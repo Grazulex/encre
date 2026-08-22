@@ -105,13 +105,20 @@ app.whenReady().then(() => {
 
   // Daily backup with 24h check
   const performBackup = (): void => {
-    if (shouldBackup(backupsDir, new Date())) {
-      backupDatabase(db, backupsDir, new Date())
-        .then((path) => {
-          console.log(`Backup créé: ${path}`)
-          pruneBackups(backupsDir, new Date())
-        })
-        .catch(console.error)
+    // try/catch : shouldBackup/statSync peut lever en cas de course sur les
+    // fichiers de backup (suppression concurrente) — jamais faire planter le
+    // process main pour ça.
+    try {
+      if (shouldBackup(backupsDir, new Date())) {
+        backupDatabase(db, backupsDir, new Date())
+          .then((path) => {
+            console.log(`Backup créé: ${path}`)
+            pruneBackups(backupsDir, new Date())
+          })
+          .catch(console.error)
+      }
+    } catch (err) {
+      console.error(err)
     }
   }
 

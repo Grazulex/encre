@@ -46,9 +46,11 @@ const rows = ref<Row[]>(store.chapters.map((c) => ({ id: c.id, title: c.title, c
 
 const needsChapters = computed(() => format.value !== 'markdown')
 const checkedCount = computed(() => rows.value.filter((r) => r.checked).length)
-// Pas de garde dédiée pour « aucun chapitre dans ce livre » : rows vide donne
-// checkedCount = 0, donc canExport tombe déjà à false pour EPUB/PDF.
-const canExport = computed(() => !needsChapters.value || checkedCount.value > 0)
+// Livre sans chapitre : bloqué pour TOUS les formats (y compris Markdown, qui
+// n'a pas de sélection mais écrirait sinon zéro fichier en toastant un succès).
+const canExport = computed(
+  () => rows.value.length > 0 && (!needsChapters.value || checkedCount.value > 0)
+)
 
 function checkAll(value: boolean): void {
   for (const r of rows.value) r.checked = value
@@ -175,8 +177,8 @@ onMounted(async () => {
           </label>
         </div>
 
-        <section v-if="needsChapters" class="chapters-pane">
-          <div class="chapters-head">
+        <section v-if="needsChapters || rows.length === 0" class="chapters-pane">
+          <div v-if="needsChapters" class="chapters-head">
             <span class="field-label">Chapitres à inclure</span>
             <div class="chapters-toggle">
               <button type="button" class="link" :disabled="busy" @click="checkAll(true)">

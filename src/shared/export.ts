@@ -32,19 +32,44 @@ function joinInline(nodes: any[]): Inline {
   return { md: parts.map((p) => p.md).join(''), xhtml: parts.map((p) => p.xhtml).join('') }
 }
 
+// Mêmes types « feuille inline » que src/main/importer.ts (INLINE_TYPES) : le
+// reste (paragraphes, autres listItem, …) est du contenu de bloc et ne doit
+// jamais être concaténé sans séparateur.
+const INLINE_TYPES = new Set(['text', 'mention', 'hardBreak'])
+// Conteneurs de blocs : leurs enfants ne sont pas de l'inline à aplatir mais
+// des blocs (souvent des paragraphes) à rendre et séparer séparément — sans
+// quoi bulletList/orderedList/listItem/blockquote collent leurs items
+// (ex. "Item 1Item 2").
+const BLOCK_CONTAINER_TYPES = new Set(['bulletList', 'orderedList', 'listItem', 'blockquote'])
+
+function renderBlockNode(node: any): { md: string; xhtml: string } {
+  const children = node.content ?? []
+  if (node.type === 'heading') {
+    const level = Math.min(Math.max(Number(node.attrs?.level ?? 1), 1), 6)
+    const inline = joinInline(children)
+    return { md: `${'#'.repeat(level)} ${inline.md}`, xhtml: `<h${level}>${inline.xhtml}</h${level}>` }
+  }
+  const isInline = children.every((c: any) => INLINE_TYPES.has(c?.type))
+  if (BLOCK_CONTAINER_TYPES.has(node.type) && !isInline) {
+    const nested = children.map(renderBlockNode)
+    // Un <li>/<blockquote> n'a pas besoin d'un balisage sémantique dédié ici :
+    // ses paragraphes internes en <p> séparés suffisent à ne pas les coller.
+    return {
+      md: nested.map((b: { md: string }) => b.md).join('\n\n'),
+      xhtml: nested.map((b: { xhtml: string }) => b.xhtml).join('\n')
+    }
+  }
+  const inline = joinInline(children)
+  return { md: inline.md, xhtml: `<p>${inline.xhtml}</p>` }
+}
+
 function renderBlocks(doc: any): { md: string[]; xhtml: string[] } {
   const md: string[] = []
   const xhtml: string[] = []
   for (const node of doc.content ?? []) {
-    const inline = joinInline(node.content ?? [])
-    if (node.type === 'heading') {
-      const level = Math.min(Math.max(Number(node.attrs?.level ?? 1), 1), 6)
-      md.push(`${'#'.repeat(level)} ${inline.md}`)
-      xhtml.push(`<h${level}>${inline.xhtml}</h${level}>`)
-    } else {
-      md.push(inline.md)
-      xhtml.push(`<p>${inline.xhtml}</p>`)
-    }
+    const block = renderBlockNode(node)
+    md.push(block.md)
+    xhtml.push(block.xhtml)
   }
   return { md, xhtml }
 }

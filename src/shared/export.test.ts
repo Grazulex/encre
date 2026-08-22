@@ -40,6 +40,25 @@ describe('tiptapToXhtml', () => {
   })
 })
 
+describe('bulletList (conteneur de blocs)', () => {
+  it('ne colle pas les listItem entre eux', () => {
+    const docWithList = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 1' }] }] },
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 2' }] }] }
+          ]
+        }
+      ]
+    })
+    expect(tiptapToMarkdown(docWithList)).toBe('Item 1\n\nItem 2\n')
+    expect(tiptapToXhtml(docWithList)).toBe('<p>Item 1</p>\n<p>Item 2</p>\n')
+  })
+})
+
 describe('hardBreak et nœuds inconnus', () => {
   it('hardBreak et texte des nœuds inconnus', () => {
     const docWithBreak = JSON.stringify({

@@ -10,6 +10,7 @@ export function slugify(s: string): string {
 }
 
 export function exportMarkdownToFolder(db: Db, bookId: number, folder: string): string {
+  getBook(db, bookId) // vérifie l'existence du livre — lève si l'id est invalide
   mkdirSync(folder, { recursive: true })
   const chapters = listChapters(db, bookId)
   for (const meta of chapters) {
@@ -18,6 +19,5 @@ export function exportMarkdownToFolder(db: Db, bookId: number, folder: string): 
     const body = tiptapToMarkdown(full.contentJson)
     writeFileSync(join(folder, name), `# ${meta.title}\n\n${body}`)
   }
-  void getBook(db, bookId)
   return folder
 }

@@ -56,7 +56,7 @@ export interface EncreApi {
   }
   exporter: {
     markdown(bookId: number): Promise<string | null>                     // showOpenDialog (dossier cible) ; écrit NN-titre.md par chapitre ; retourne le dossier ; null si annulé
-    epub(bookId: number, chapterIds: number[]): Promise<string | null>   // showSaveDialog ; branché Task 6 (stub temporaire)
+    epub(bookId: number, chapterIds: number[]): Promise<string | null>   // showSaveDialog ; construit un .epub (OPF/NCX/XHTML) à partir des chapitres sélectionnés
     pdf(bookId: number, chapterIds: number[]): Promise<string | null>    // showSaveDialog ; fenêtre cachée + printToPDF (A5)
   }
   app: {
