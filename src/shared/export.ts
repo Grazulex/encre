@@ -46,7 +46,14 @@ function renderBlockNode(node: any): { md: string; xhtml: string } {
   const children = node.content ?? []
   // Atomes de bloc (Task 3) : pas d'enfants à aplatir, un rendu fixe par
   // format. Traités avant le repli paragraphe générique.
-  if (node.type === 'sceneBreak') {
+  // `horizontalRule` : nœud hérité (StarterKit, désactivé dans l'éditeur au
+  // profit de sceneBreak, cf. stripCodeBlocks.ts). La normalisation vers
+  // sceneBreak n'est appliquée qu'au prochain chargement/édition dans
+  // l'éditeur — elle n'est pas persistée en base à l'ouverture. Un chapitre
+  // jamais rouvert depuis cette bascule peut donc encore stocker un
+  // horizontalRule : le rendre comme un sceneBreak (même séparateur de scène)
+  // plutôt que de le laisser tomber dans le repli paragraphe vide ci-dessous.
+  if (node.type === 'sceneBreak' || node.type === 'horizontalRule') {
     return { md: '***', xhtml: '<div class="scene-break">⁂</div>' }
   }
   if (node.type === 'pageBreak') {

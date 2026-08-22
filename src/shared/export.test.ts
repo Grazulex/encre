@@ -59,6 +59,25 @@ describe('bulletList (conteneur de blocs)', () => {
   })
 })
 
+describe('horizontalRule (nœud hérité, Fix 1)', () => {
+  const docWithRule = JSON.stringify({
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Avant' }] },
+      { type: 'horizontalRule' },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Après' }] }
+    ]
+  })
+  it('sérialise en MD comme un sceneBreak (***)', () => {
+    expect(tiptapToMarkdown(docWithRule)).toBe('Avant\n\n***\n\nAprès\n')
+  })
+  it('sérialise en XHTML comme un sceneBreak', () => {
+    expect(tiptapToXhtml(docWithRule)).toBe(
+      '<p>Avant</p>\n<div class="scene-break">⁂</div>\n<p>Après</p>\n'
+    )
+  })
+})
+
 describe('sceneBreak', () => {
   const docWithSceneBreak = JSON.stringify({
     type: 'doc',
