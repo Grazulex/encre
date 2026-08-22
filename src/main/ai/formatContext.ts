@@ -21,10 +21,20 @@ export interface FormatPromptBundle {
 // PROPOSAL_BLOCK (prompt utilisateur, voir plus bas) autorisait pourtant — le
 // system prompt l'emportait. SYSTEM_PROMPT_STRICT reste BYTE-IDENTIQUE au
 // system prompt historique (mode par défaut, proposerSeparations=false).
-// SYSTEM_PROMPT_WITH_PROPOSALS l'étend d'une exception explicite plutôt que
-// de réécrire les phrases existantes, pour ne courir aucun risque de
-// relâcher involontairement la garantie « tu ne réécris JAMAIS » dans le
-// texte partagé par les deux modes.
+//
+// Fix round 3 (review) : SYSTEM_PROMPT_WITH_PROPOSALS n'est PLUS dérivé par
+// concaténation de SYSTEM_PROMPT_STRICT + une exception ajoutée en fin de
+// texte — cette approche laissait passer telles quelles, non reformulées,
+// les phrases mêmes qui causaient le bug (« et rien d'autre »,
+// « tu n'ajoutes ni ne retires de contenu »), l'exception n'étant qu'un
+// pansement en toute fin de prompt. C'est désormais un texte autonome et
+// cohérent de bout en bout : la phrase de normalisation intègre directement
+// l'autorisation d'insérer des marqueurs (au lieu de dire "et rien d'autre"
+// puis de se contredire plus loin), et la phrase anti-ajout/retrait est
+// reformulée pour porter explicitement sur les MOTS du récit (jamais sur les
+// lignes-marqueurs, seules additions permises). Aucune phrase de ce texte
+// n'interdit ce qu'une autre autorise — relu de bout en bout à chaque
+// modification.
 const SYSTEM_PROMPT_STRICT =
   "Tu es typographe littéraire. On te donne le texte d'un chapitre en Markdown. " +
   'Tu rends le MÊME texte, mots et ponctuation du récit inchangés, en normalisant ' +
@@ -35,12 +45,19 @@ const SYSTEM_PROMPT_STRICT =
   'Sortie : le Markdown complet du chapitre, rien d\'autre.'
 
 const SYSTEM_PROMPT_WITH_PROPOSALS =
-  SYSTEM_PROMPT_STRICT +
-  ' Exception, mode proposition activé : tu PEUX aussi INSÉRER de nouvelles ' +
-  'lignes-marqueurs `***` (transition de scène manifeste) ou ' +
-  '`<!-- page-break -->` (rupture structurelle majeure) — uniquement des ' +
-  'lignes entières de marqueur, sans jamais modifier, retirer ni déplacer un ' +
-  'seul mot du texte ni un marqueur existant.'
+  "Tu es typographe littéraire. On te donne le texte d'un chapitre en Markdown. " +
+  'Tu rends le MÊME texte, mots et ponctuation du récit inchangés, en normalisant ' +
+  'la mise en forme selon les conventions demandées : dialogues, listes, séparateurs ' +
+  'de scène (uniquement la ligne `***`) ; dans ce mode, tu PEUX AUSSI INSÉRER une ' +
+  'ligne-marqueur `***` (transition de scène manifeste) ou `<!-- page-break -->` ' +
+  '(rupture structurelle majeure) là où elle manque encore — uniquement des lignes ' +
+  'entières de marqueur, rien de plus. ' +
+  'Tu ne réécris JAMAIS une phrase, tu ne corriges pas le style. ' +
+  "Tu n'ajoutes ni ne retires JAMAIS le moindre mot du texte du récit : les seules " +
+  'additions permises sont ces lignes-marqueurs, et tu ne retires ni ne déplaces ' +
+  'jamais un marqueur déjà présent. ' +
+  'Sortie : le Markdown complet du chapitre, ces éventuelles insertions de ' +
+  "marqueurs comprises, rien d'autre."
 
 const DIALOGUE_EXAMPLES: Record<FormatConventions['dialogue'], string> = {
   guillemets: '« Bonjour », dit-il.',

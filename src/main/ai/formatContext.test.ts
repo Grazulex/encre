@@ -73,10 +73,17 @@ describe('buildFormatPrompt', () => {
     const { system } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(system).toMatch(/ne réécris? jamais/i)
-    expect(system).toMatch(/exception/i)
-    expect(system).toMatch(/PEUX aussi INSÉRER/i)
+    expect(system).toMatch(/PEUX AUSSI INSÉRER/i)
     expect(system).toContain('***')
     expect(system).toContain('<!-- page-break -->')
+  })
+
+  it("proposerSeparations = true : le system prompt ne reprend PAS les clauses strictes qui contrediraient l'insertion autorisée", () => {
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: true }
+    const { system } = buildFormatPrompt(db, chapterId, conventions)
+
+    expect(system).not.toContain("tu n'ajoutes ni ne retires de contenu")
+    expect(system).not.toMatch(/et rien d'autre/i)
   })
 
   it("demande une sortie sans préambule ni recopie du titre CHAPITRE", () => {
