@@ -1,7 +1,7 @@
 import type {
   Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
   Entity, EntityCreate, EntityKind, EntityOccurrence, EntityPatch,
-  OutlineNote, Snapshot, TimelineEvent, TimelineEventPatch
+  OutlineNote, Series, Snapshot, TimelineEvent, TimelineEventPatch
 } from './types'
 
 export interface EncreApi {
@@ -82,6 +82,11 @@ export interface EncreApi {
     create(chapterId: number, contentJson: string, reason: string): Promise<Snapshot>
     content(id: number): Promise<string>
   }
+  series: {
+    list(): Promise<Series[]>
+    getOrCreate(name: string): Promise<Series>
+    remove(id: number): Promise<void>
+  }
 }
 
 // Canaux IPC : `${domaine}:${méthode}` — ex. 'books:list', 'chapters:saveContent'
@@ -89,5 +94,5 @@ export interface EncreApi {
 // `ai` mêle les deux : prepareWrite/startWrite/cancel sont des invoke normaux,
 // mais onChunk/onDone/onError sont préload-only (ipcRenderer.on), comme `app`.
 export const API_DOMAINS = [
-  'books', 'chapters', 'entities', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots'
+  'books', 'chapters', 'entities', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots', 'series'
 ] as const

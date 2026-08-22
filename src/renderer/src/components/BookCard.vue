@@ -44,6 +44,7 @@ watch(
       <span v-else>{{ book.title.slice(0, 1).toUpperCase() }}</span>
     </div>
     <h3>{{ book.title }}</h3>
+    <span v-if="book.seriesName" class="series-badge">{{ book.seriesName }}</span>
     <p class="meta">
       <span class="status" :class="book.status">{{ STATUS_LABELS[book.status] }}</span>
       <span class="dot">·</span>{{ book.chapterCount }} chap. <span class="dot">·</span
@@ -140,6 +141,21 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.series-badge {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  padding: 1px 8px;
+  margin-bottom: 4px;
 }
 
 .meta {

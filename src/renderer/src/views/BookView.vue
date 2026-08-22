@@ -144,6 +144,8 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
           <span v-if="store.book.author">{{ store.book.author }}</span>
           <span v-if="store.book.author && store.book.genre" class="dot">·</span>
           <span v-if="store.book.genre">{{ store.book.genre }}</span>
+          <span v-if="(store.book.author || store.book.genre) && store.book.seriesName" class="dot">·</span>
+          <span v-if="store.book.seriesName">{{ store.book.seriesName }}</span>
         </p>
         <p class="progress">{{ progress }}</p>
       </div>

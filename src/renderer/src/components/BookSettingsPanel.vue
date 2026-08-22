@@ -6,15 +6,18 @@
 // motif que EntityCard) ; à la fermeture, tout minuteur encore en attente est
 // flushé immédiatement plutôt que simplement annulé, pour ne jamais perdre
 // une frappe des 600 dernières ms.
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useBookStore } from '../stores/book'
+import { useUiStore } from '../stores/ui'
 import { BOOK_STATUS_LABELS } from '../../../shared/labels'
+import { normalizeForSearch } from '../../../shared/textNormalize'
 import { mediaUrl } from '../utils/media'
-import type { BookStatus } from '../../../shared/types'
+import type { BookStatus, Series } from '../../../shared/types'
 
 const emit = defineEmits<{ close: [] }>()
 
 const store = useBookStore()
+const ui = useUiStore()
 const dialogEl = ref<HTMLElement | null>(null)
 
 const STATUSES: { value: BookStatus; label: string }[] = (
@@ -74,6 +77,85 @@ function onStatusChange(event: Event): void {
   store.update({ status })
 }
 
+// --- Série (combobox : champ texte + suggestions, Task 7b) --------------
+// Liste chargée une seule fois à l'ouverture du panneau (pas un store — un
+// simple ref local, comme les patterns d'écran existants) : jamais tenue en
+// synchro live avec la base, juste assez fraîche pour peupler les
+// suggestions et retrouver l'id d'une série déjà tapée sans repasser par
+// getOrCreate.
+const seriesList = ref<Series[]>([])
+const seriesInput = ref('')
+const showSeriesSuggestions = ref(false)
+
+const filteredSeries = computed<Series[]>(() => {
+  const q = normalizeForSearch(seriesInput.value.trim())
+  if (!q) return seriesList.value
+  return seriesList.value.filter((s) => normalizeForSearch(s.name).includes(q))
+})
+
+async function loadSeries(): Promise<void> {
+  try {
+    seriesList.value = await window.encre.series.list()
+  } catch (err) {
+    console.error('Échec du chargement des séries', err)
+    ui.toast('Impossible de charger les séries.')
+  }
+}
+
+function selectSeries(s: Series): void {
+  seriesInput.value = s.name
+  showSeriesSuggestions.value = false
+  if (store.book) store.update({ seriesId: s.id })
+}
+
+// Enter ou blur : confirme la saisie. Un nom vide est un no-op (ne crée
+// jamais de série vide) — seul le bouton « Aucune » explicite efface la
+// série ; un nom inchangé n'appelle pas l'IPC pour rien.
+async function commitSeriesInput(): Promise<void> {
+  showSeriesSuggestions.value = false
+  if (!store.book) return
+  const name = seriesInput.value.trim()
+  if (!name) {
+    seriesInput.value = store.book.seriesName ?? ''
+    return
+  }
+  if (name === store.book.seriesName) {
+    seriesInput.value = name
+    return
+  }
+  try {
+    const existing = seriesList.value.find((s) => s.name === name)
+    const s = existing ?? (await window.encre.series.getOrCreate(name))
+    if (!seriesList.value.some((existingSeries) => existingSeries.id === s.id)) {
+      seriesList.value.push(s)
+    }
+    seriesInput.value = s.name
+    await store.update({ seriesId: s.id })
+  } catch (err) {
+    console.error('Échec de la récupération/création de la série', err)
+    ui.toast("Échec de l'enregistrement de la série.")
+  }
+}
+
+function onSeriesKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    commitSeriesInput()
+  } else if (event.key === 'Escape' && showSeriesSuggestions.value) {
+    // Un premier Échap referme juste les suggestions ; un second (dropdown
+    // déjà fermé) doit atteindre le onKeydown du dialogue pour fermer le
+    // panneau — d'où le stopPropagation seulement dans ce cas-ci.
+    event.stopPropagation()
+    showSeriesSuggestions.value = false
+  }
+}
+
+function clearSeries(): void {
+  seriesInput.value = ''
+  showSeriesSuggestions.value = false
+  if (store.book) store.update({ seriesId: null })
+}
+
 async function chooseCover(): Promise<void> {
   await store.pickCover()
 }
@@ -91,6 +173,8 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 onMounted(async () => {
+  seriesInput.value = store.book?.seriesName ?? ''
+  loadSeries()
   await nextTick()
   dialogEl.value?.focus()
 })
@@ -137,6 +221,39 @@ onBeforeUnmount(flushAll)
             <input v-model="store.book.genre" type="text" @input="onGenreInput" />
           </label>
         </div>
+
+        <label class="field series-field">
+          <span class="field-label">Série</span>
+          <div class="series-combobox">
+            <input
+              v-model="seriesInput"
+              type="text"
+              placeholder="Aucune série"
+              autocomplete="off"
+              spellcheck="false"
+              @focus="showSeriesSuggestions = true"
+              @input="showSeriesSuggestions = true"
+              @keydown="onSeriesKeydown"
+              @blur="commitSeriesInput"
+            />
+            <button
+              v-if="seriesInput"
+              type="button"
+              class="clear-series"
+              title="Aucune série"
+              aria-label="Retirer la série"
+              @mousedown.prevent
+              @click="clearSeries"
+            >
+              ×
+            </button>
+            <ul v-if="showSeriesSuggestions && filteredSeries.length" class="series-suggestions">
+              <li v-for="s in filteredSeries" :key="s.id">
+                <button type="button" @mousedown.prevent @click="selectSeries(s)">{{ s.name }}</button>
+              </li>
+            </ul>
+          </div>
+        </label>
 
         <label class="field">
           <span class="field-label">Synopsis</span>
@@ -302,6 +419,68 @@ header h2 {
   resize: vertical;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.series-field {
+  position: relative;
+}
+.series-combobox {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.series-combobox input {
+  width: 100%;
+  padding-right: 26px;
+}
+.clear-series {
+  position: absolute;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: none;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--fg-muted);
+  font-size: 13px;
+  line-height: 1;
+}
+.clear-series:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.series-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1;
+  max-height: 160px;
+  overflow-y: auto;
+  list-style: none;
+  padding: 4px;
+  margin: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--fg) 35%, transparent);
+}
+.series-suggestions button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 12.5px;
+  color: var(--fg);
+  background: none;
+}
+.series-suggestions button:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
 }
 /* Même recette que .status-select (EditorPane, statut de chapitre) :
    appearance: none retire le rendu natif (flèche + cadre blanc du système),

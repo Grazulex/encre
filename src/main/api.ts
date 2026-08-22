@@ -9,6 +9,7 @@ import * as entities from './db/entities'
 import * as outline from './db/outline'
 import * as timeline from './db/timeline'
 import * as snapshots from './db/snapshots'
+import * as series from './db/series'
 import { createAiSession, addAiMessage } from './db/aiSessions'
 import { buildWritePrompt } from './ai/context'
 import { AiService, type AiRunner } from './ai/service'
@@ -353,6 +354,11 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
       create: async (chapterId, contentJson, reason) =>
         snapshots.createSnapshot(db, chapterId, contentJson, reason),
       content: async (id) => snapshots.getSnapshotContent(db, id)
+    },
+    series: {
+      list: async () => series.listSeries(db),
+      getOrCreate: async (name) => series.getOrCreateSeries(db, name),
+      remove: async (id) => series.deleteSeries(db, id)
     }
   }
 }

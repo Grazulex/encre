@@ -171,4 +171,14 @@ describe('createApi', () => {
     const content = await api.snapshots.content(snap.id)
     expect(content).toBe('{"type":"doc"}')
   })
+
+  it('series.getOrCreate est idempotent et series.list la retourne', async () => {
+    const api = createApi(openDb(':memory:'))
+    const s1 = await api.series.getOrCreate('Les Chroniques de Verre')
+    const s2 = await api.series.getOrCreate('Les Chroniques de Verre')
+    expect(s2.id).toBe(s1.id)
+
+    const all = await api.series.list()
+    expect(all.map((s) => s.id)).toContain(s1.id)
+  })
 })

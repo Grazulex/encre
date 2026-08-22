@@ -68,6 +68,12 @@ export const useBookStore = defineStore('book', {
           for (const key of Object.keys(patch) as (keyof BookPatch)[]) {
             ;(this.book as Record<string, unknown>)[key] = updated[key]
           }
+          // seriesId n'est qu'une clé étrangère : le nom affiché (seriesName,
+          // recalculé côté serveur via jointure) n'est jamais une clé du
+          // patch envoyé, donc la boucle ci-dessus ne le touche pas — sans
+          // ce cas spécial, changer/effacer la série laisserait l'ancien nom
+          // affiché (aside, badge de carte) jusqu'au prochain rechargement.
+          if ('seriesId' in patch) this.book.seriesName = updated.seriesName
         }
       } catch (err) {
         console.error('Échec de la sauvegarde du livre', err)
