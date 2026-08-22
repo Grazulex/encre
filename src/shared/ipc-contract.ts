@@ -65,6 +65,12 @@ export interface EncreApi {
   }
   ai: {
     prepareWrite(chapterId: number, entityIds?: number[]): Promise<{ hasSummary: boolean; defaultEntityIds: number[] }>
+    // CONTRAT D'ORDONNANCEMENT : rien ne garantit que la résolution de cet invoke (qui
+    // porte le requestId) arrive au renderer AVANT le premier événement ai:chunk/ai:done/
+    // ai:error portant ce même requestId — invoke (requête/réponse) et webContents.send
+    // (événement) sont deux transports IPC indépendants. Le consommateur DOIT tamponner
+    // les événements dont le requestId est encore inconnu et les réconcilier une fois que
+    // startWrite() résout (voir src/main/api.ts, commentaire au site d'appel).
     startWrite(chapterId: number, options: { instructions?: string; entityIds?: number[]; model: string; continueFromText: boolean }): Promise<string>  // requestId ; enregistre ai_session + messages
     cancel(requestId: string): Promise<void>
     onChunk(cb: (p: { requestId: string; text: string }) => void): void   // ipcRenderer.on('ai:chunk') — hors invoke

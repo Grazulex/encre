@@ -23,13 +23,32 @@ import { buildPdf } from './pdf'
  * Import d'electron paresseux (à l'intérieur de la fonction) pour que ce module
  * reste importable par vitest sans jamais charger electron au niveau module —
  * les tests injectent toujours leur propre `emit`.
+ *
+ * Isolation par fenêtre : une fenêtre déjà détruite/en cours de fermeture (le
+ * process de rendu peut disparaître entre `getAllWindows()` et l'itération, ou
+ * pendant qu'une génération streame) ferait lever `send` sur son
+ * `webContents` — sans garde, une seule fenêtre fermée interromprait la
+ * diffusion vers toutes les autres. On filtre `isDestroyed()` et on isole
+ * chaque `send` dans son propre try/catch. Le `.catch` final couvre l'import
+ * paresseux lui-même (sinon un rejet de la chaîne — electron indisponible,
+ * erreur inattendue — resterait une rejection non gérée, `emit` n'étant pas
+ * awaité par ses appelants).
  */
 function defaultEmit(channel: string, payload: unknown): void {
-  void import('electron').then(({ BrowserWindow }) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(channel, payload)
-    }
-  })
+  import('electron')
+    .then(({ BrowserWindow }) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (win.isDestroyed()) continue
+        try {
+          win.webContents.send(channel, payload)
+        } catch (error) {
+          console.error(`defaultEmit: échec d'envoi sur une fenêtre (${channel})`, error)
+        }
+      }
+    })
+    .catch((error: unknown) => {
+      console.error(`defaultEmit: échec de diffusion (${channel})`, error)
+    })
 }
 
 export interface CreateApiOptions {
@@ -281,6 +300,17 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
         const bundle = buildWritePrompt(db, chapterId, { entityIds })
         return { hasSummary: bundle.hasSummary, defaultEntityIds: bundle.defaultEntityIds }
       },
+      // CONTRAT D'ORDONNANCEMENT (à l'attention du consommateur renderer, Task 6) :
+      // le micro-tick de report ci-dessus (voir `runner`) garantit seulement que
+      // `requestId` est connu de CE module avant tout callback — il ne garantit PAS
+      // que la réponse de l'invoke `ai:startWrite` (qui porte ce requestId) arrive
+      // au renderer avant le premier événement `ai:chunk`/`ai:done`/`ai:error`.
+      // invoke (requête/réponse) et `webContents.send` (événement) sont deux
+      // transports IPC indépendants ; seule la latence réseau/SDK rend l'ordre
+      // « réponse avant premier chunk » vrai en pratique aujourd'hui, rien ne le
+      // garantit structurellement. LE CONSOMMATEUR DOIT TAMPONNER LES ÉVÉNEMENTS
+      // DONT LE requestId EST ENCORE INCONNU et les réconcilier une fois que
+      // `startWrite()` résout (ne jamais supposer que l'invoke résout en premier).
       startWrite: async (chapterId, opts) => {
         const bundle = buildWritePrompt(db, chapterId, {
           instructions: opts.instructions,
