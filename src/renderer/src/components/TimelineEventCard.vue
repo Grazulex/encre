@@ -11,6 +11,7 @@ import { useBookStore } from '../stores/book'
 import { useEntitiesStore } from '../stores/entities'
 import { useUiStore } from '../stores/ui'
 import { autoGrowClamped } from '../utils/autoGrow'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const props = defineProps<{ eventId: number }>()
 
@@ -259,9 +260,30 @@ function toggleEntityLink(id: number): void {
   store.setLinks(props.eventId, event.value.chapterIds, ids)
 }
 
+// Suppression thémée (audit UI/UX, proposition #13) : window.confirm() natif
+// (auparavant dans stores/timeline.ts, voir son commentaire) remplacé par
+// ConfirmDialog — même sémantique (confirmer supprime, annuler/Échap ne fait
+// rien). Le libellé du message est construit ici, la carte connaissant déjà
+// le titre courant de l'événement.
+const confirmingRemoval = ref(false)
+
 function removeEvent(): void {
+  confirmingRemoval.value = true
+}
+
+function confirmRemoval(): void {
+  confirmingRemoval.value = false
   store.remove(props.eventId)
 }
+
+function cancelRemoval(): void {
+  confirmingRemoval.value = false
+}
+
+const removalMessage = computed(() => {
+  const title = event.value?.title?.trim()
+  return `Supprimer ${title ? `« ${title} »` : 'cet événement'} ?`
+})
 </script>
 
 <template>
@@ -275,11 +297,32 @@ function removeEvent(): void {
         @input="onDateInput"
       />
       <span class="controls">
-        <button :disabled="!canMoveUp" type="button" title="Monter" @click="moveUp">↑</button>
-        <button :disabled="!canMoveDown" type="button" title="Descendre" @click="moveDown">
+        <button
+          :disabled="!canMoveUp"
+          type="button"
+          title="Monter"
+          aria-label="Monter cet événement"
+          @click="moveUp"
+        >
+          ↑
+        </button>
+        <button
+          :disabled="!canMoveDown"
+          type="button"
+          title="Descendre"
+          aria-label="Descendre cet événement"
+          @click="moveDown"
+        >
           ↓
         </button>
-        <button type="button" title="Supprimer" @click="removeEvent">×</button>
+        <button
+          type="button"
+          title="Supprimer"
+          aria-label="Supprimer cet événement"
+          @click="removeEvent"
+        >
+          ×
+        </button>
       </span>
     </div>
 
@@ -368,6 +411,13 @@ function removeEvent(): void {
         </Teleport>
       </span>
     </div>
+
+    <ConfirmDialog
+      v-if="confirmingRemoval"
+      :message="removalMessage"
+      @confirm="confirmRemoval"
+      @cancel="cancelRemoval"
+    />
   </article>
 </template>
 
@@ -427,10 +477,6 @@ function removeEvent(): void {
 .controls button:hover:not(:disabled) {
   color: var(--fg);
   background: color-mix(in srgb, var(--fg) 8%, transparent);
-}
-.controls button:disabled {
-  opacity: 0.25;
-  cursor: default;
 }
 
 .title {

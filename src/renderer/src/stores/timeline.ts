@@ -111,10 +111,12 @@ export const useTimelineStore = defineStore('timeline', {
         await this.load(this.bookId)
       }
     },
+    // Confirmation déplacée au niveau du composant appelant (audit UI/UX,
+    // proposition #13) : TimelineEventCard affiche désormais ConfirmDialog
+    // (thémé) avant d'appeler cette action, qui ne fait plus que la
+    // suppression elle-même — un store Pinia n'a pas de template pour monter
+    // une boîte de dialogue.
     async remove(id: number) {
-      const event = this.events.find((e) => e.id === id)
-      const label = event?.title ? `« ${event.title} »` : 'cet événement'
-      if (!confirm(`Supprimer ${label} ?`)) return
       try {
         await window.encre.timeline.remove(id)
         this.events = this.events.filter((e) => e.id !== id)
