@@ -116,6 +116,27 @@ function seedAttrPairs(): void {
 onMounted(seedAttrPairs)
 watch(() => props.entityId, seedAttrPairs)
 
+// Deux lignes avec la même clé (une fois espaces de bord retirés) : côté
+// serveur, la dernière valeur écrase silencieusement l'autre — et sans
+// signal visuel, la ligne perdante semble juste disparaître au prochain
+// reseed. On ne bloque rien (pas de modale), on se contente de marquer les
+// lignes en conflit pour que l'utilisateur comprenne pourquoi.
+const duplicateKeys = computed<Set<string>>(() => {
+  const counts = new Map<string, number>()
+  for (const pair of attrPairs.value) {
+    const key = pair.key.trim()
+    if (!key) continue
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const dupes = new Set<string>()
+  for (const [key, count] of counts) if (count > 1) dupes.add(key)
+  return dupes
+})
+function isDuplicateKey(pair: AttrPair): boolean {
+  const key = pair.key.trim()
+  return key.length > 0 && duplicateKeys.value.has(key)
+}
+
 function commitAttributesNow(): void {
   clearTimeout(timers.attributes)
   const record: Record<string, string> = {}
@@ -218,7 +239,13 @@ function removeEntity(): void {
 
     <div class="attributes">
       <h4>Attributs</h4>
-      <div v-for="(pair, index) in attrPairs" :key="pair.id" class="attr-row">
+      <div
+        v-for="(pair, index) in attrPairs"
+        :key="pair.id"
+        class="attr-row"
+        :class="{ duplicate: isDuplicateKey(pair) }"
+        :title="isDuplicateKey(pair) ? 'Clé en double — la dernière valeur l\'emporte' : undefined"
+      >
         <input
           v-model="pair.key"
           type="text"
@@ -432,6 +459,15 @@ function removeEntity(): void {
   min-width: 0;
   font-size: 12px;
   padding: 4px 8px;
+}
+/* Clé en double (voir isDuplicateKey) : liseré rouge dérivé des tokens de
+   thème plutôt qu'une couleur d'erreur figée, pour rester cohérent en clair
+   comme en sombre. Signal discret, pas de modale. */
+.attr-row.duplicate input {
+  border-color: color-mix(in srgb, #c0392b 55%, var(--border));
+}
+.attr-row.duplicate input:focus {
+  border-color: color-mix(in srgb, #c0392b 70%, var(--accent));
 }
 .attr-row button {
   flex-shrink: 0;

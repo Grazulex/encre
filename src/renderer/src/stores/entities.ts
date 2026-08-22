@@ -2,6 +2,15 @@ import { defineStore } from 'pinia'
 import { useUiStore } from './ui'
 import type { Entity, EntityKind, EntityOccurrence, EntityPatch } from '../../../shared/types'
 
+// Compteur de séquence par entité (hors état réactif : c'est un garde-fou
+// interne, pas une donnée d'affichage). Deux update() rapprochés sur la même
+// fiche — p. ex. ajout d'alias puis suppression d'un attribut, ni l'un ni
+// l'autre débouncé — peuvent voir leurs réponses IPC revenir dans le
+// désordre. On ne réconcilie que la réponse de la DERNIÈRE requête émise
+// pour cette fiche ; une réponse plus ancienne arrivée en retard est
+// silencieusement ignorée plutôt que d'écraser un état local plus récent.
+const updateSeq = new Map<number, number>()
+
 export const useEntitiesStore = defineStore('entities', {
   state: () => ({
     entities: [] as Entity[],
@@ -39,10 +48,15 @@ export const useEntitiesStore = defineStore('entities', {
     // frappes en cours, pas encore débouncées, dans "notes" ou "attributes"
     // du même instant.
     async update(id: number, patch: EntityPatch) {
+      const seq = (updateSeq.get(id) ?? 0) + 1
+      updateSeq.set(id, seq)
       const local = this.entities.find((e) => e.id === id)
       try {
         const updated = await window.encre.entities.update(id, patch)
-        if (local) {
+        // N'applique la réconciliation que si aucune requête plus récente
+        // n'a été émise entre-temps pour cette même fiche (sinon, réponse
+        // périmée : on la laisse tomber).
+        if (local && updateSeq.get(id) === seq) {
           for (const key of Object.keys(patch) as (keyof EntityPatch)[]) {
             ;(local as Record<string, unknown>)[key] = updated[key]
           }

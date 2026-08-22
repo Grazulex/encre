@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import EntityCard from './EntityCard.vue'
 
@@ -21,15 +22,36 @@ function onKeydown(event: KeyboardEvent): void {
     store.closeDrawer()
   }
 }
+
+// Le stopPropagation() ci-dessus ne protège que les frappes qui traversent
+// CE noeud. À l'ouverture, rien n'a encore le focus à l'intérieur du tiroir
+// (le bouton qui l'a ouvert, dans la grille ou une mention, l'a toujours à
+// l'extérieur) : une touche Échap pressée juste après l'ouverture partirait
+// donc de l'extérieur du tiroir et irait directement à window, sans jamais
+// passer par onKeydown. On focus explicitement le tiroir (tabindex="-1" :
+// focusable par script, hors du parcours Tab) dès qu'il s'ouvre, pour que ce
+// noeud reçoive bien le prochain keydown — même principe que le champ de
+// CommandPalette qui s'autofocus à l'ouverture.
+const drawerEl = ref<HTMLElement | null>(null)
+watch(
+  () => store.drawerEntityId,
+  async (id) => {
+    if (id == null) return
+    await nextTick()
+    drawerEl.value?.focus()
+  }
+)
 </script>
 
 <template>
   <Transition name="slide">
     <aside
       v-if="store.drawerEntityId != null"
+      ref="drawerEl"
       class="drawer"
       role="dialog"
       aria-label="Fiche"
+      tabindex="-1"
       @keydown="onKeydown"
     >
       <div class="drawer-head">
@@ -68,6 +90,12 @@ function onKeydown(event: KeyboardEvent): void {
   box-shadow: -12px 0 32px -20px color-mix(in srgb, var(--fg) 45%, transparent);
   overflow-y: auto;
   z-index: 150;
+}
+/* Cible de focus purement programmatique (voir le watch sur drawerEntityId
+   dans le script) : pas de bague de focus visible autour de tout le panneau. */
+.drawer:focus,
+.drawer:focus-visible {
+  outline: none;
 }
 
 .drawer-head {
