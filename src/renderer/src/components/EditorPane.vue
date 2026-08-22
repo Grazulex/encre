@@ -40,13 +40,25 @@ async function flush(): Promise<void> {
   await store.saveContentFor(id, json, text)
 }
 
+// Jeton de génération : Vue n'attend pas qu'une invocation async du watcher
+// se termine avant de lancer la suivante. Si l'utilisateur bascule A → B → A
+// assez vite, l'invocation pour B peut encore être en attente sur son
+// `await flush()` quand celle pour le retour vers A démarre ; sans garde,
+// l'invocation B, une fois son flush résolu, écraserait le contenu déjà posé
+// par l'invocation A avec un setContent obsolète. Chaque invocation capture
+// son propre numéro de génération et abandonne avant setContent/focus si une
+// invocation plus récente a démarré entre-temps.
+let watchGeneration = 0
+
 watch(
   () => store.currentChapter?.id,
   async (_newId, _oldId) => {
+    const generation = ++watchGeneration
     // Le flush du chapitre précédent doit partir avant de charger le nouveau,
     // sans quoi setContent écraserait un éditeur qui a encore des frappes
     // non enregistrées.
     await flush()
+    if (generation !== watchGeneration) return
     const ed = editor.value
     if (!ed || !store.currentChapter) return
     ed.commands.setContent(JSON.parse(store.currentChapter.contentJson), { emitUpdate: false })
