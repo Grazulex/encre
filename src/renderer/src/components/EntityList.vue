@@ -63,7 +63,13 @@ function initials(name: string): string {
   <nav class="entities">
     <div class="head">
       <h2>{{ labels.title }}</h2>
-      <button class="add" type="button" :title="`Nouveau : ${labels.placeholder}`" @click="openCreateForm">
+      <button
+        class="add"
+        type="button"
+        :title="`Nouveau : ${labels.placeholder}`"
+        :aria-label="`Nouveau : ${labels.placeholder}`"
+        @click="openCreateForm"
+      >
         +
       </button>
     </div>
@@ -89,7 +95,13 @@ function initials(name: string): string {
         v-for="entity in filtered"
         :key="entity.id"
         :class="{ active: entity.id === store.selectedId }"
+        tabindex="0"
+        role="button"
+        :aria-current="entity.id === store.selectedId ? 'true' : undefined"
+        :aria-label="`Ouvrir « ${entity.name || '(sans nom)'} »`"
         @click="store.select(entity.id)"
+        @keydown.enter="store.select(entity.id)"
+        @keydown.space.prevent="store.select(entity.id)"
       >
         <span class="avatar">
           <img v-if="entity.imagePath" :src="mediaUrl(entity.imagePath) ?? undefined" alt="" />

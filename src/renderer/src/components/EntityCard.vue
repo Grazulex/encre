@@ -296,7 +296,14 @@ function removeEntity(): void {
     <div class="aliases">
       <span v-for="(alias, index) in entity.aliases" :key="alias" class="chip">
         {{ alias }}
-        <button type="button" title="Retirer cet alias" @click="removeAlias(index)">×</button>
+        <button
+          type="button"
+          title="Retirer cet alias"
+          :aria-label="`Retirer l'alias « ${alias} »`"
+          @click="removeAlias(index)"
+        >
+          ×
+        </button>
       </span>
       <input
         v-model="newAlias"
@@ -337,7 +344,14 @@ function removeEntity(): void {
           placeholder="Valeur"
           @input="commitAttributesDebounced"
         />
-        <button type="button" title="Retirer cet attribut" @click="removeAttrPair(index)">×</button>
+        <button
+          type="button"
+          title="Retirer cet attribut"
+          :aria-label="pair.key ? `Retirer l'attribut « ${pair.key} »` : 'Retirer cet attribut'"
+          @click="removeAttrPair(index)"
+        >
+          ×
+        </button>
       </div>
       <button class="add-attr" type="button" @click="addAttrPair">+ Ajouter un attribut</button>
     </div>
