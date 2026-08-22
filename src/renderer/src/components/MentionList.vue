@@ -89,7 +89,7 @@ defineExpose({ onKeyDown })
   text-align: left;
   border: none;
   border-left: 2px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-s);
   padding: 6px 8px;
   font-size: 13px;
   color: var(--fg);

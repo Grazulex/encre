@@ -133,10 +133,10 @@ async function removeChapter(id: number, title: string): Promise<void> {
   padding: 10px 8px 8px;
 }
 h2 {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   color: var(--fg-muted);
 }
 .head-actions {
@@ -201,7 +201,7 @@ li {
   align-items: center;
   gap: 8px;
   padding: 7px 10px 7px 12px;
-  border-radius: 7px;
+  border-radius: var(--radius-s);
   cursor: pointer;
   font-size: 13px;
   border-left: 2px solid transparent;
@@ -266,10 +266,6 @@ li:focus-within .actions {
 .actions button:hover:not(:disabled) {
   color: var(--fg);
   background: color-mix(in srgb, var(--fg) 8%, transparent);
-}
-.actions button:disabled {
-  opacity: 0.25;
-  cursor: default;
 }
 
 .unfold-enter-active,
