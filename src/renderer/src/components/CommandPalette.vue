@@ -203,6 +203,17 @@ function onKeydown(event: KeyboardEvent): void {
       event.stopPropagation()
       activateSelected()
       break
+    case 'Tab':
+      // Piège de focus minimal : le seul élément focusable de la palette
+      // est cet input (les lignes de résultat sont des <button> mais la
+      // navigation prévue passe par ↑/↓/Entrée et la souris, jamais Tab).
+      // On bloque donc Tab/Shift+Tab plutôt que de cycler : ça pin le focus
+      // sur l'input tant que la palette est ouverte, ce qui empêche Tab de
+      // faire sortir le focus vers les éléments focusables du fond (aside,
+      // cartes de livres, etc.) derrière l'overlay.
+      event.preventDefault()
+      event.stopPropagation()
+      break
   }
 }
 </script>
