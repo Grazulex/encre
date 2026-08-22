@@ -11,6 +11,7 @@ import { EntityMention } from '../editor/mention'
 import { SceneBreak, PageBreak } from '../editor/formatNodes'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import SnapshotManager from './SnapshotManager.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
 import { stripCodeBlocks } from '../../../shared/stripCodeBlocks'
 import { locateQuote, type DocNode } from '../../../shared/quoteLocator'
@@ -420,15 +421,30 @@ async function moveChapterNote(index: number, direction: -1 | 1): Promise<void> 
   )
 }
 
-async function removeChapterNote(note: OutlineNote): Promise<void> {
-  if (!confirm('Supprimer cette note ?')) return
+// Suppression thémée (audit UI/UX, proposition #13) : window.confirm() natif
+// remplacé par ConfirmDialog, montée plus bas dans le template — même
+// sémantique (confirmer supprime, annuler/Échap ne fait rien).
+const pendingNoteRemoval = ref<OutlineNote | null>(null)
+
+function removeChapterNote(note: OutlineNote): void {
+  pendingNoteRemoval.value = note
+}
+
+async function confirmNoteRemoval(): Promise<void> {
+  const note = pendingNoteRemoval.value
+  pendingNoteRemoval.value = null
+  if (!note) return
   // Idem OutlineSection.removeNote : purge le debounce en attente pour cette
   // note avant suppression, sinon il se déclencherait après coup sur un id
-  // qui n'existe plus (le .catch ci-dessus couvre aussi ce cas).
+  // qui n'existe plus (le .catch du commit couvre aussi ce cas).
   clearTimeout(noteTimers.get(note.id))
   noteTimers.delete(note.id)
   await window.encre.outline.remove(note.id)
   chapterNotes.value = chapterNotes.value.filter((n) => n.id !== note.id)
+}
+
+function cancelNoteRemoval(): void {
+  pendingNoteRemoval.value = null
 }
 
 // Changement de chapitre : (a) force la sauvegarde d'un résumé en attente
@@ -901,7 +917,21 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
         aria-label="Lier les entités"
         @click="openAutolink"
       >
-        🔗
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M9 17H7a5 5 0 0 1 0-10h2" />
+          <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+          <line x1="8" y1="12" x2="16" y2="12" />
+        </svg>
       </button>
       <button
         type="button"
@@ -912,7 +942,21 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
         :aria-pressed="ai.open"
         @click="ai.toggle()"
       >
-        🪶
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" />
+          <line x1="16" y1="8" x2="2" y2="22" />
+          <line x1="17.5" y1="15" x2="9" y2="15" />
+        </svg>
       </button>
       <div ref="formatWrapEl" class="format-wrap">
         <button
@@ -948,7 +992,22 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
           aria-label="Prendre un snapshot du chapitre"
           @click="openSnapshotPrompt"
         >
-          📸
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+            />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
         </button>
         <div
           v-if="snapshotPromptOpen"
@@ -1025,6 +1084,7 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
                   :disabled="index === 0"
                   type="button"
                   title="Monter"
+                  aria-label="Monter cette note"
                   @click="moveChapterNote(index, -1)"
                 >
                   ↑
@@ -1033,11 +1093,19 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
                   :disabled="index === chapterNotes.length - 1"
                   type="button"
                   title="Descendre"
+                  aria-label="Descendre cette note"
                   @click="moveChapterNote(index, 1)"
                 >
                   ↓
                 </button>
-                <button type="button" title="Supprimer" @click="removeChapterNote(note)">×</button>
+                <button
+                  type="button"
+                  title="Supprimer"
+                  aria-label="Supprimer cette note"
+                  @click="removeChapterNote(note)"
+                >
+                  ×
+                </button>
               </span>
             </li>
           </ol>
@@ -1066,6 +1134,12 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       @apply="applyAutolink"
     />
     <SnapshotManager v-if="ai.snapshotManagerOpen" />
+    <ConfirmDialog
+      v-if="pendingNoteRemoval"
+      message="Supprimer cette note ?"
+      @confirm="confirmNoteRemoval"
+      @cancel="cancelNoteRemoval"
+    />
   </div>
 </template>
 
@@ -1094,7 +1168,7 @@ header {
      réduit à 0 et titre/statut/bouton viennent buter sur les bords (retour
      utilisateur : colonne rognée à gauche, en-tête écrasé à droite). */
   padding: 28px 24px 10px;
-  max-width: 44rem;
+  max-width: 40rem;
   width: 100%;
   margin: 0 auto;
   flex-shrink: 0;
@@ -1312,7 +1386,7 @@ header {
 }
 
 .summary-zone {
-  max-width: 44rem;
+  max-width: 40rem;
   width: 100%;
   margin: 0 auto;
   padding: 0 24px 10px;
@@ -1475,7 +1549,7 @@ header {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-width: 44rem;
+  max-width: 40rem;
   width: 100%;
   margin: 0 auto;
   padding: 0 24px 12px;
@@ -1524,7 +1598,7 @@ header {
 }
 .page :deep(.tiptap) {
   width: 100%;
-  max-width: 44rem;
+  max-width: 40rem;
   margin: 0 auto;
   padding: 12px 0 45vh;
   font-family: var(--font-manuscript);
@@ -1533,9 +1607,18 @@ header {
   color: var(--fg);
   caret-color: var(--accent);
   outline: none;
+  /* Confort typographique du manuscrit (audit UI/UX, proposition #12) :
+     `lang="fr"` sur <html> (index.html) donne au moteur de césure le bon
+     dictionnaire — sans lui, `hyphens: auto` resterait un no-op silencieux.
+     `common-ligatures` profite à Iowan Old Style (fi/fl notamment). */
+  hyphens: auto;
+  font-variant-ligatures: common-ligatures;
 }
 .page :deep(.tiptap p) {
   margin-bottom: 0.9em;
+  /* text-wrap: pretty (Chromium ≥ 117) : élimine les mots orphelins en fin de
+     paragraphe — pas de repli nécessaire, ignoré silencieusement sinon. */
+  text-wrap: pretty;
 }
 .page :deep(.tiptap strong) {
   font-weight: 700;
