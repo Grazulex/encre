@@ -2,18 +2,28 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
+import { useEntitiesStore } from '../stores/entities'
 import { useShortcuts } from '../composables/useShortcuts'
 import { SECTION_LABELS } from '../../../shared/labels'
 import SectionNav from '../components/SectionNav.vue'
 import ChapterList from '../components/ChapterList.vue'
 import EditorPane from '../components/EditorPane.vue'
 import StatusBar from '../components/StatusBar.vue'
+import EntitiesSection from '../components/EntitiesSection.vue'
+import EntityDrawer from '../components/EntityDrawer.vue'
 
 const props = defineProps<{ bookId: number }>()
 const store = useBookStore()
+const entitiesStore = useEntitiesStore()
 const router = useRouter()
 
-onMounted(() => store.open(props.bookId))
+// Chargé ici (pas paresseusement à l'entrée de la section Personnages/Lieux) :
+// les mentions de l'éditeur (Task 11) et l'autolink (Task 12) ont besoin des
+// entités dès que l'éditeur est visible, quelle que soit la section active.
+onMounted(() => {
+  store.open(props.bookId)
+  entitiesStore.load(props.bookId)
+})
 
 const progress = computed(() => {
   const book = store.book
@@ -93,18 +103,19 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
            autre section — voir EditorPane), sous peine de perdre l'état de
            frappe/scroll au retour. -->
       <div v-show="store.section === 'chapitres'" class="chapitres-view">
-        <p v-if="!store.currentChapter" class="empty">
-          Créez un chapitre pour commencer à écrire.
-        </p>
+        <p v-if="!store.currentChapter" class="empty">Créez un chapitre pour commencer à écrire.</p>
         <template v-else>
           <EditorPane />
           <StatusBar />
         </template>
       </div>
-      <p v-if="store.section !== 'chapitres'" class="empty">
+      <EntitiesSection v-if="store.section === 'personnages'" kind="character" />
+      <EntitiesSection v-if="store.section === 'lieux'" kind="place" />
+      <p v-if="store.section === 'chronologie' || store.section === 'plan'" class="empty">
         {{ SECTION_LABELS[store.section] }} — à venir.
       </p>
     </main>
+    <EntityDrawer />
   </div>
 </template>
 
