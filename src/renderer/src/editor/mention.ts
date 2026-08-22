@@ -1,10 +1,14 @@
 // Extension @ mentions (Task 11) : étend le nœud `mention` officiel avec un
-// attribut `kind` (personnage/lieu) et une NodeView plain-JS qui affiche soit
-// le `label` figé à l'insertion, soit le nom COURANT de l'entité depuis le
-// store — voir la règle détaillée sur `currentLabel` ci-dessous (Task
-// publication 1 : la liaison automatique ne doit jamais réécrire la prose de
-// l'auteur). Le `label` stocké ne sert de repli inconditionnel que si
-// l'entité a été supprimée depuis.
+// attribut `kind` (personnage/lieu) et une NodeView plain-JS.
+//
+// Règle d'affichage (Task T6c — bug utilisateur : la liaison automatique
+// réécrivait la prose, ex. « L'appartement qu'elle louait… » affiché
+// « calle Predicadors qu'elle louait… ») : le texte VISIBLE est TOUJOURS le
+// `label` figé à l'insertion — le texte exact du manuscrit — jamais le nom
+// courant de l'entité. Le nom de l'entité ne sert de repli que si `label`
+// est vide/absent. L'identité réelle de l'entité (nom courant + type,
+// suivant les renommages via un watch Pinia) n'apparaît qu'en infobulle
+// (`title`), jamais dans le texte du nœud.
 import Mention from '@tiptap/extension-mention'
 import { VueRenderer } from '@tiptap/vue-3'
 import type { SuggestionKeyDownProps, SuggestionOptions, SuggestionProps } from '@tiptap/suggestion'
@@ -12,6 +16,7 @@ import tippy, { type GetReferenceClientRect, type Instance as TippyInstance } fr
 import { watch } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import { normalizeForSearch } from '../../../shared/textNormalize'
+import { mentionDisplayText, mentionTooltip } from '../../../shared/mentionDisplay'
 import type { Entity, EntityKind } from '../../../shared/types'
 import MentionList from '../components/MentionList.vue'
 
@@ -20,7 +25,7 @@ import MentionList from '../components/MentionList.vue'
 // et portent en plus `kind`, ajouté via addAttributes ci-dessous — d'où ce
 // type de lecture propre à ce fichier plutôt qu'une extension de
 // MentionNodeAttrs (dont le champ `id` est incompatible).
-type EntityMentionAttrs = {
+export type EntityMentionAttrs = {
   id: number | null
   label?: string | null
   kind?: EntityKind | null
@@ -125,41 +130,34 @@ export const EntityMention = Mention.extend({
       const dom = document.createElement('span')
       dom.setAttribute('data-type', 'mention')
 
-      // Règle d'affichage (bug utilisateur — la liaison réécrivait la prose) :
-      // un `label` qui figure parmi les alias de l'entité est le texte de
-      // l'auteur (alias/prénom écrit seul, capturé tel quel par la liaison
-      // automatique — voir EditorPane.applyAutolink) — l'auteur est roi, on
-      // l'affiche VERBATIM, jamais remplacé par le nom canonique. Un `label`
-      // qui n'y figure pas correspond à une mention insérée via `@` avec le
-      // nom canonique de l'époque : dans ce cas on affiche le nom COURANT de
-      // l'entité, pour que les renommages continuent de s'y propager. Si
-      // l'entité a été supprimée depuis, repli sur le label stocké.
-      const currentLabel = (attrs: EntityMentionAttrs): string => {
-        const entity = store.entities.find((e) => e.id === attrs.id)
-        if (!entity) return attrs.label ?? ''
-        if (attrs.label && entity.aliases.includes(attrs.label)) return attrs.label
-        return entity.name
-      }
-
       const applyClasses = (attrs: EntityMentionAttrs): void => {
         dom.className = attrs.kind === 'place' ? 'mention mention-place' : 'mention'
         if (attrs.id != null) dom.setAttribute('data-id', String(attrs.id))
       }
 
+      const render = (attrs: EntityMentionAttrs): void => {
+        const entity = store.entities.find((e) => e.id === attrs.id)
+        // Texte visible : toujours le label du manuscrit (jamais le nom de
+        // l'entité) — voir mentionDisplayText. Repli sur le nom courant
+        // uniquement si le label est vide/absent.
+        const text = mentionDisplayText(attrs) || entity?.name || ''
+        dom.textContent = `@${text}`
+        const tooltip = mentionTooltip(entity)
+        if (tooltip) dom.setAttribute('title', tooltip)
+        else dom.removeAttribute('title')
+      }
+
       applyClasses(node.attrs as EntityMentionAttrs)
 
-      // Source du watch : nom ET alias, pas seulement le nom — `currentLabel`
-      // dépend désormais aussi de `entity.aliases` (règle ci-dessus), donc un
-      // édit des alias seuls (sans toucher au nom) doit lui aussi redéclencher
-      // le recalcul de l'affichage pendant qu'une mention est montée.
+      // Le watch ne pilote plus que l'infobulle (nom courant + type, suit les
+      // renommages) — jamais le texte visible du nœud, qui reste figé au
+      // label stocké tant que l'attribut lui-même ne change pas.
       const stopWatch = watch(
         () => {
           const entity = store.entities.find((e) => e.id === node.attrs.id)
-          return entity ? `${entity.name} ${entity.aliases.join(' ')}` : undefined
+          return entity ? `${entity.name} ${entity.kind}` : undefined
         },
-        () => {
-          dom.textContent = `@${currentLabel(node.attrs as EntityMentionAttrs)}`
-        },
+        () => render(node.attrs as EntityMentionAttrs),
         { immediate: true }
       )
 
@@ -169,7 +167,7 @@ export const EntityMention = Mention.extend({
           if (updatedNode.type.name !== node.type.name) return false
           node = updatedNode
           applyClasses(node.attrs as EntityMentionAttrs)
-          dom.textContent = `@${currentLabel(node.attrs as EntityMentionAttrs)}`
+          render(node.attrs as EntityMentionAttrs)
           return true
         },
         destroy() {
