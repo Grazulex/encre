@@ -1,4 +1,5 @@
 import type { Db } from './connection'
+import type { AiRole } from '../../shared/types'
 
 export function createAiSession(
   db: Db,
@@ -17,7 +18,7 @@ export function createAiSession(
   return Number(result.lastInsertRowid)
 }
 
-export function addAiMessage(db: Db, sessionId: number, role: string, content: string): void {
+export function addAiMessage(db: Db, sessionId: number, role: AiRole, content: string): void {
   db.prepare(
     `INSERT INTO ai_messages (session_id, role, content)
      VALUES (?, ?, ?)`

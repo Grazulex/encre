@@ -2,28 +2,32 @@ import type { Db } from './connection'
 import type { Snapshot } from '../../shared/types'
 
 export function createSnapshot(db: Db, chapterId: number, contentJson: string, reason: string): Snapshot {
-  const result = db
-    .prepare(
-      `INSERT INTO snapshots (chapter_id, content_json, reason)
-       VALUES (?, ?, ?)`
-    )
-    .run(chapterId, contentJson, reason)
+  const id = db.transaction(() => {
+    const result = db
+      .prepare(
+        `INSERT INTO snapshots (chapter_id, content_json, reason)
+         VALUES (?, ?, ?)`
+      )
+      .run(chapterId, contentJson, reason)
 
-  const id = Number(result.lastInsertRowid)
+    const insertedId = Number(result.lastInsertRowid)
 
-  // Prune: garder les 20 plus récents pour ce chapitre
-  const toDelete = db
-    .prepare(
-      `SELECT id FROM snapshots
-       WHERE chapter_id = ?
-       ORDER BY created_at DESC
-       LIMIT -1 OFFSET 20`
-    )
-    .all(chapterId) as any[]
+    // Prune: garder les 20 plus récents pour ce chapitre
+    const toDelete = db
+      .prepare(
+        `SELECT id FROM snapshots
+         WHERE chapter_id = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT -1 OFFSET 20`
+      )
+      .all(chapterId) as any[]
 
-  for (const row of toDelete) {
-    db.prepare('DELETE FROM snapshots WHERE id = ?').run(row.id)
-  }
+    for (const row of toDelete) {
+      db.prepare('DELETE FROM snapshots WHERE id = ?').run(row.id)
+    }
+
+    return insertedId
+  })()
 
   return getSnapshot(db, id)
 }
@@ -46,7 +50,7 @@ export function listSnapshots(db: Db, chapterId: number): Snapshot[] {
     .prepare(
       `SELECT id, chapter_id, reason, created_at FROM snapshots
        WHERE chapter_id = ?
-       ORDER BY created_at DESC`
+       ORDER BY created_at DESC, id DESC`
     )
     .all(chapterId)
     .map((row: any) => ({
