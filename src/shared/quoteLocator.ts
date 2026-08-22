@@ -14,14 +14,30 @@
 // - un nœud sans `content` et sans texte (nœud atomique : sceneBreak,
 //   pageBreak, mention, hardBreak, image…) occupe exactement 1 position.
 // Le nœud racine `doc` lui-même n'a PAS de jeton d'ouverture/fermeture propre
-// (ses enfants directs démarrent à la position 0, pas 1) — cas spécial
-// géré par `locateQuote` ci-dessous plutôt que par `nodeSize`.
+// (ses enfants directs démarrent à la position 0, pas 1) — cas spécial géré
+// par `collectTextRuns` ci-dessous plutôt que par `nodeSize`.
 //
 // Le texte de repérage est la concaténation BRUTE (sans séparateur ajouté)
 // des nœuds texte du document, dans l'ordre de parcours : un nœud atomique
 // n'apporte aucun caractère, donc une citation qui engloberait un tel nœud
 // (ex. traverse une mention @Personnage) ne pourra JAMAIS être retrouvée —
 // comportement documenté et accepté par le brief de la Task 3, pas un bug.
+//
+// GARDE STRUCTURELLE (correctif review) : cette concaténation SANS séparateur
+// signifie que la fin du texte d'un bloc de premier niveau (paragraphe...)
+// est immédiatement suivie, dans le texte de repérage, par le début du texte
+// du bloc SUIVANT — un `indexOf` naïf peut donc « trouver » une citation dont
+// la moitié vient de la fin d'un paragraphe et l'autre moitié du début du
+// suivant (ex. paragraphe A finissant par « …hi », paragraphe B commençant
+// par « ok… », citation "hiok"). Une suggestion de relecture porte TOUJOURS
+// sur un extrait d'un seul passage continu (jamais une réécriture à cheval
+// sur deux paragraphes) : chaque run de texte est donc étiqueté avec l'index
+// de son bloc de premier niveau (`block`, l'index de l'enfant direct de
+// `doc`), et `locateQuote` rejette explicitement toute occurrence dont le
+// premier et le dernier caractère matché ne partagent pas le même `block`
+// (en cherchant l'occurrence suivante à la place) — rendu « not-found »
+// plutôt qu'une correspondance fautive, jamais une fusion silencieuse de
+// deux paragraphes par la transaction de remplacement.
 
 export interface DocNode {
   type?: string
@@ -35,6 +51,7 @@ export type LocateResult = { found: true; from: number; to: number } | { found: 
 interface TextRun {
   text: string
   pos: number // position ProseMirror juste avant le premier caractère de ce nœud texte
+  block: number // index de l'enfant direct de `doc` (bloc de premier niveau) qui porte ce run
 }
 
 // Taille ProseMirror d'un nœud (voir commentaire d'en-tête) — utilisée pour
@@ -47,30 +64,48 @@ function nodeSize(node: DocNode): number {
   return 1
 }
 
-// Parcourt une liste de nœuds FRÈRES en avançant `pos` nœud après nœud,
-// collectant chaque nœud texte rencontré (à n'importe quelle profondeur) avec
-// sa position PM de départ. `startPos` est la position juste avant le premier
-// de ces frères — pour les enfants directs de `doc` (racine, sans jeton
-// propre) c'est l'appelant (locateQuote) qui passe 0 ; pour les enfants d'un
-// nœud normal (paragraphe, etc.) c'est `parentPos + 1` (après son jeton
-// d'ouverture), géré dans la branche `content` ci-dessous.
-function walkChildren(nodes: DocNode[], startPos: number, runs: TextRun[]): void {
-  let pos = startPos
-  for (const node of nodes) {
-    if (typeof node.text === 'string') {
-      if (node.text.length > 0) runs.push({ text: node.text, pos })
-    } else if (Array.isArray(node.content)) {
-      walkChildren(node.content, pos + 1, runs)
-    }
-    // Nœud atomique (ni texte ni content) : aucune contribution au texte de
-    // repérage, seule sa taille (1) fait avancer `pos` ci-dessous.
-    pos += nodeSize(node)
+// Parcourt un nœud et ses descendants (profondeur quelconque — listes,
+// citations imbriquées…), collectant chaque nœud texte rencontré avec sa
+// position PM de départ et le `block` de premier niveau transmis depuis
+// l'appelant (collectTextRuns ci-dessous) — inchangé quelle que soit la
+// profondeur, un nœud imbriqué appartient toujours au même bloc de premier
+// niveau que son ancêtre direct de `doc`.
+function walkNode(node: DocNode, pos: number, block: number, runs: TextRun[]): void {
+  if (typeof node.text === 'string') {
+    if (node.text.length > 0) runs.push({ text: node.text, pos, block })
+    return
   }
+  if (Array.isArray(node.content)) {
+    let childPos = pos + 1 // franchit le jeton d'ouverture de ce nœud
+    for (const child of node.content) {
+      walkNode(child, childPos, block, runs)
+      childPos += nodeSize(child)
+    }
+  }
+  // Nœud atomique (ni texte ni content) : aucune contribution au texte de
+  // repérage, seule sa taille (1, via nodeSize côté appelant) fait avancer
+  // la position du frère suivant.
 }
 
-// Position ProseMirror du CARACTÈRE à l'index `idx` du texte concaténé (voir
-// walkChildren) — `idx` doit désigner un caractère réel (0 <= idx <
-// fullText.length), jamais une position "juste après la fin".
+// Point d'entrée du parcours : itère les enfants DIRECTS de `doc` (pas de
+// jeton propre pour la racine — ses enfants démarrent à la position 0, pas
+// 1, voir commentaire d'en-tête), en attribuant à chacun son propre index de
+// `block`.
+function collectTextRuns(doc: DocNode): TextRun[] {
+  const runs: TextRun[] = []
+  const topLevel = doc.content ?? []
+  let pos = 0
+  topLevel.forEach((node, block) => {
+    walkNode(node, pos, block, runs)
+    pos += nodeSize(node)
+  })
+  return runs
+}
+
+// Retrouve le run contenant le caractère à l'index `idx` du texte concaténé
+// (voir collectTextRuns), et l'offset de ce caractère À L'INTÉRIEUR de ce
+// run — `idx` doit désigner un caractère réel (0 <= idx < fullText.length),
+// jamais une position "juste après la fin".
 //
 // Intervalle demi-ouvert [consumed, consumed+length) strict, pas <= : deux
 // runs consécutifs séparés par un nœud sans texte (jeton de fermeture/
@@ -80,40 +115,56 @@ function walkChildren(nodes: DocNode[], startPos: number, runs: TextRun[]): void
 // de < résoudrait à tort la position de FIN du run précédent au lieu de la
 // position de DÉBUT du run suivant dès que idx tombe pile sur cette frontière
 // (ex. citation qui commence juste après un saut de paragraphe).
-function charPos(runs: TextRun[], idx: number): number {
+function runAt(runs: TextRun[], idx: number): { run: TextRun; offset: number } | null {
   let consumed = 0
   for (const run of runs) {
-    if (idx < consumed + run.text.length) return run.pos + (idx - consumed)
+    if (idx < consumed + run.text.length) return { run, offset: idx - consumed }
     consumed += run.text.length
   }
-  // Ne devrait pas arriver (idx toujours borné par fullText.length par
-  // l'appelant) — filet de sécurité plutôt qu'une exception.
-  const last = runs[runs.length - 1]
-  return last ? last.pos + last.text.length : 0
+  return null
 }
 
 /**
  * Localise la PREMIÈRE occurrence exacte de `quote` dans le texte du document
- * `doc` (nœud racine `doc`, avec son `content`), et renvoie les positions
+ * `doc` (nœud racine `doc`, avec son `content`) qui reste entièrement à
+ * l'intérieur d'un seul bloc de premier niveau, et renvoie les positions
  * ProseMirror `[from, to)` de cet extrait (`to` exclusif, comme
  * `tr.replaceWith`/`tr.delete`/`tr.insertText`).
  *
- * `{ found: false }` si `quote` est vide ou introuvable — citation caduque
- * (texte modifié depuis la génération de la suggestion) ou citation
- * traversant un nœud atomique (mention, saut de scène/page…), voir
- * commentaire d'en-tête.
+ * `{ found: false }` si `quote` est vide, introuvable, ou si TOUTES ses
+ * occurrences dans le texte concaténé traversent une frontière de bloc de
+ * premier niveau (voir commentaire d'en-tête — jamais une fusion silencieuse
+ * de deux paragraphes) — même statut non bloquant qu'une citation caduque
+ * (texte modifié depuis la génération de la suggestion) ou traversant un
+ * nœud atomique (mention, saut de scène/page…).
  */
 export function locateQuote(doc: DocNode, quote: string): LocateResult {
   if (!quote) return { found: false }
-  const runs: TextRun[] = []
-  walkChildren(doc.content ?? [], 0, runs)
+  const runs = collectTextRuns(doc)
   const fullText = runs.map((run) => run.text).join('')
-  const index = fullText.indexOf(quote)
-  if (index === -1) return { found: false }
-  // `to` dérivé de la position du DERNIER caractère réellement matché
-  // (index + quote.length - 1), jamais de l'offset "juste après" — voir
-  // charPos ci-dessus pour la raison (ambiguïté aux frontières de bloc).
-  const from = charPos(runs, index)
-  const to = charPos(runs, index + quote.length - 1) + 1
-  return { found: true, from, to }
+
+  let searchFrom = 0
+  for (;;) {
+    const index = fullText.indexOf(quote, searchFrom)
+    if (index === -1) return { found: false }
+
+    const start = runAt(runs, index)
+    // `index + quote.length - 1` = dernier caractère réellement matché,
+    // jamais l'offset "juste après" (voir runAt/charPos ci-dessus pour la
+    // raison : ambiguïté aux frontières de bloc/nœud atomique).
+    const end = runAt(runs, index + quote.length - 1)
+    if (!start || !end) return { found: false } // filet de sécurité, ne devrait pas arriver
+
+    if (start.run.block === end.run.block) {
+      return {
+        found: true,
+        from: start.run.pos + start.offset,
+        to: end.run.pos + end.offset + 1
+      }
+    }
+    // Occurrence à cheval sur deux blocs de premier niveau (voir commentaire
+    // d'en-tête) : rejetée, on cherche l'occurrence suivante plutôt que de
+    // renvoyer une plage qui fusionnerait deux paragraphes.
+    searchFrom = index + 1
+  }
 }

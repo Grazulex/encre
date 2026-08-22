@@ -106,4 +106,40 @@ describe('locateQuote', () => {
     expect(locateQuote({ type: 'doc' }, 'quoi que ce soit')).toEqual({ found: false })
     expect(locateQuote({ type: 'doc', content: [] }, 'quoi que ce soit')).toEqual({ found: false })
   })
+
+  // Correctif review : la concaténation sans séparateur entre blocs de
+  // premier niveau ne doit JAMAIS permettre à une citation de "fusionner"
+  // la fin d'un paragraphe et le début du suivant.
+  it("ne trouve pas une citation à cheval sur la fin d'un paragraphe et le début du suivant", () => {
+    const doc: DocNode = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Elle dit hi' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'ok, bien sûr.' }] }
+      ]
+    }
+    // fullText = "Elle dit hiok, bien sûr." — "hiok" existe bien dans le
+    // texte concaténé (fin du 1er paragraphe + début du 2e), mais ne doit
+    // JAMAIS être renvoyé : l'appliquer fusionnerait silencieusement les
+    // deux paragraphes.
+    expect(locateQuote(doc, 'hiok')).toEqual({ found: false })
+  })
+
+  it('trouve toujours une citation entièrement à l’intérieur d’un seul paragraphe malgré un paragraphe voisin', () => {
+    const doc: DocNode = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Elle dit hi' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'ok, bien sûr.' }] }
+      ]
+    }
+    // "dit hi" est entièrement dans le 1er paragraphe : doit rester trouvable
+    // et à la bonne position, même quoique le mot "hiok" existe accidentellement
+    // dans le texte concaténé. Index 5 dans "Elle dit hi" (+1 pour le jeton
+    // d'ouverture du 1er paragraphe) → position 6.
+    expect(locateQuote(doc, 'dit hi')).toEqual({ found: true, from: 6, to: 12 })
+    // "ok, bien" est entièrement dans le 2e paragraphe (pos 14 = fin du 1er
+    // paragraphe (13) + jeton d'ouverture du 2e (14)).
+    expect(locateQuote(doc, 'ok, bien')).toEqual({ found: true, from: 14, to: 22 })
+  })
 })
