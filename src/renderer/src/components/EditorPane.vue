@@ -8,6 +8,7 @@ import { useEntitiesStore } from '../stores/entities'
 import { EntityMention } from '../editor/mention'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
+import { stripCodeBlocks } from '../../../shared/stripCodeBlocks'
 import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
 import type { ChapterStatus, Entity, OutlineNote } from '../../../shared/types'
 
@@ -27,7 +28,7 @@ let pendingChapterId: number | null = null
 let editorChapterId: number | null = null
 
 const editor = useEditor({
-  extensions: [StarterKit, EntityMention],
+  extensions: [StarterKit.configure({ codeBlock: false, code: false }), EntityMention],
   content: '',
   onUpdate: () => {
     if (editorChapterId === null) return
@@ -92,7 +93,15 @@ watch(
     const ed = editor.value
     if (!ed || !store.currentChapter) return
     editorChapterId = store.currentChapter.id
-    ed.commands.setContent(JSON.parse(store.currentChapter.contentJson), { emitUpdate: false })
+    // Migration douce (Task publication 1) : d'anciens chapitres peuvent
+    // encore contenir des blocs de code / marques `code`, retirés de
+    // l'éditeur. `changed` n'est utilisé que pour choisir quel JSON charger —
+    // pas de save déclenché ici (emitUpdate: false), la prochaine frappe
+    // persistera la conversion naturellement.
+    const { json, changed } = stripCodeBlocks(store.currentChapter.contentJson)
+    ed.commands.setContent(JSON.parse(changed ? json : store.currentChapter.contentJson), {
+      emitUpdate: false
+    })
     ed.commands.focus('start')
   },
   { immediate: true }
@@ -180,12 +189,16 @@ function applyAutolink(selected: AutolinkMatch[]): void {
   // document, jamais celles qui précèdent — appliquer en ordre décroissant
   // laisse donc les positions `from`/`to` des occurrences restantes valides
   // sans avoir à les recalculer.
+  // label: texte ORIGINAL apparié (m.matched), jamais le nom canonique de la
+  // fiche — sans quoi la liaison réécrirait la prose de l'auteur (bug
+  // utilisateur : « Nieves » écrit seul se retrouvait affiché avec le nom
+  // complet de la fiche). Voir mention.ts pour la règle d'affichage
+  // correspondante (alias tel quel vs nom courant propagé).
   for (const m of [...selected].sort((a, b) => b.from - a.from)) {
-    const entity = entitiesStore.entities.find((e) => e.id === m.entityId)
     tr.replaceWith(
       m.from,
       m.to,
-      mentionType.create({ id: m.entityId, label: entity?.name ?? m.matched, kind: m.kind })
+      mentionType.create({ id: m.entityId, label: m.matched, kind: m.kind })
     )
   }
   // Dispatch direct (pas de editor.commands) : passe par le même

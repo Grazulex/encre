@@ -1,9 +1,10 @@
 // Extension @ mentions (Task 11) : étend le nœud `mention` officiel avec un
-// attribut `kind` (personnage/lieu) et une NodeView plain-JS qui affiche le
-// nom COURANT de l'entité depuis le store — jamais le `label` figé au moment
-// de l'insertion — pour que les renommages se propagent à l'affichage sans
-// jamais réécrire le contenu des chapitres. Le `label` stocké dans le nœud
-// ne sert que de repli si l'entité a été supprimée depuis.
+// attribut `kind` (personnage/lieu) et une NodeView plain-JS qui affiche soit
+// le `label` figé à l'insertion, soit le nom COURANT de l'entité depuis le
+// store — voir la règle détaillée sur `currentLabel` ci-dessous (Task
+// publication 1 : la liaison automatique ne doit jamais réécrire la prose de
+// l'auteur). Le `label` stocké ne sert de repli inconditionnel que si
+// l'entité a été supprimée depuis.
 import Mention from '@tiptap/extension-mention'
 import { VueRenderer } from '@tiptap/vue-3'
 import type { SuggestionKeyDownProps, SuggestionOptions, SuggestionProps } from '@tiptap/suggestion'
@@ -128,8 +129,21 @@ export const EntityMention = Mention.extend({
       const dom = document.createElement('span')
       dom.setAttribute('data-type', 'mention')
 
-      const currentLabel = (attrs: EntityMentionAttrs): string =>
-        store.entities.find((entity) => entity.id === attrs.id)?.name ?? attrs.label ?? ''
+      // Règle d'affichage (bug utilisateur — la liaison réécrivait la prose) :
+      // un `label` qui figure parmi les alias de l'entité est le texte de
+      // l'auteur (alias/prénom écrit seul, capturé tel quel par la liaison
+      // automatique — voir EditorPane.applyAutolink) — l'auteur est roi, on
+      // l'affiche VERBATIM, jamais remplacé par le nom canonique. Un `label`
+      // qui n'y figure pas correspond à une mention insérée via `@` avec le
+      // nom canonique de l'époque : dans ce cas on affiche le nom COURANT de
+      // l'entité, pour que les renommages continuent de s'y propager. Si
+      // l'entité a été supprimée depuis, repli sur le label stocké.
+      const currentLabel = (attrs: EntityMentionAttrs): string => {
+        const entity = store.entities.find((e) => e.id === attrs.id)
+        if (!entity) return attrs.label ?? ''
+        if (attrs.label && entity.aliases.includes(attrs.label)) return attrs.label
+        return entity.name
+      }
 
       const applyClasses = (attrs: EntityMentionAttrs): void => {
         dom.className = attrs.kind === 'place' ? 'mention mention-place' : 'mention'
