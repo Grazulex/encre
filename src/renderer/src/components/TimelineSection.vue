@@ -83,9 +83,15 @@ function onDragEnd(): void {
         <span class="plus">+</span> Nouvel événement
       </button>
     </header>
+    <p class="hint">
+      Ordonnez les événements de l’histoire ; liez-les aux chapitres où ils sont racontés et aux
+      personnages impliqués.
+    </p>
 
     <p v-if="store.events.length === 0" class="empty">
-      Aucun événement pour l’instant. Cliquez sur <span class="plus-ref">+</span> pour commencer.
+      Aucun événement pour l’instant. Ordonnez les grandes étapes de l’histoire, puis liez chaque
+      événement aux chapitres où il est raconté et aux personnages impliqués. Cliquez sur
+      <span class="plus-ref">+</span> pour commencer.
     </p>
 
     <TransitionGroup v-else tag="ol" name="row" class="rail">
@@ -121,7 +127,6 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
 }
@@ -133,6 +138,14 @@ h2 {
 .plus {
   display: inline-block;
   margin-right: 2px;
+}
+
+.hint {
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-width: 46rem;
+  margin: 10px 0 20px;
 }
 
 .empty {

@@ -17,6 +17,16 @@ async function load(): Promise<void> {
     notes.value = all
       .filter((n) => n.chapterId === null)
       .sort((a, b) => a.position - b.position)
+    // Les données arrivent après le rendu initial (await ci-dessus) : le
+    // ref-callback des textareas (setTextareaRef) tourne bien à leur
+    // création, mais on force ici un second passage une fois le DOM à jour
+    // (nextTick) — filet de sécurité pour ne jamais retomber sur une
+    // textarea coupée à 1 ligne au retour dans la section.
+    await nextTick()
+    for (const note of notes.value) {
+      const el = textareaRefs.get(note.id)
+      if (el) autoGrow(el)
+    }
   } catch (err) {
     console.error('Échec du chargement du plan', err)
   }
@@ -112,7 +122,7 @@ async function removeNote(note: OutlineNote): Promise<void> {
           v-model="note.content"
           class="note-text"
           rows="1"
-          placeholder="Note de plan…"
+          placeholder="Nouvelle note…"
           @input="onNoteInput(note, $event)"
         ></textarea>
         <span class="note-controls">
@@ -208,20 +218,24 @@ h2 {
 /* Texte de travail (notes/plan), pas manuscrit : hérite de --font-ui (défini
    sur <body>, cf. theme.css) plutôt que --font-manuscript, comme les champs
    description/notes des fiches personnages/lieux (EntityCard). */
+/* Visible avant la frappe (retour utilisateur) : bordure + fond distinct de
+   la carte qui la porte (--bg-panel), plutôt qu'un champ transparent qu'on ne
+   perçoit qu'au focus. */
 .note-text {
   flex: 1;
   min-width: 0;
   resize: none;
   overflow: hidden;
-  border: none;
-  background: none;
-  padding: 4px 2px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 7px 10px;
   font-size: 13.5px;
   line-height: 1.6;
 }
 .note-text:focus {
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-  border-radius: 4px;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg));
 }
 
 .note-controls {

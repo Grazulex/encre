@@ -272,6 +272,15 @@ async function loadChapterNotes(): Promise<void> {
     chapterNotes.value = all
       .filter((n) => n.chapterId === requestedId)
       .sort((a, b) => a.position - b.position)
+    // Filet de sécurité (comme OutlineSection.load) : recalcule la hauteur une
+    // fois les données arrivées et le DOM à jour, pas seulement au ref-callback
+    // de création — sans quoi une textarea peut rester coupée à 1 ligne au
+    // retour sur ce chapitre si la zone résumé/notes était déjà dépliée.
+    await nextTick()
+    for (const note of chapterNotes.value) {
+      const el = noteRefs.get(note.id)
+      if (el) autoGrowNote(el)
+    }
   } catch (err) {
     console.error('Échec du chargement des notes du chapitre', err)
   }
@@ -400,7 +409,14 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       >
         <option v-for="s in STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
       </select>
-      <button type="button" class="autolink-btn" @click="openAutolink">Lier les entités</button>
+      <button
+        type="button"
+        class="autolink-btn"
+        title="Convertit les noms de fiches écrits sans @ en mentions liées"
+        @click="openAutolink"
+      >
+        Lier les entités
+      </button>
     </header>
 
     <div class="summary-zone">
@@ -440,7 +456,7 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
                 v-model="note.content"
                 class="note-text"
                 rows="1"
-                placeholder="Note…"
+                placeholder="Nouvelle note…"
                 @input="onChapterNoteInput(note, $event)"
               ></textarea>
               <span class="note-controls">
@@ -510,8 +526,13 @@ header {
   display: flex;
   gap: 14px;
   align-items: center;
-  padding: 28px 0 10px;
-  max-width: 42rem;
+  /* Gouttière horizontale réelle (padding, pas seulement margin: auto) :
+     restaurée ici et sur .summary-zone/.chapter-chips/.page ci-dessous — sans
+     elle, dès que la fenêtre est plus étroite que max-width, la marge auto se
+     réduit à 0 et titre/statut/bouton viennent buter sur les bords (retour
+     utilisateur : colonne rognée à gauche, en-tête écrasé à droite). */
+  padding: 28px 24px 10px;
+  max-width: 44rem;
   width: 100%;
   margin: 0 auto;
   flex-shrink: 0;
@@ -588,10 +609,10 @@ header {
 }
 
 .summary-zone {
-  max-width: 42rem;
+  max-width: 44rem;
   width: 100%;
   margin: 0 auto;
-  padding: 0 0 10px;
+  padding: 0 24px 10px;
   flex-shrink: 0;
 }
 
@@ -650,10 +671,16 @@ header {
 
 /* Résumé et notes : texte de travail, pas manuscrit — hérite de --font-ui
    (posé sur <body>, theme.css) plutôt que --font-manuscript, comme les
-   champs description/notes des fiches personnages/lieux (EntityCard). */
+   champs description/notes des fiches personnages/lieux (EntityCard).
+   Bordure + fond explicites (--bg sur le panneau --bg-panel) : visible avant
+   la frappe, pas seulement au focus (retour utilisateur). */
 .summary-text {
   width: 100%;
   resize: vertical;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 8px 10px;
   font-size: 13px;
   line-height: 1.55;
 }
@@ -688,20 +715,24 @@ header {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+/* Visible avant la frappe (retour utilisateur) : le parent .note est déjà en
+   --bg (distinct du --bg-panel du panneau résumé/notes), donc un fond --bg
+   identique serait invisible ici — color-mix creuse un léger écart au lieu. */
 .note-text {
   flex: 1;
   min-width: 0;
   resize: none;
   overflow: hidden;
-  border: none;
-  background: none;
-  padding: 3px 2px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  border-radius: 5px;
+  padding: 6px 8px;
   font-size: 13px;
   line-height: 1.55;
 }
 .note-text:focus {
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-  border-radius: 4px;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
 }
 .note-controls {
   flex-shrink: 0;
@@ -729,10 +760,10 @@ header {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-width: 42rem;
+  max-width: 44rem;
   width: 100%;
   margin: 0 auto;
-  padding: 0 0 12px;
+  padding: 0 24px 12px;
   flex-shrink: 0;
 }
 .chip {
@@ -762,9 +793,14 @@ header {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Gouttière portée par le conteneur scrollable lui-même, pas par la colonne
+     centrée (:deep(.tiptap) ci-dessous) : ainsi le texte garde une marge
+     minimale des deux côtés même quand la fenêtre est plus étroite que
+     max-width (voir header, même raisonnement). */
+  padding: 0 24px;
 }
 .page :deep(.tiptap) {
-  max-width: 42rem;
+  max-width: 44rem;
   margin: 0 auto;
   padding: 12px 0 45vh;
   font-family: var(--font-manuscript);

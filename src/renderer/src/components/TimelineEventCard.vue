@@ -218,7 +218,7 @@ function removeEvent(): void {
         v-model="event.dateLabel"
         class="date"
         type="text"
-        placeholder="Date libre"
+        placeholder="An 3, printemps · 12 mars 1892…"
         @input="onDateInput"
       />
       <span class="controls">
