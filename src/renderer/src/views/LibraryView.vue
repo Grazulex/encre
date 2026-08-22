@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useLibraryStore } from '../stores/library'
 import BookCard from '../components/BookCard.vue'
+import ImportWizard from '../components/ImportWizard.vue'
 
 const store = useLibraryStore()
 const router = useRouter()
@@ -10,6 +11,7 @@ const creating = ref(false)
 const newTitle = ref('')
 const newAuthor = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
+const importing = ref(false)
 
 onMounted(() => store.load())
 
@@ -52,10 +54,15 @@ async function removeBook(id: number, title: string): Promise<void> {
         <h1>Bibliothèque</h1>
         <p v-if="bookCountLabel" class="count">{{ bookCountLabel }}</p>
       </div>
-      <button class="primary" type="button" @click="openCreateForm">
-        <span class="plus">+</span> Nouveau livre
-      </button>
+      <div class="header-actions">
+        <button type="button" @click="importing = true">Importer un livre</button>
+        <button class="primary" type="button" @click="openCreateForm">
+          <span class="plus">+</span> Nouveau livre
+        </button>
+      </div>
     </header>
+
+    <ImportWizard v-if="importing" @close="importing = false" />
 
     <Transition name="unfold">
       <form v-if="creating" class="create-form" @submit.prevent="createBook">
@@ -123,6 +130,12 @@ h1 {
 .plus {
   display: inline-block;
   margin-right: 2px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .create-form {
