@@ -15,6 +15,7 @@ import { buildWritePrompt } from './ai/context'
 import { buildFormatPrompt } from './ai/formatContext'
 import { buildReviewPrompt } from './ai/reviewContext'
 import { buildExtractPrompt } from './ai/extractContext'
+import { buildChronoPrompt } from './ai/chronoContext'
 import type { FormatConventions } from '../shared/types'
 import { AiService, type AiRunner } from './ai/service'
 import { createSdkRunner } from './ai/runner'
@@ -461,6 +462,40 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
                 addAiMessage(db, sessionId, 'assistant', full)
               } catch (err) {
                 console.error('[ai.startExtract] échec addAiMessage (assistant) :', err)
+              }
+            },
+            onError: (message) => emit('ai:error', { requestId, message })
+          }
+        )
+        return requestId
+      },
+      // Vérification de chronologie (Task 6, plan 3c) : même mécanique que
+      // startWrite/startFormat/startReview/startExtract ci-dessus (AiService.start,
+      // mêmes canaux ai:chunk/ai:done/ai:error, même contrat d'ordonnancement
+      // documenté plus haut), mais NIVEAU LIVRE — session enregistrée avec
+      // task='chrono' et chapterId NULL (CONTROLLER RULING : ai_sessions.chapter_id
+      // est déjà nullable, createAiSession accepte déjà null, aucune migration
+      // nécessaire). buildChronoPrompt lève déjà l'erreur de refus (livre sans
+      // chapitre) : pas de garde supplémentaire ici, contrairement à
+      // startReview/startExtract qui vérifient contentText eux-mêmes. Modèle
+      // choisi par l'appelant (comme startReview) : cette tâche suit le
+      // sélecteur de modèle du panneau.
+      startChrono: async (bookId, options) => {
+        const bundle = buildChronoPrompt(db, bookId)
+        const sessionId = createAiSession(db, bookId, null, 'chrono', options.model)
+        addAiMessage(db, sessionId, 'user', bundle.prompt)
+
+        let requestId = ''
+        requestId = service.start(
+          { system: bundle.system, prompt: bundle.prompt, model: options.model },
+          {
+            onChunk: (text) => emit('ai:chunk', { requestId, text }),
+            onDone: (full) => {
+              emit('ai:done', { requestId, text: full })
+              try {
+                addAiMessage(db, sessionId, 'assistant', full)
+              } catch (err) {
+                console.error('[ai.startChrono] échec addAiMessage (assistant) :', err)
               }
             },
             onError: (message) => emit('ai:error', { requestId, message })

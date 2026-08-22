@@ -91,6 +91,21 @@ export interface ExtractProposal {
   enrichissements: { entityId: number; aliases?: string[]; description?: string; notes?: string }[]
 }
 
+// Incohérence de chronologie relevée au niveau du LIVRE ENTIER (Task 6, plan
+// 3c) — un tableau de ces objets est la SEULE forme de sortie attendue de
+// l'IA pour ai.startChrono (voir le system prompt dans main/ai/chronoContext.ts).
+// `chapterIds`/`eventIds` sont des ids RÉELLEMENT fournis dans le prompt
+// (chapitres et événements du livre) : le modèle ne doit jamais en inventer,
+// et le renderer (Task 6, stores/ai.ts) filtre ceux qui ne correspondent plus
+// à aucun chapitre/événement du catalogue courant, comme extractProposal.ts
+// le fait pour entityId.
+export interface ChronoIssue {
+  severity: 'incoherence' | 'doute'
+  description: string // français, autoportant
+  chapterIds: number[] // chapitres impliqués (ids fournis dans le prompt)
+  eventIds: number[] // événements timeline impliqués (ids fournis)
+}
+
 export interface AiSessionRecord {
   id: number
   bookId: number

@@ -74,6 +74,7 @@ const api: EncreApi = {
     startFormat: (chapterId, conventions) => ipcRenderer.invoke('ai:startFormat', chapterId, conventions),
     startReview: (chapterId, options) => ipcRenderer.invoke('ai:startReview', chapterId, options),
     startExtract: (chapterId) => ipcRenderer.invoke('ai:startExtract', chapterId),
+    startChrono: (bookId, options) => ipcRenderer.invoke('ai:startChrono', bookId, options),
     formatToJson: (markdown) => ipcRenderer.invoke('ai:formatToJson', markdown),
     cancel: (requestId) => ipcRenderer.invoke('ai:cancel', requestId),
     onChunk: (cb) => {

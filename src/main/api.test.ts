@@ -359,6 +359,53 @@ describe('createApi', () => {
     expect(messages[1].content).toBe(extractJson)
   })
 
+  it('ai.startChrono rejette clairement un livre sans chapitre', async () => {
+    const db = openDb(':memory:')
+    const { emit } = makeEmitRecorder()
+    const api = createApi(db, { runner: makeFakeRunner('[]'), emitAiEvent: emit })
+    const book = await api.books.create({ title: 'Livre vide' })
+    await expect(
+      api.ai.startChrono(book.id, { model: 'claude-x' })
+    ).rejects.toThrow("Ce livre n'a aucun chapitre.")
+  })
+
+  it("ai.startChrono sur un livre avec chapitres génère un requestId, émet chunk/done et enregistre une session task='chrono' avec chapter_id NULL", async () => {
+    const db = openDb(':memory:')
+    let resolveDone: (() => void) | undefined
+    const donePromise = new Promise<void>((resolve) => { resolveDone = resolve })
+    const events: { channel: string; payload: unknown }[] = []
+    const emit = (channel: string, payload: unknown): void => {
+      events.push({ channel, payload })
+      if (channel === 'ai:done' || channel === 'ai:error') resolveDone?.()
+    }
+    const chronoJson = '[{"severity":"doute","description":"Chapitre sans résumé.","chapterIds":[],"eventIds":[]}]'
+    const api = createApi(db, { runner: makeFakeRunner(chronoJson), emitAiEvent: emit })
+    const book = await api.books.create({ title: 'Avec chapitres' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+
+    const requestId = await api.ai.startChrono(book.id, { model: 'claude-x' })
+    expect(requestId).toBeTypeOf('string')
+
+    await donePromise
+
+    const chunkEvent = events.find((e) => e.channel === 'ai:chunk')
+    const doneEvent = events.find((e) => e.channel === 'ai:done')
+    expect(chunkEvent?.payload).toEqual({ requestId, text: chronoJson })
+    expect(doneEvent?.payload).toEqual({ requestId, text: chronoJson })
+
+    const session = db.prepare('SELECT * FROM ai_sessions WHERE book_id = ? AND task = ?').get(book.id, 'chrono') as any
+    expect(session).toBeTruthy()
+    expect(session.chapter_id).toBeNull()
+    expect(session.model).toBe('claude-x')
+
+    const messages = db.prepare('SELECT role, content FROM ai_messages WHERE session_id = ? ORDER BY id').all(session.id) as any[]
+    expect(messages).toHaveLength(2)
+    expect(messages[0].role).toBe('user')
+    expect(messages[0].content).toContain(String(chapter.id))
+    expect(messages[1].role).toBe('assistant')
+    expect(messages[1].content).toBe(chronoJson)
+  })
+
   it('ai.formatToJson convertit du Markdown en JSON TipTap (aucune écriture en base)', async () => {
     const api = createApi(openDb(':memory:'))
     const { contentJson, contentText } = await api.ai.formatToJson('« Bonjour », dit-elle.')

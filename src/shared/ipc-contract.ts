@@ -95,6 +95,16 @@ export interface EncreApi {
     // (rejette) un chapitre dont le contenu texte est vide — rien à extraire. Pas
     // de choix de modèle exposé ici (comme startFormat) : modèle fixé côté main.
     startExtract(chapterId: number): Promise<string>  // requestId ; enregistre ai_session (task='extract') + messages
+    // Vérification de chronologie (Task 6, plan 3c) : même contrat d'ordonnancement
+    // et mêmes canaux ai:chunk/ai:done/ai:error que les autres startX ci-dessus ;
+    // session enregistrée avec task='chrono' et chapterId NULL (session NIVEAU
+    // LIVRE, pas rattachée à un chapitre précis — voir createAiSession, chapter_id
+    // est déjà nullable). La sortie attendue côté renderer est un tableau JSON de
+    // ChronoIssue (voir src/shared/types.ts) — le parsing se fait après ai:done,
+    // pas ici. Refuse (rejette) un livre sans aucun chapitre — rien à vérifier.
+    // Modèle choisi par l'appelant (comme startReview) : cette tâche suit le
+    // sélecteur de modèle du panneau, comme la relecture.
+    startChrono(bookId: number, options: { model: string }): Promise<string>  // requestId ; enregistre ai_session (task='chrono', chapterId null) + messages
     // Conversion pure Markdown → JSON TipTap (Task 6), réutilisant mdToTiptapJson
     // (déjà utilisé par l'import de fichier) : ne touche à aucun chapitre en base,
     // sert uniquement à préparer le contenu proposé par startFormat avant de
