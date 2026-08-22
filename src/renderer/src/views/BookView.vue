@@ -14,6 +14,7 @@ import OutlineSection from '../components/OutlineSection.vue'
 import TimelineSection from '../components/TimelineSection.vue'
 import EntityDrawer from '../components/EntityDrawer.vue'
 import BookSettingsPanel from '../components/BookSettingsPanel.vue'
+import ExportDialog from '../components/ExportDialog.vue'
 
 const props = defineProps<{ bookId: number }>()
 const store = useBookStore()
@@ -41,6 +42,10 @@ const focusMode = ref(false)
 // Panneau d'édition du livre (Task 15) : ouvert par le bouton discret ⚙ de
 // l'aside, fermé par son propre bouton « Fermer » ou Échap (BookSettingsPanel).
 const settingsOpen = ref(false)
+// Dialogue d'export (Task 9) : ouvert par le bouton « Exporter… » de l'aside,
+// près du bouton d'édition ⚙ — fermé par Annuler/Échap/clic hors carte ou
+// automatiquement après un export réussi (ExportDialog).
+const exportOpen = ref(false)
 
 function navigateChapter(direction: -1 | 1): void {
   if (store.section !== 'chapitres') return
@@ -103,6 +108,7 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
             ⚙
           </button>
         </div>
+        <button class="export-book" type="button" @click="exportOpen = true">Exporter…</button>
         <p class="meta">
           <span v-if="store.book.author">{{ store.book.author }}</span>
           <span v-if="store.book.author && store.book.genre" class="dot">·</span>
@@ -136,6 +142,7 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
     </main>
     <EntityDrawer />
     <BookSettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
+    <ExportDialog v-if="exportOpen" @close="exportOpen = false" />
   </div>
 </template>
 
@@ -229,6 +236,17 @@ aside {
 }
 .edit-book:hover {
   border-color: var(--accent);
+  color: var(--accent);
+}
+.export-book {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+.export-book:hover {
   color: var(--accent);
 }
 .header .meta {
