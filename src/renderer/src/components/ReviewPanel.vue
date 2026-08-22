@@ -84,10 +84,19 @@ function dismiss(index: number): void {
     <p v-if="ai.reviewParseError" class="cp-error">
       Réponse de relecture illisible — {{ ai.reviewParseError }}
     </p>
-    <p v-else-if="ai.reviewSuggestions.length === 0" class="cp-hint">
-      Aucune suggestion pour ce chapitre.
-    </p>
     <template v-else>
+      <p v-if="ai.reviewMalformedCount > 0" class="cp-hint">
+        {{ ai.reviewMalformedCount }}
+        suggestion{{ ai.reviewMalformedCount > 1 ? 's' : '' }} malformée{{
+          ai.reviewMalformedCount > 1 ? 's' : ''
+        }}
+        ignorée{{ ai.reviewMalformedCount > 1 ? 's' : '' }}.
+      </p>
+      <p v-if="ai.reviewSuggestions.length === 0" class="cp-hint">
+        Aucune suggestion pour ce chapitre.
+      </p>
+    </template>
+    <template v-if="!ai.reviewParseError && ai.reviewSuggestions.length > 0">
       <p v-if="anyApplied" class="review-banner">Snapshot pris avant la première application.</p>
       <ul class="review-list">
         <li

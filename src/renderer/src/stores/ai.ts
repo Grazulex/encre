@@ -3,6 +3,7 @@ import { useEntitiesStore } from './entities'
 import type { Entity, FormatConventions, ReviewSuggestion } from '../../../shared/types'
 import { sanitizeFormatOutput } from '../../../shared/sanitizeFormatOutput'
 import { parseAiJson } from '../../../shared/aiJson'
+import { isValidReviewSuggestion } from '../../../shared/reviewSuggestion'
 
 export type AiPhase = 'idle' | 'preparing' | 'streaming' | 'done' | 'error'
 export type AiModel = 'sonnet' | 'opus' | 'fable'
@@ -135,12 +136,22 @@ export const useAiStore = defineStore('ai', {
     // task==='review' (voir apply() ci-dessous), à partir du parsing défensif
     // de this.draft. reviewParseError porte le message d'échec de parseAiJson
     // (ou une réponse structurellement invalide — pas un tableau) pour
-    // affichage côté ReviewPanel ; les deux sont réinitialisés à chaque
-    // startReview(). Le statut PAR SUGGESTION (pending/applied/dismissed/
-    // notFound) est un détail d'affichage porté par ReviewPanel.vue, jamais
-    // par ce store (reviewSuggestions reste la donnée brute reçue de l'IA).
+    // affichage côté ReviewPanel ; reviewSuggestions ne contient jamais que
+    // des éléments passés au crible d'isValidReviewSuggestion (correctif
+    // review — un élément malformé, ex. `quote` manquant, ne doit jamais
+    // atteindre EditorPane.applySuggestionIntoEditor) ; reviewMalformedCount
+    // compte ceux écartés par ce filtre (0 si aucun, ou si reviewParseError
+    // est déjà posé — pas d'information redondante). Les trois sont
+    // réinitialisés à chaque startReview() ET à chaque VRAI changement de
+    // chapitre (prepare() ci-dessous, isNewChapter) : une relecture d'un
+    // chapitre déjà quitté n'a plus sa place à l'écran une fois qu'on est
+    // passé à un autre chapitre. Le statut PAR SUGGESTION
+    // (pending/applied/dismissed/notFound) est un détail d'affichage porté
+    // par ReviewPanel.vue, jamais par ce store (reviewSuggestions reste la
+    // donnée brute — filtrée — reçue de l'IA).
     reviewSuggestions: [] as ReviewSuggestion[],
     reviewParseError: null as string | null,
+    reviewMalformedCount: 0,
     // État d'ouverture du gestionnaire de snapshots (Task 2) : porté ici plutôt
     // que localement dans EditorPane (qui monte le composant) parce que le
     // déclencheur « Gérer les snapshots » vit dans ClaudePanel — même situation
@@ -193,12 +204,22 @@ export const useAiStore = defineStore('ai', {
         // intermédiaires, qui ne forment pas un JSON complet. Un tableau vide
         // (Claude "reste silencieux") est un succès normal, pas une erreur.
         if (this.task === 'review') {
-          const result = parseAiJson<ReviewSuggestion[]>(this.draft)
+          const result = parseAiJson<unknown[]>(this.draft)
           if (result.ok && Array.isArray(result.value)) {
-            this.reviewSuggestions = result.value
+            // Filtre défensif (correctif review) : parseAiJson garantit un
+            // JSON syntaxiquement valide, PAS la forme de chaque élément — un
+            // élément malformé (champ manquant, `type` hors énumération...)
+            // ne doit jamais atteindre EditorPane.applySuggestionIntoEditor
+            // ni ReviewPanel, où il planterait ou s'afficherait n'importe
+            // comment. Écarté silencieusement mais compté (reviewMalformedCount)
+            // plutôt qu'ignoré sans trace.
+            const valid = result.value.filter(isValidReviewSuggestion)
+            this.reviewSuggestions = valid
+            this.reviewMalformedCount = result.value.length - valid.length
             this.reviewParseError = null
           } else {
             this.reviewSuggestions = []
+            this.reviewMalformedCount = 0
             this.reviewParseError = result.ok
               ? 'Réponse inattendue (pas un tableau de suggestions).'
               : result.error
@@ -234,6 +255,15 @@ export const useAiStore = defineStore('ai', {
         this.requestId = null
         this.errorMessage = null
         this.phase = 'preparing'
+        // Correctif review : une relecture affichée pour le chapitre QUITTÉ
+        // n'a plus sa place une fois qu'on est passé à un autre chapitre —
+        // même raisonnement que draft/requestId/errorMessage ci-dessus, pour
+        // les mêmes raisons (ReviewPanel se démonte de toute façon avec le
+        // panneau, mais l'état ne doit pas survivre à un retour ultérieur
+        // sur ce même onglet pour un chapitre différent).
+        this.reviewSuggestions = []
+        this.reviewParseError = null
+        this.reviewMalformedCount = 0
       }
       try {
         const result = await window.encre.ai.prepareWrite(chapterId)
@@ -348,6 +378,7 @@ export const useAiStore = defineStore('ai', {
       this.requestId = null
       this.reviewSuggestions = []
       this.reviewParseError = null
+      this.reviewMalformedCount = 0
       try {
         const requestId = await window.encre.ai.startReview(chapterId, { model: this.model })
         this.requestId = requestId
