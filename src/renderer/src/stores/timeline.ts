@@ -63,12 +63,23 @@ export const useTimelineStore = defineStore('timeline', {
     // Immédiat (pas de debounce : des cases à cocher, pas une frappe), mais
     // toujours protégé par le même garde de séquence — deux (dé)cochages
     // rapprochés sur le même événement ne doivent pas se doubler.
+    //
+    // Clonage défensif à LA FRONTIÈRE IPC : `ipcRenderer.invoke` sérialise ses
+    // arguments avec l'algorithme de clonage structuré, qui échoue sur un
+    // Proxy (« could not be cloned ») — or TimelineEventCard.toggleXLink
+    // construit le tableau modifié en clair (filter/spread) mais transmet
+    // l'AUTRE tableau tel quel (`event.value.chapterIds`/`entityIds`), une
+    // référence directe vers un tableau réactif Pinia, donc un Proxy. D'où
+    // l'échec systématique observé en pratique (toast à chaque coche) alors
+    // que la logique de liaison elle-même était correcte. On clone ICI, à la
+    // frontière du store, plutôt que côté appelant : aucun futur appelant de
+    // setLinks (ou de reorder ci-dessous) ne peut réintroduire ce bug.
     async setLinks(id: number, chapterIds: number[], entityIds: number[]) {
       const seq = (updateSeq.get(id) ?? 0) + 1
       updateSeq.set(id, seq)
       const local = this.events.find((e) => e.id === id)
       try {
-        const updated = await window.encre.timeline.setLinks(id, chapterIds, entityIds)
+        const updated = await window.encre.timeline.setLinks(id, [...chapterIds], [...entityIds])
         if (local && updateSeq.get(id) === seq) {
           local.chapterIds = updated.chapterIds
           local.entityIds = updated.entityIds
@@ -88,7 +99,12 @@ export const useTimelineStore = defineStore('timeline', {
     async reorder(orderedIds: number[]) {
       if (this.bookId == null) return
       try {
-        await window.encre.timeline.reorder(this.bookId, orderedIds)
+        // Même clonage défensif que setLinks ci-dessus : tous les appelants
+        // actuels (TimelineSection, TimelineEventCard) construisent déjà
+        // `orderedIds` via `.map()` (donc un tableau déjà plain), mais rien
+        // n'empêche un futur appelant de transmettre directement un tableau
+        // réactif — cloner ici plutôt que de compter sur chaque appelant.
+        await window.encre.timeline.reorder(this.bookId, [...orderedIds])
       } catch (err) {
         console.error('Échec du réordonnancement de la chronologie', err)
         useUiStore().toast('Échec du réordonnancement.')
