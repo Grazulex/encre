@@ -32,6 +32,7 @@
     "@tiptap/suggestion": "^3.30.2",
     "@tiptap/vue-3": "^3.30.2",
     "better-sqlite3": "^13.0.3",
+    "jszip": "^3.10.1",
     "marked": "^18.0.10",
     "pinia": "^4.0.3",
     "tippy.js": "^6.3.7",

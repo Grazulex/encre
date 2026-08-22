@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, unlinkSync, readFileSync } from 'fs'
+import { copyFileSync, mkdirSync, unlinkSync, readFileSync, writeFileSync } from 'fs'
 import { join, extname, dirname } from 'path'
 import type { Db } from './db/connection'
 import type { EncreApi } from '../shared/ipc-contract'
@@ -8,7 +8,8 @@ import * as entities from './db/entities'
 import * as outline from './db/outline'
 import * as timeline from './db/timeline'
 import { scanChapterFiles, mdToTiptapJson } from './importer'
-import { exportMarkdownToFolder } from './exporter'
+import { exportMarkdownToFolder, slugify } from './exporter'
+import { buildEpub } from './epub'
 
 // `app` (onFlushRequest/flushDone) est un domaine événementiel côté renderer
 // (ipcRenderer.on/send) : il n'a pas de contrepartie invoke côté main, donc
@@ -162,9 +163,18 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
         if (res.canceled || res.filePaths.length === 0) return null
         return exportMarkdownToFolder(db, bookId, res.filePaths[0])
       },
-      // Branché Task 6 : génération EPUB réelle.
-      epub: async () => {
-        throw new Error('EPUB: Task 6')
+      epub: async (bookId, chapterIds) => {
+        const { dialog } = await import('electron')
+        const book = books.getBook(db, bookId)
+        const res = await dialog.showSaveDialog({
+          title: 'Exporter en EPUB',
+          defaultPath: `${slugify(book.title)}.epub`,
+          filters: [{ name: 'EPUB', extensions: ['epub'] }]
+        })
+        if (res.canceled || !res.filePath) return null
+        const buffer = await buildEpub(db, bookId, chapterIds)
+        writeFileSync(res.filePath, buffer)
+        return res.filePath
       },
       // Branché Task 7 : génération PDF réelle.
       pdf: async () => {
