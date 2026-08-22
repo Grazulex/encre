@@ -36,7 +36,7 @@ const LISTE_EXAMPLES: Record<FormatConventions['listes'], string> = {
 /** Construit le prompt d'harmonisation typographique pour un chapitre donné. */
 // Task 6b : sentence de préservation des marqueurs. En mode « proposition »,
 // l'interdiction de suppression/déplacement reste intacte, mais l'ajout de
-// marqueurs devient explicitement autorisé (voir bloc PRESERVE_BLOCK ci-dessous
+// marqueurs devient explicitement autorisé (voir bloc PROPOSAL_BLOCK ci-dessous
 // pour le détail des règles) — d'où le renvoi "voir consignes ci-dessous" pour
 // ne pas dupliquer les règles à deux endroits du prompt.
 const PRESERVE_STRICT =

@@ -48,4 +48,14 @@ describe('sanitizeFormatOutput', () => {
     const input = `${longLine}\n\nBonjour, dit-elle.`
     expect(sanitizeFormatOutput(input)).toBe(input)
   })
+
+  it("ne retire pas un vrai titre de chapitre de l'auteur (\"## Chapitre 12\") — garde-fou faux positif", () => {
+    const input = '## Chapitre 12\n\nBonjour, dit-elle.'
+    expect(sanitizeFormatOutput(input)).toBe(input)
+  })
+
+  it('ne retire pas un vrai titre de chapitre de l\'auteur ("## Chapitre III : Le Retour")', () => {
+    const input = '## Chapitre III : Le Retour\n\nBonjour, dit-elle.'
+    expect(sanitizeFormatOutput(input)).toBe(input)
+  })
 })

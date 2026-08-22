@@ -22,11 +22,15 @@ export function stripMarkdownFences(markdown: string): string {
 //
 // Deux formes reconnues, chacune seulement si suivie d'une ligne vide (pour
 // ne jamais manger un début de chapitre légitime) :
-//  - l'écho du titre de section ("## CHAPITRE ...") ;
+//  - l'écho EXACT du titre de section injecté par buildFormatPrompt
+//    ("## CHAPITRE (Markdown)") — ancré sur le suffixe "(Markdown)" pour ne
+//    JAMAIS matcher un vrai titre de chapitre écrit par l'auteur, du type
+//    "## Chapitre 12" ou "## Chapitre III : Le Retour" (perte de contenu
+//    silencieuse sinon, identique en preview et en résultat appliqué) ;
 //  - une courte ligne d'annonce se terminant par ":" (bornée en longueur pour
 //    ne pas confondre avec un vrai incipit se terminant par deux-points).
 // Boucle bornée : gère l'ordre "annonce puis titre" ou l'inverse.
-const HEADING_ECHO_RE = /^##\s*CHAPITRE\b.*$/i
+const HEADING_ECHO_RE = /^##\s*CHAPITRE\s*\(Markdown\)\s*$/i
 const MAX_ANNOUNCEMENT_LENGTH = 100
 const MAX_PREAMBLE_LINES = 5
 
