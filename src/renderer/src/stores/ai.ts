@@ -1,9 +1,15 @@
 import { defineStore } from 'pinia'
 import { useEntitiesStore } from './entities'
-import type { Entity, FormatConventions, ReviewSuggestion } from '../../../shared/types'
+import type {
+  Entity,
+  ExtractProposal,
+  FormatConventions,
+  ReviewSuggestion
+} from '../../../shared/types'
 import { sanitizeFormatOutput } from '../../../shared/sanitizeFormatOutput'
 import { parseAiJson } from '../../../shared/aiJson'
 import { isValidReviewSuggestion } from '../../../shared/reviewSuggestion'
+import { filterExtractProposal } from '../../../shared/extractProposal'
 
 export type AiPhase = 'idle' | 'preparing' | 'streaming' | 'done' | 'error'
 export type AiModel = 'sonnet' | 'opus' | 'fable'
@@ -17,7 +23,10 @@ export type AiModel = 'sonnet' | 'opus' | 'fable'
 // relecture — le brouillon final n'est jamais un texte à insérer/comparer
 // mais un JSON de ReviewSuggestion[] (voir reviewSuggestions ci-dessous),
 // parsé une seule fois à phase==='done' via parseAiJson (aiJson.ts, Task 1).
-export type AiTask = 'write' | 'format' | 'review'
+// 'extract' (Task 5, plan 3c) : extraction de fiches — le brouillon final est
+// UN SEUL objet JSON ExtractProposal (voir extractProposal ci-dessous), pas
+// un tableau, parsé une seule fois à phase==='done' comme 'review'.
+export type AiTask = 'write' | 'format' | 'review' | 'extract'
 
 // Task 6b : la sanitisation défensive de la sortie d'harmonisation (fences +
 // préambule/écho de titre) vit désormais dans shared/sanitizeFormatOutput.ts
@@ -152,6 +161,27 @@ export const useAiStore = defineStore('ai', {
     reviewSuggestions: [] as ReviewSuggestion[],
     reviewParseError: null as string | null,
     reviewMalformedCount: 0,
+    // Extraction de fiches (Task 5, plan 3c) : peuplé UNIQUEMENT à
+    // phase==='done' avec task==='extract' (voir apply() ci-dessous), à
+    // partir du parsing défensif de this.draft — MÊME principe que
+    // reviewSuggestions/reviewParseError/reviewMalformedCount ci-dessus, avec
+    // deux différences : (1) la sortie attendue est UN SEUL objet
+    // ExtractProposal, jamais un tableau ; (2) le filtre défensif se fait en
+    // DEUX temps — d'abord la FORME de chaque création/enrichissement
+    // (filterExtractProposal, src/shared/extractProposal.ts, comptée dans
+    // extractMalformedCount), puis, pour les enrichissements dont la forme
+    // est valide, l'EXISTENCE de leur entityId dans le catalogue courant du
+    // livre (useEntitiesStore — un id inventé ou déjà supprimé entre-temps
+    // n'a plus sa place ici, compté séparément dans
+    // extractUnknownEntityCount pour l'affichage « N propositions ignorées
+    // (entité inconnue) » d'ExtractDialog). Réinitialisés à chaque
+    // startExtract() ET à chaque VRAI changement de chapitre (prepare()
+    // ci-dessous, isNewChapter), pour les mêmes raisons que les champs
+    // review.
+    extractProposal: null as ExtractProposal | null,
+    extractParseError: null as string | null,
+    extractMalformedCount: 0,
+    extractUnknownEntityCount: 0,
     // État d'ouverture du gestionnaire de snapshots (Task 2) : porté ici plutôt
     // que localement dans EditorPane (qui monte le composant) parce que le
     // déclencheur « Gérer les snapshots » vit dans ClaudePanel — même situation
@@ -224,6 +254,36 @@ export const useAiStore = defineStore('ai', {
               ? 'Réponse inattendue (pas un tableau de suggestions).'
               : result.error
           }
+        } else if (this.task === 'extract') {
+          // Parsing défensif de la sortie d'extraction (Task 5) — même
+          // moment (uniquement à 'done') et même raisonnement que 'review'
+          // ci-dessus, mais la cible est UN SEUL objet, jamais un tableau.
+          const result = parseAiJson<unknown>(this.draft)
+          const filtered =
+            result.ok ? filterExtractProposal(result.value) : null
+          if (result.ok && filtered) {
+            // Second filtre, RENDERER-ONLY (voir commentaire du state
+            // ci-dessus) : un enrichissement bien formé mais dont l'entityId
+            // ne correspond à aucune fiche du catalogue courant du livre
+            // (id inventé par le modèle, ou fiche supprimée entre-temps)
+            // n'a rien à faire dans ExtractDialog.
+            const knownIds = new Set(useEntitiesStore().entities.map((e) => e.id))
+            const before = filtered.proposal.enrichissements.length
+            const enrichissements = filtered.proposal.enrichissements.filter((e) =>
+              knownIds.has(e.entityId)
+            )
+            this.extractProposal = { creations: filtered.proposal.creations, enrichissements }
+            this.extractMalformedCount = filtered.malformedCount
+            this.extractUnknownEntityCount = before - enrichissements.length
+            this.extractParseError = null
+          } else {
+            this.extractProposal = null
+            this.extractMalformedCount = 0
+            this.extractUnknownEntityCount = 0
+            this.extractParseError = result.ok
+              ? 'Réponse inattendue (pas un objet d’extraction).'
+              : result.error
+          }
         }
       } else {
         this.errorMessage = payload.message ?? 'Erreur inconnue.'
@@ -264,6 +324,13 @@ export const useAiStore = defineStore('ai', {
         this.reviewSuggestions = []
         this.reviewParseError = null
         this.reviewMalformedCount = 0
+        // Correctif extract (même raisonnement que review ci-dessus) : une
+        // extraction affichée pour le chapitre QUITTÉ n'a plus sa place une
+        // fois qu'on est passé à un autre chapitre.
+        this.extractProposal = null
+        this.extractParseError = null
+        this.extractMalformedCount = 0
+        this.extractUnknownEntityCount = 0
       }
       try {
         const result = await window.encre.ai.prepareWrite(chapterId)
@@ -388,6 +455,39 @@ export const useAiStore = defineStore('ai', {
         this.phase = 'error'
         this.errorMessage =
           err instanceof Error ? err.message : 'Échec du démarrage de la relecture.'
+      }
+    },
+    // Lance une extraction de fiches (Task 5, plan 3c) — même squelette que
+    // startReview ci-dessus (draft/erreur/phase remis à zéro, requestId
+    // inconnu jusqu'à résolution de l'invoke, reconcile() rejoue les
+    // événements déjà tamponnés) ; task='extract' pour que ClaudePanel/
+    // ExtractDialog sachent comment traiter le flux, et pour que apply()
+    // ci-dessus sache parser this.draft en ExtractProposal une fois 'done'.
+    // extractProposal/extractParseError/les deux compteurs d'une éventuelle
+    // extraction précédente sont vidés ici, pas seulement à la réception du
+    // nouveau résultat — sans quoi ExtractDialog afficherait un instant
+    // l'ANCIENNE proposition pendant le stream. Contrairement à startReview,
+    // pas de choix de modèle exposé (comme startFormat) : modèle fixé côté
+    // main (voir ipc-contract.ts, startExtract).
+    async startExtract(chapterId: number): Promise<void> {
+      this.task = 'extract'
+      this.draft = ''
+      this.errorMessage = null
+      this.phase = 'streaming'
+      this.requestId = null
+      this.extractProposal = null
+      this.extractParseError = null
+      this.extractMalformedCount = 0
+      this.extractUnknownEntityCount = 0
+      try {
+        const requestId = await window.encre.ai.startExtract(chapterId)
+        this.requestId = requestId
+        this.reconcile(requestId)
+      } catch (err) {
+        console.error('Échec du démarrage de l’extraction', err)
+        this.phase = 'error'
+        this.errorMessage =
+          err instanceof Error ? err.message : "Échec du démarrage de l'extraction."
       }
     },
     // Applique une suggestion de relecture par son index dans

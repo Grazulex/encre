@@ -1,0 +1,610 @@
+<script setup lang="ts">
+// Dialogue de validation champ par champ de l'extraction de fiches (Task 5,
+// plan 3c) : monté par ClaudePanel dès que
+// `ai.phase === 'done' && ai.task === 'extract'` (voir son template) — se
+// referme de lui-même dès que phase quitte 'done' (nouvelle extraction
+// lancée, chapitre changé — prepare() reset la phase, ou fermeture/
+// application ci-dessous). Même langage modal qu'AutolinkDialog (overlay +
+// carte, groupes par entité, cases cochées par défaut) et FormatDialog
+// (piège de Tab — plus de contrôles ici que les deux boutons de pied de page
+// de FormatDialog, le piège a donc réellement lieu d'être).
+//
+// Entièrement pilotée par le store ai pour la PROPOSITION (ai.extractProposal,
+// déjà filtrée deux fois — forme, voir shared/extractProposal.ts, puis
+// existence de l'entityId, voir stores/ai.ts) ; la SÉLECTION (quelles
+// créations/quels champs d'enrichissement appliquer) est un état purement
+// local à ce composant, construit une seule fois au montage (même idiome
+// qu'AutolinkDialog.selected) — ce dialogue est remonté à chaque nouvelle
+// extraction (v-if côté ClaudePanel), jamais réutilisé d'une session à
+// l'autre.
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useAiStore } from '../stores/ai'
+import { useBookStore } from '../stores/book'
+import { useEntitiesStore } from '../stores/entities'
+import { useUiStore } from '../stores/ui'
+import type { Entity, EntityPatch, ExtractProposal } from '../../../shared/types'
+
+type Creation = ExtractProposal['creations'][number]
+type Enrichissement = ExtractProposal['enrichissements'][number]
+type EnrichField = 'aliases' | 'description' | 'notes'
+
+interface CreationChoice {
+  creation: Creation
+  checked: boolean
+}
+
+interface FieldChoice {
+  field: EnrichField
+  label: string
+  preview: string
+  checked: boolean
+}
+
+interface EnrichissementChoice {
+  entity: Entity
+  fields: FieldChoice[]
+}
+
+const ai = useAiStore()
+const store = useBookStore()
+const entitiesStore = useEntitiesStore()
+const ui = useUiStore()
+
+const cardEl = ref<HTMLElement | null>(null)
+const applying = ref(false)
+
+const FIELD_LABELS: Record<EnrichField, string> = {
+  aliases: 'Alias',
+  description: 'Description',
+  notes: 'Notes'
+}
+
+// Une seule fois au montage (voir en-tête de fichier) : chaque création
+// proposée est cochée par défaut (brief), affichable directement.
+const creationChoices = ref<CreationChoice[]>(
+  (ai.extractProposal?.creations ?? []).map((creation) => ({ creation, checked: true }))
+)
+
+function buildFieldChoices(enrichissement: Enrichissement): FieldChoice[] {
+  const fields: FieldChoice[] = []
+  if (enrichissement.aliases && enrichissement.aliases.length > 0) {
+    fields.push({
+      field: 'aliases',
+      label: FIELD_LABELS.aliases,
+      preview: enrichissement.aliases.join(', '),
+      checked: true
+    })
+  }
+  if (enrichissement.description && enrichissement.description.trim()) {
+    fields.push({
+      field: 'description',
+      label: FIELD_LABELS.description,
+      preview: enrichissement.description,
+      checked: true
+    })
+  }
+  if (enrichissement.notes && enrichissement.notes.trim()) {
+    fields.push({
+      field: 'notes',
+      label: FIELD_LABELS.notes,
+      preview: enrichissement.notes,
+      checked: true
+    })
+  }
+  return fields
+}
+
+// Par entité (brief : « par entité : chaque champ proposé = checkbox ») —
+// l'entité existe forcément dans le catalogue courant (ai.extractProposal a
+// déjà écarté les entityId inconnus, voir stores/ai.ts), le `!` ci-dessous
+// est donc sûr ; un enrichissement dont aucun champ n'est finalement
+// exploitable (les trois vides) n'a rien à afficher.
+const enrichissementChoices = ref<EnrichissementChoice[]>(
+  (ai.extractProposal?.enrichissements ?? [])
+    .map((enrichissement): EnrichissementChoice | null => {
+      const entity = entitiesStore.entities.find((e) => e.id === enrichissement.entityId)
+      if (!entity) return null
+      const fields = buildFieldChoices(enrichissement)
+      if (fields.length === 0) return null
+      return { entity, fields }
+    })
+    .filter((choice): choice is EnrichissementChoice => choice !== null)
+)
+
+// Garde les enrichissements bruts alignés sur enrichissementChoices (même
+// index) pour retrouver, à l'application, les valeurs PROPOSÉES par champ
+// (aliases/description/notes) sans les redupliquer dans FieldChoice.preview.
+const enrichissementSources = (ai.extractProposal?.enrichissements ?? []).filter((e) =>
+  entitiesStore.entities.some((entity) => entity.id === e.entityId)
+)
+
+const hasSelection = computed(
+  () =>
+    creationChoices.value.some((c) => c.checked) ||
+    enrichissementChoices.value.some((c) => c.fields.some((f) => f.checked))
+)
+
+// Ajoute `addition` (si non vide) à la suite de `existing`, séparé par une
+// ligne vide (brief : « AJOUTÉES à la suite de l'existant ») — jamais une
+// réécriture. `existing` vide (fiche neuve ou champ encore inexploité) ne
+// laisse aucune ligne vide en tête.
+function appendText(existing: string, addition: string): string {
+  const trimmedAddition = addition.trim()
+  if (!trimmedAddition) return existing
+  return existing.trim() ? `${existing}\n\n${trimmedAddition}` : trimmedAddition
+}
+
+// Fusion d'alias sans doublon (brief : « comparaison sensible à la casse
+// acceptée », ordre existant conservé, nouveaux ajoutés à la suite).
+function mergeAliases(existing: string[], proposed: string[]): string[] {
+  const merged = [...existing]
+  for (const alias of proposed) {
+    if (!merged.includes(alias)) merged.push(alias)
+  }
+  return merged
+}
+
+async function applySelection(): Promise<void> {
+  if (applying.value || !hasSelection.value) return
+  const book = store.book
+  if (!book) return
+  applying.value = true
+  let createdCount = 0
+  let enrichedCount = 0
+  let hadError = false
+
+  try {
+    for (const choice of creationChoices.value) {
+      if (!choice.checked) continue
+      const { creation } = choice
+      try {
+        const entity = await window.encre.entities.create({
+          bookId: book.id,
+          kind: creation.kind,
+          name: creation.name
+        })
+        const patch: EntityPatch = {}
+        if (creation.aliases.length > 0) patch.aliases = [...creation.aliases]
+        if (creation.description.trim()) patch.description = creation.description
+        if (Object.keys(patch).length > 0) {
+          await window.encre.entities.update(entity.id, patch)
+        }
+        createdCount++
+      } catch (err) {
+        console.error('Échec de la création de fiche depuis l’extraction', err)
+        hadError = true
+      }
+    }
+
+    for (let i = 0; i < enrichissementChoices.value.length; i++) {
+      const choice = enrichissementChoices.value[i]
+      const source = enrichissementSources[i]
+      const checkedFields = choice.fields.filter((f) => f.checked)
+      if (checkedFields.length === 0) continue
+      const patch: EntityPatch = {}
+      for (const field of checkedFields) {
+        if (field.field === 'aliases') {
+          patch.aliases = mergeAliases(choice.entity.aliases, source.aliases ?? [])
+        } else if (field.field === 'description') {
+          patch.description = appendText(choice.entity.description, source.description ?? '')
+        } else {
+          patch.notes = appendText(choice.entity.notes, source.notes ?? '')
+        }
+      }
+      try {
+        await window.encre.entities.update(choice.entity.id, patch)
+        enrichedCount++
+      } catch (err) {
+        console.error('Échec de l’enrichissement de fiche depuis l’extraction', err)
+        hadError = true
+      }
+    }
+
+    await entitiesStore.load(book.id)
+
+    const parts: string[] = []
+    if (createdCount > 0) {
+      parts.push(`${createdCount} fiche${createdCount > 1 ? 's' : ''} créée${createdCount > 1 ? 's' : ''}`)
+    }
+    if (enrichedCount > 0) {
+      parts.push(`${enrichedCount} enrichie${enrichedCount > 1 ? 's' : ''}`)
+    }
+    if (parts.length > 0) {
+      ui.toast(parts.join(', ') + (hadError ? ' (certaines applications ont échoué).' : '.'))
+    } else if (hadError) {
+      ui.toast('Impossible d’appliquer la sélection.')
+    }
+
+    // Ferme le dialogue uniquement si tout s'est bien passé — un échec
+    // partiel laisse la session 'done' intacte pour que l'auteur puisse
+    // relire ce qui a échoué et réessayer (même philosophie que
+    // ai.applyFormat/ai.insertDraft : reset() seulement après succès
+    // confirmé).
+    if (!hadError) ai.reset()
+  } finally {
+    applying.value = false
+  }
+}
+
+function close(): void {
+  if (applying.value) return
+  ai.reset()
+}
+
+// Piège de focus identique à FormatDialog : plusieurs contrôles (cases à
+// cocher + deux boutons de pied de page), Tab doit continuer à circuler
+// entre eux sans jamais s'échapper vers la vue en arrière-plan.
+function trapTab(event: KeyboardEvent): void {
+  const card = cardEl.value
+  if (!card) return
+  const focusables = Array.from(
+    card.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+    )
+  )
+  if (focusables.length === 0) return
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    close()
+  } else if (event.key === 'Tab') {
+    trapTab(event)
+  }
+}
+
+onMounted(async () => {
+  await nextTick()
+  cardEl.value?.focus()
+})
+</script>
+
+<template>
+  <div class="extract-overlay" @click.self="close">
+    <div
+      ref="cardEl"
+      class="extract-card"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Validation de l'extraction de fiches"
+      tabindex="-1"
+      @keydown="onKeydown"
+    >
+      <header>
+        <h2>Extraction de fiches</h2>
+        <span class="kbd">Échap</span>
+      </header>
+
+      <div class="extract-body">
+        <p v-if="ai.extractMalformedCount > 0" class="extract-hint">
+          {{ ai.extractMalformedCount }}
+          proposition{{ ai.extractMalformedCount > 1 ? 's' : '' }} malformée{{
+            ai.extractMalformedCount > 1 ? 's' : ''
+          }}
+          ignorée{{ ai.extractMalformedCount > 1 ? 's' : '' }}.
+        </p>
+        <p v-if="ai.extractUnknownEntityCount > 0" class="extract-hint">
+          {{ ai.extractUnknownEntityCount }}
+          proposition{{ ai.extractUnknownEntityCount > 1 ? 's' : '' }} ignorée{{
+            ai.extractUnknownEntityCount > 1 ? 's' : ''
+          }}
+          (entité inconnue).
+        </p>
+
+        <template v-if="creationChoices.length === 0 && enrichissementChoices.length === 0">
+          <p class="extract-empty">Aucune proposition pour ce chapitre.</p>
+        </template>
+
+        <section v-if="creationChoices.length > 0" class="extract-section">
+          <span class="field-label">Nouvelles fiches</span>
+          <label
+            v-for="(choice, index) in creationChoices"
+            :key="`creation-${index}`"
+            class="creation-row"
+          >
+            <input v-model="choice.checked" type="checkbox" />
+            <div class="creation-body">
+              <div class="creation-head">
+                <span class="badge" :class="{ 'badge-place': choice.creation.kind === 'place' }">
+                  {{ choice.creation.kind === 'place' ? '●' : '◆' }}
+                </span>
+                <span class="creation-name">{{ choice.creation.name }}</span>
+                <span v-if="choice.creation.aliases.length > 0" class="creation-aliases">
+                  alias : {{ choice.creation.aliases.join(', ') }}
+                </span>
+              </div>
+              <p v-if="choice.creation.description" class="creation-description">
+                {{ choice.creation.description }}
+              </p>
+            </div>
+          </label>
+        </section>
+
+        <section v-if="enrichissementChoices.length > 0" class="extract-section">
+          <span class="field-label">Enrichissements</span>
+          <div
+            v-for="(choice, index) in enrichissementChoices"
+            :key="`enrichissement-${index}`"
+            class="enrich-group"
+          >
+            <div class="enrich-head">
+              <span class="badge" :class="{ 'badge-place': choice.entity.kind === 'place' }">
+                {{ choice.entity.kind === 'place' ? '●' : '◆' }}
+              </span>
+              <span class="enrich-name">{{ choice.entity.name }}</span>
+            </div>
+            <label v-for="field in choice.fields" :key="field.field" class="enrich-row">
+              <input v-model="field.checked" type="checkbox" />
+              <div class="enrich-field">
+                <span class="enrich-field-label">{{ field.label }}</span>
+                <p class="enrich-field-preview">{{ field.preview }}</p>
+              </div>
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <footer>
+        <button type="button" class="ghost" :disabled="applying" @click="close">Fermer</button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="applying || !hasSelection"
+          @click="applySelection"
+        >
+          <span v-if="applying" class="spinner" aria-hidden="true"></span>
+          {{ applying ? 'Application…' : 'Appliquer la sélection' }}
+        </button>
+      </footer>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.extract-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: color-mix(in srgb, var(--fg) 25%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.extract-card {
+  width: 560px;
+  max-width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px -20px color-mix(in srgb, var(--fg) 45%, transparent);
+  overflow: hidden;
+}
+.extract-card:focus,
+.extract-card:focus-visible {
+  outline: none;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+header h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.kbd {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  background: var(--bg);
+}
+
+.extract-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.extract-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.extract-empty {
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.extract-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--fg-muted);
+}
+
+.badge {
+  font-size: 9px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.badge-place {
+  color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.creation-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.creation-row:hover {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+.creation-row input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.creation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.creation-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.creation-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.creation-aliases {
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+.creation-description {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+}
+
+.enrich-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.enrich-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 2px;
+}
+.enrich-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.enrich-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.enrich-row:hover {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+.enrich-row input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.enrich-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.enrich-field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+.enrich-field-preview {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ghost {
+  color: var(--fg-muted);
+}
+
+.spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 2px solid color-mix(in srgb, var(--bg) 40%, transparent);
+  border-top-color: var(--bg);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.8s;
+  }
+}
+</style>

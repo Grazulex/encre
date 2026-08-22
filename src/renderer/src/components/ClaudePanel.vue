@@ -12,20 +12,22 @@ import { useUiStore } from '../stores/ui'
 import type { FormatConventions } from '../../../shared/types'
 import FormatDialog from './FormatDialog.vue'
 import ReviewPanel from './ReviewPanel.vue'
+import ExtractDialog from './ExtractDialog.vue'
 
 const ai = useAiStore()
 const store = useBookStore()
 const ui = useUiStore()
 
-// Trois onglets partageant le même panneau (Task 6, puis Task 3 plan 3c) :
-// « Écriture » (préexistant), « Mise en forme » (harmonisation typographique)
-// et « Relecture » (suggestions ciblées appliquées une à une). Les trois
-// tâches partagent phase/draft/requestId côté store (un seul flux à la
-// fois — voir stores/ai.ts, AiTask) ; cet onglet local ne pilote QUE
-// l'affichage, jamais la génération elle-même : basculer d'onglet pendant un
-// stream ne l'annule pas, il continue en arrière-plan (ai.task indique
-// lequel).
-const activeTab = ref<'ecriture' | 'mise-en-forme' | 'relecture'>('ecriture')
+// Quatre onglets partageant le même panneau (Task 6, puis Task 3 et Task 5
+// plan 3c) : « Écriture » (préexistant), « Mise en forme » (harmonisation
+// typographique), « Relecture » (suggestions ciblées appliquées une à une)
+// et « Extraction » (fiches personnages/lieux proposées depuis le texte du
+// chapitre, validées dans ExtractDialog). Les quatre tâches partagent
+// phase/draft/requestId côté store (un seul flux à la fois — voir
+// stores/ai.ts, AiTask) ; cet onglet local ne pilote QUE l'affichage, jamais
+// la génération elle-même : basculer d'onglet pendant un stream ne l'annule
+// pas, il continue en arrière-plan (ai.task indique lequel).
+const activeTab = ref<'ecriture' | 'mise-en-forme' | 'relecture' | 'extraction'>('ecriture')
 
 // Conventions de mise en forme (Task 6) : « mémorisées en session » (brief) —
 // sessionStorage plutôt que le store Pinia (qui ne persiste rien lui-même) ou
@@ -109,6 +111,15 @@ function launchReview(): void {
   ai.startReview(chapter.id)
 }
 
+// Lance une extraction de fiches (Task 5, plan 3c) — même garde que
+// launchReview ci-dessus. Contrairement à la relecture, aucun choix de
+// modèle n'est exposé (fixé côté main, comme la mise en forme).
+function launchExtract(): void {
+  const chapter = store.currentChapter
+  if (!chapter || !hasContent.value || busy.value) return
+  ai.startExtract(chapter.id)
+}
+
 // prepare() re-déclenché à chaque ouverture du panneau (montage — v-if côté
 // BookView) ET à chaque changement de chapitre tant qu'il reste ouvert
 // (même watcher, { immediate: true } couvrant les deux cas). prepare()
@@ -125,6 +136,18 @@ watch(
 
 const busy = computed(() => ai.phase === 'preparing' || ai.phase === 'streaming')
 const hasContent = computed(() => !!store.currentChapter?.contentText.trim())
+
+// Libellé en français d'une tâche IA (Task 5, plan 3c) — les bandeaux
+// « <tâche> en cours, patientez… » de Relecture et Extraction couvrent les
+// TROIS autres tâches possibles (contrairement à ceux d'Écriture/Mise en
+// forme, chacun gaté sur une seule autre tâche précise), d'où cette table
+// plutôt qu'un ternaire imbriqué à chaque site d'appel.
+const TASK_LABELS: Record<string, string> = {
+  write: 'Écriture',
+  format: 'Mise en forme',
+  review: 'Relecture',
+  extract: 'Extraction'
+}
 
 // ai.hasSummary ne se rafraîchit qu'à prepare() (montage du panneau /
 // changement de chapitre) : si le panneau reste ouvert pendant que l'auteur
@@ -258,6 +281,16 @@ watch(
         @click="activeTab = 'relecture'"
       >
         Relecture
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="cp-tab"
+        :class="{ active: activeTab === 'extraction' }"
+        :aria-selected="activeTab === 'extraction'"
+        @click="activeTab = 'extraction'"
+      >
+        Extraction
       </button>
     </div>
 
@@ -426,7 +459,7 @@ watch(
         </div>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeTab === 'relecture'">
         <div class="cp-model-row">
           <span class="field-label">Modèle</span>
           <select v-model="ai.model" class="cp-model-select" :disabled="busy">
@@ -437,8 +470,7 @@ watch(
         </div>
 
         <p v-if="busy && ai.task !== 'review'" class="cp-warning">
-          {{ ai.task === 'write' ? 'Écriture' : 'Mise en forme' }} en cours — patientez avant de
-          relire ce chapitre.
+          {{ TASK_LABELS[ai.task] }} en cours — patientez avant de relire ce chapitre.
         </p>
         <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à relire.</p>
 
@@ -465,12 +497,44 @@ watch(
         <ReviewPanel v-if="ai.task === 'review' && ai.phase === 'done'" />
       </template>
 
+      <template v-else>
+        <p v-if="busy && ai.task !== 'extract'" class="cp-warning">
+          {{ TASK_LABELS[ai.task] }} en cours — patientez avant d'extraire des fiches de ce
+          chapitre.
+        </p>
+        <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à extraire.</p>
+
+        <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
+          <p v-if="ai.errorMessage && ai.task === 'extract'" class="cp-error">
+            {{ ai.errorMessage }}
+          </p>
+          <button type="button" class="primary" :disabled="!hasContent || busy" @click="launchExtract">
+            Analyser ce chapitre
+          </button>
+        </div>
+
+        <div
+          v-if="ai.task === 'extract' && (ai.phase === 'streaming' || ai.phase === 'done')"
+          class="cp-stream"
+        >
+          <span class="field-label">Analyse en cours…</span>
+          <div ref="streamEl" class="cp-stream-text">
+            {{ ai.draft }}<span v-if="ai.phase === 'streaming'" class="cp-cursor">▍</span>
+          </div>
+          <div v-if="ai.phase === 'streaming'" class="cp-stream-actions">
+            <button type="button" @click="ai.cancel()">Annuler</button>
+          </div>
+          <p v-else class="cp-hint">Proposition affichée dans la boîte de dialogue.</p>
+        </div>
+      </template>
+
       <button type="button" class="cp-snapshots-link" @click="ai.openSnapshotManager()">
         Gérer les snapshots
       </button>
     </div>
 
     <FormatDialog v-if="ai.phase === 'done' && ai.task === 'format'" />
+    <ExtractDialog v-if="ai.phase === 'done' && ai.task === 'extract'" />
   </div>
 </template>
 
