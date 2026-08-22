@@ -2,6 +2,9 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { openDb } from './db/connection'
+import { createApi } from './api'
+import { registerIpc } from './ipc'
 
 function createWindow(): void {
   // Create the browser window.
@@ -51,6 +54,9 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
+
+  const db = openDb(join(app.getPath('userData'), 'library.db'))
+  registerIpc(createApi(db))
 
   createWindow()
 

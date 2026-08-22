@@ -1,22 +1,25 @@
-import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer } from 'electron'
+import type { EncreApi } from '../shared/ipc-contract'
 
-// Custom APIs for renderer
-const api = {}
-
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
+const api: EncreApi = {
+  books: {
+    list: () => ipcRenderer.invoke('books:list'),
+    get: (id) => ipcRenderer.invoke('books:get', id),
+    create: (input) => ipcRenderer.invoke('books:create', input),
+    update: (id, patch) => ipcRenderer.invoke('books:update', id, patch),
+    remove: (id) => ipcRenderer.invoke('books:remove', id)
+  },
+  chapters: {
+    listByBook: (bookId) => ipcRenderer.invoke('chapters:listByBook', bookId),
+    get: (id) => ipcRenderer.invoke('chapters:get', id),
+    create: (bookId, title) => ipcRenderer.invoke('chapters:create', bookId, title),
+    saveContent: (id, contentJson, contentText) =>
+      ipcRenderer.invoke('chapters:saveContent', id, contentJson, contentText),
+    rename: (id, title) => ipcRenderer.invoke('chapters:rename', id, title),
+    setStatus: (id, status) => ipcRenderer.invoke('chapters:setStatus', id, status),
+    reorder: (bookId, orderedIds) => ipcRenderer.invoke('chapters:reorder', bookId, orderedIds),
+    remove: (id) => ipcRenderer.invoke('chapters:remove', id)
   }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
 }
+
+contextBridge.exposeInMainWorld('encre', api)

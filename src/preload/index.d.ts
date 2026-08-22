@@ -1,8 +1,7 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+import type { EncreApi } from '../shared/ipc-contract'
 
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: unknown
+    encre: EncreApi
   }
 }
