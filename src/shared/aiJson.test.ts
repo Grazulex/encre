@@ -68,7 +68,7 @@ describe('parseAiJson', () => {
     }
   })
 
-  it('handle nested arrays correctly', () => {
+  it('gère les tableaux imbriqués correctement', () => {
     const result = parseAiJson<unknown>('Preamble [[1, 2], [3, 4]]')
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -76,11 +76,45 @@ describe('parseAiJson', () => {
     }
   })
 
-  it('handle nested objects correctly', () => {
+  it('gère les objets imbriqués correctement', () => {
     const result = parseAiJson<unknown>('Preamble {"a": {"b": 1}}')
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.value).toEqual({ a: { b: 1 } })
+    }
+  })
+
+  it('tolère les crochets dans le préambule (Voici [enfin] le résultat)', () => {
+    const result = parseAiJson<{ key: string }>('Voici [enfin] le résultat : {"key":"value"}')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value).toEqual({ key: 'value' })
+    }
+  })
+
+  it('tolère les crochets dans le préambule avec tableau JSON', () => {
+    const result = parseAiJson<string[]>('Voici [les résultats] :\n\n["item1", "item2"]')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value).toEqual(['item1', 'item2'])
+    }
+  })
+
+  it('retourne {ok:false} avec plusieurs candidats invalides', () => {
+    const result = parseAiJson<unknown>('[pas json] et aussi {pas json}')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toBeTruthy()
+    }
+  })
+
+  it('ne bloque pas avec beaucoup de crochets parasites', () => {
+    // 50 crochets ouvrants sans fermetures correspondantes valides
+    const manyBrackets = '[' + ' '.repeat(100) + '{"real":"json"}'
+    const result = parseAiJson<{ real: string }>(manyBrackets)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value).toEqual({ real: 'json' })
     }
   })
 

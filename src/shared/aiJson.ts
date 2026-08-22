@@ -9,17 +9,17 @@ export type ParseAiJsonResult<T> =
  *
  * Tolère:
  * - Les fences markdown (```json ... ```)
- * - Un préambule avant le premier [ ou {
- * - Du texte après le dernier ] ou } correspondant
+ * - Un préambule contenant des crochets avant le JSON (ex: "Voici [enfin] le résultat : {...}")
+ * - Plusieurs candidats de crochets ouvrants (boucle jusqu'à 10 candidats)
  *
  * Ne jette jamais une exception.
  *
  * @param raw - Texte brut potentiellement contenant du JSON
  * @returns Résultat avec ok:true et la valeur parsée, ou ok:false et un message d'erreur en français
  */
-export function parseAiJson<T>(raw: unknown): ParseAiJsonResult<T> {
+export function parseAiJson<T>(raw: string): ParseAiJsonResult<T> {
   try {
-    // Défense: accepter les entrées non-string sans jeter
+    // Défense interne: accepter les entrées non-string sans jeter
     if (typeof raw !== 'string') {
       return { ok: false, error: 'Entrée non-string fournie à parseAiJson' }
     }
@@ -28,33 +28,51 @@ export function parseAiJson<T>(raw: unknown): ParseAiJsonResult<T> {
     const stripped = stripMarkdownFences(raw)
     const trimmed = stripped.trim()
 
-    // Étape 2: chercher le premier caractère JSON plausible
-    const openBracketIndex = trimmed.search(/[\[\{]/)
-    if (openBracketIndex === -1) {
-      return { ok: false, error: 'Aucun JSON trouvé (pas de [ ni {)' }
+    // Étape 2: essayer successivement les candidats [ ou {
+    const MAX_CANDIDATES = 10
+    let searchStartIndex = 0
+
+    for (let attemptCount = 0; attemptCount < MAX_CANDIDATES; attemptCount++) {
+      // Trouver le prochain [ ou { à partir de searchStartIndex
+      const remainingText = trimmed.slice(searchStartIndex)
+      const nextMatch = remainingText.search(/[\[\{]/)
+
+      if (nextMatch === -1) {
+        // Pas de JSON trouvé
+        if (attemptCount === 0) {
+          return { ok: false, error: 'Aucun JSON trouvé (pas de [ ni {)' }
+        }
+        // Tous les candidats ont échoué
+        return { ok: false, error: 'Aucun JSON valide trouvé après avoir testé les candidats' }
+      }
+
+      const actualOpenBracketIndex = searchStartIndex + nextMatch
+      const openBracket = trimmed[actualOpenBracketIndex]
+      const closeBracket = openBracket === '[' ? ']' : '}'
+
+      // Étape 3: chercher le dernier ] ou } de ce type
+      const closeBracketIndex = trimmed.lastIndexOf(closeBracket)
+      if (closeBracketIndex === -1 || closeBracketIndex <= actualOpenBracketIndex) {
+        // Ce candidat n'a pas de fermeture, essayer le suivant
+        searchStartIndex = actualOpenBracketIndex + 1
+        continue
+      }
+
+      // Étape 4: extraire et parser le JSON
+      const jsonString = trimmed.substring(actualOpenBracketIndex, closeBracketIndex + 1)
+
+      try {
+        const parsed: T = JSON.parse(jsonString)
+        return { ok: true, value: parsed }
+      } catch {
+        // Ce candidat ne parse pas, essayer le suivant
+        searchStartIndex = actualOpenBracketIndex + 1
+        continue
+      }
     }
 
-    const openBracket = trimmed[openBracketIndex]
-    const closeBracket = openBracket === '[' ? ']' : '}'
-
-    // Étape 3: chercher le dernier ] ou } correspondant
-    const closeBracketIndex = trimmed.lastIndexOf(closeBracket)
-    if (closeBracketIndex === -1 || closeBracketIndex <= openBracketIndex) {
-      return { ok: false, error: `Pas de ${closeBracket} correspondant trouvé` }
-    }
-
-    // Étape 4: extraire et parser le JSON
-    const jsonString = trimmed.substring(openBracketIndex, closeBracketIndex + 1)
-
-    let parsed: T
-    try {
-      parsed = JSON.parse(jsonString)
-    } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : String(e)
-      return { ok: false, error: `JSON invalide: ${errorMsg}` }
-    }
-
-    return { ok: true, value: parsed }
+    // Trop de candidats, on abandonne
+    return { ok: false, error: 'Trop de candidats de crochets sans JSON valide' }
   } catch (error) {
     // Défense absolue: capturer toute exception imprévue
     const errorMsg = error instanceof Error ? error.message : String(error)
