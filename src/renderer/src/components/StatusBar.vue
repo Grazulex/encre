@@ -43,7 +43,7 @@ const sessionWords = computed(() => {
     <span class="spacer" />
     <span class="save-state" :class="store.saveState">
       <span class="pulse" />
-      {{ SAVE_LABELS[store.saveState] }}
+      {{ store.saveError ?? SAVE_LABELS[store.saveState] }}
     </span>
   </footer>
 </template>

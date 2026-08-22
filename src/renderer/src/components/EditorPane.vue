@@ -9,14 +9,22 @@ const store = useBookStore()
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingChapterId: number | null = null
+// Id du chapitre dont le contenu est réellement chargé dans l'éditeur : posé
+// uniquement là où setContent s'exécute (chargement initial et watch
+// ci-dessous), jamais lu depuis store.currentChapter. Pendant une transition
+// de chapitre, store.currentChapter pointe déjà vers le nouveau alors que
+// l'éditeur affiche encore l'ancien document (le temps que flush() puis
+// setContent se terminent) ; taguer une frappe survenant dans cette fenêtre
+// avec l'id du nouveau chapitre écraserait son contenu au prochain flush.
+let editorChapterId: number | null = null
 
 const editor = useEditor({
   extensions: [StarterKit],
   content: '',
   onUpdate: () => {
-    if (!store.currentChapter) return
-    pendingChapterId = store.currentChapter.id
-    store.markDirty()
+    if (editorChapterId === null) return
+    pendingChapterId = editorChapterId
+    if (editorChapterId === store.currentChapter?.id) store.markDirty()
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(flush, 800)
   }
@@ -62,6 +70,7 @@ watch(
     if (generation !== watchGeneration) return
     const ed = editor.value
     if (!ed || !store.currentChapter) return
+    editorChapterId = store.currentChapter.id
     ed.commands.setContent(JSON.parse(store.currentChapter.contentJson), { emitUpdate: false })
     ed.commands.focus('start')
   },

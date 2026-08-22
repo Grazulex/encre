@@ -9,7 +9,11 @@ export const useBookStore = defineStore('book', {
     // 'dirty' : frappe en attente, minuteur de sauvegarde armé mais pas encore
     // déclenché (l'éditeur seul sait quand une frappe survient : voir
     // EditorPane.markDirty). 'saving' : requête IPC en vol. 'saved' : à jour.
-    saveState: 'saved' as 'saved' | 'dirty' | 'saving'
+    saveState: 'saved' as 'saved' | 'dirty' | 'saving',
+    // Message d'échec de la dernière tentative de sauvegarde, affiché dans la
+    // StatusBar tant qu'aucune sauvegarde n'a réussi depuis. null si la
+    // dernière tentative (ou aucune tentative) n'a pas échoué.
+    saveError: null as string | null
   }),
   actions: {
     markDirty() {
@@ -67,11 +71,24 @@ export const useBookStore = defineStore('book', {
     // de chapitre sans perdre la dernière frappe en attente).
     async saveContentFor(id: number, contentJson: string, contentText: string) {
       this.saveState = 'saving'
-      const { wordCount } = await window.encre.chapters.saveContent(id, contentJson, contentText)
-      const meta = this.chapters.find((c) => c.id === id)
-      if (meta) meta.wordCount = wordCount
-      if (this.currentChapter?.id === id) this.currentChapter.wordCount = wordCount
-      this.saveState = 'saved'
+      try {
+        const { wordCount } = await window.encre.chapters.saveContent(
+          id,
+          contentJson,
+          contentText
+        )
+        const meta = this.chapters.find((c) => c.id === id)
+        if (meta) meta.wordCount = wordCount
+        if (this.currentChapter?.id === id) this.currentChapter.wordCount = wordCount
+        this.saveState = 'saved'
+        this.saveError = null
+      } catch {
+        // On revient à 'dirty' (plutôt que de rester bloqué sur 'saving') pour
+        // que la frappe suivante réarme normalement le minuteur de sauvegarde ;
+        // saveError reste affiché tant qu'aucune sauvegarde n'a réussi depuis.
+        this.saveState = 'dirty'
+        this.saveError = "Échec de l'enregistrement — nouvelle tentative…"
+      }
     },
     async saveContent(contentJson: string, contentText: string) {
       if (this.currentChapter)
