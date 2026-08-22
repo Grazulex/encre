@@ -59,6 +59,44 @@ describe('bulletList (conteneur de blocs)', () => {
   })
 })
 
+describe('sceneBreak', () => {
+  const docWithSceneBreak = JSON.stringify({
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Avant' }] },
+      { type: 'sceneBreak' },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Après' }] }
+    ]
+  })
+  it('sérialise en MD comme un bloc *** séparé par des lignes vides', () => {
+    expect(tiptapToMarkdown(docWithSceneBreak)).toBe('Avant\n\n***\n\nAprès\n')
+  })
+  it('sérialise en XHTML comme <div class="scene-break">⁂</div>', () => {
+    expect(tiptapToXhtml(docWithSceneBreak)).toBe(
+      '<p>Avant</p>\n<div class="scene-break">⁂</div>\n<p>Après</p>\n'
+    )
+  })
+})
+
+describe('pageBreak', () => {
+  const docWithPageBreak = JSON.stringify({
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Avant' }] },
+      { type: 'pageBreak' },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Après' }] }
+    ]
+  })
+  it('sérialise en MD comme un commentaire <!-- page-break --> séparé par des lignes vides', () => {
+    expect(tiptapToMarkdown(docWithPageBreak)).toBe('Avant\n\n<!-- page-break -->\n\nAprès\n')
+  })
+  it('sérialise en XHTML comme <hr class="page-break"/>', () => {
+    expect(tiptapToXhtml(docWithPageBreak)).toBe(
+      '<p>Avant</p>\n<hr class="page-break"/>\n<p>Après</p>\n'
+    )
+  })
+})
+
 describe('hardBreak et nœuds inconnus', () => {
   it('hardBreak et texte des nœuds inconnus', () => {
     const docWithBreak = JSON.stringify({

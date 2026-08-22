@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { scanChapterFiles, mdToTiptapJson } from './importer'
+import { tiptapToMarkdown } from '../shared/export'
 
 describe('scanChapterFiles', () => {
   it('trie par préfixe numérique et déduit les titres', () => {
@@ -40,5 +41,51 @@ describe('mdToTiptapJson', () => {
     const { contentJson, contentText } = mdToTiptapJson('\n# Titre\n\nCorps.')
     expect(contentJson).not.toContain('"heading"')
     expect(contentText.startsWith('Corps.')).toBe(true)
+  })
+
+  it('convertit *** (hr) en sceneBreak (via stripCodeBlocks, Task 3)', () => {
+    const { contentJson } = mdToTiptapJson('Avant.\n\n***\n\nAprès.')
+    const doc = JSON.parse(contentJson)
+    expect(doc.content).toContainEqual({ type: 'sceneBreak' })
+    expect(contentJson).not.toContain('horizontalRule')
+  })
+
+  it('convertit --- (hr) en sceneBreak', () => {
+    const { contentJson } = mdToTiptapJson('Avant.\n\n---\n\nAprès.')
+    const doc = JSON.parse(contentJson)
+    expect(doc.content).toContainEqual({ type: 'sceneBreak' })
+  })
+
+  it('convertit <!-- page-break --> en pageBreak (placeholder)', () => {
+    const { contentJson, contentText } = mdToTiptapJson('Avant.\n\n<!-- page-break -->\n\nAprès.')
+    const doc = JSON.parse(contentJson)
+    expect(doc.content).toContainEqual({ type: 'pageBreak' })
+    expect(contentJson).not.toContain('ENCRE-PAGE-BREAK')
+    expect(contentText).not.toContain('ENCRE-PAGE-BREAK')
+  })
+})
+
+describe('round-trip export → import', () => {
+  it('sceneBreak + pageBreak survivent à tiptapToMarkdown puis mdToTiptapJson', () => {
+    const original = JSON.stringify({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Chapitre.' }] },
+        { type: 'sceneBreak' },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Milieu.' }] },
+        { type: 'pageBreak' },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Fin.' }] }
+      ]
+    })
+    const md = tiptapToMarkdown(original)
+    const { contentJson } = mdToTiptapJson(md)
+    const doc = JSON.parse(contentJson)
+    expect(doc.content.map((n: any) => n.type)).toEqual([
+      'paragraph',
+      'sceneBreak',
+      'paragraph',
+      'pageBreak',
+      'paragraph'
+    ])
   })
 })

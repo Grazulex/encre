@@ -44,6 +44,14 @@ const BLOCK_CONTAINER_TYPES = new Set(['bulletList', 'orderedList', 'listItem', 
 
 function renderBlockNode(node: any): { md: string; xhtml: string } {
   const children = node.content ?? []
+  // Atomes de bloc (Task 3) : pas d'enfants à aplatir, un rendu fixe par
+  // format. Traités avant le repli paragraphe générique.
+  if (node.type === 'sceneBreak') {
+    return { md: '***', xhtml: '<div class="scene-break">⁂</div>' }
+  }
+  if (node.type === 'pageBreak') {
+    return { md: '<!-- page-break -->', xhtml: '<hr class="page-break"/>' }
+  }
   if (node.type === 'heading') {
     const level = Math.min(Math.max(Number(node.attrs?.level ?? 1), 1), 6)
     const inline = joinInline(children)

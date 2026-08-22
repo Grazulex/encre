@@ -36,6 +36,17 @@ p {
   margin: 0 0 1em 0;
   text-indent: 1.5em;
 }
+.scene-break {
+  text-align: center;
+  margin: 1.5em 0;
+  border: none;
+}
+.page-break {
+  page-break-after: always;
+  break-after: page;
+  border: none;
+  margin: 0;
+}
 `
 
 function buildHtml(title: string, author: string, chapters: { title: string; body: string }[]): string {

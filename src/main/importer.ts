@@ -13,6 +13,39 @@ import { stripCodeBlocks } from '../shared/stripCodeBlocks'
 
 const EXTENSIONS = [StarterKit.configure({ codeBlock: false, code: false })]
 
+// Saut de page en Markdown : `<!-- page-break -->` (le seul marqueur MD
+// raisonnable, cf. export.ts). Ni marked ni generateJSON ne connaissent ce
+// nœud : un commentaire HTML au milieu du texte est simplement absorbé par
+// le parseur HTML de marked et disparaît avant d'atteindre generateJSON.
+// Stratégie placeholder : avant marked, chaque ligne EXACTEMENT égale à
+// `<!-- page-break -->` (espaces de bord tolérés) est remplacée par un
+// paragraphe contenant un jeton unique, qui redevient un texte `%%ENCRE-
+// PAGE-BREAK%%` après generateJSON ; on repère ensuite tout paragraphe dont
+// le texte est EXACTEMENT ce jeton et on le convertit en nœud `pageBreak`.
+// Collision acceptée : un auteur qui écrirait littéralement ce jeton en
+// pleine ligne verrait sa ligne convertie en saut de page — improbable, et
+// documenté ici plutôt que contourné par un jeton imprononçable.
+const PAGE_BREAK_TOKEN = '%%ENCRE-PAGE-BREAK%%'
+const PAGE_BREAK_COMMENT_LINE = /^[ \t]*<!--\s*page-break\s*-->[ \t]*$/gm
+
+function convertPageBreakPlaceholders(node: any): any {
+  if (!node || typeof node !== 'object') return node
+  let out = node
+  if (
+    out.type === 'paragraph' &&
+    Array.isArray(out.content) &&
+    out.content.length === 1 &&
+    out.content[0]?.type === 'text' &&
+    out.content[0]?.text === PAGE_BREAK_TOKEN
+  ) {
+    return { type: 'pageBreak' }
+  }
+  if (Array.isArray(out.content)) {
+    out = { ...out, content: out.content.map(convertPageBreakPlaceholders) }
+  }
+  return out
+}
+
 function titleFromFilename(file: string): string {
   return basename(file, '.md').replace(/^\d+[\s._-]*/, '').replace(/[_-]+/g, ' ').trim()
 }
@@ -61,9 +94,12 @@ export function mdToTiptapJson(md: string): { contentJson: string; contentText: 
   // retirer le premier # Titre (il devient le titre du chapitre, pas son corps)
   // — tolérant aux lignes vides/espaces qui précéderaient ce titre de tête.
   const body = md.replace(/^\s*#\s+.+\n+/, '')
-  const html = marked.parse(body, { async: false }) as string
+  // Placeholder pageBreak (voir commentaire plus haut) avant marked : le
+  // commentaire HTML `<!-- page-break -->` ne survivrait pas au parseur.
+  const withPlaceholder = body.replace(PAGE_BREAK_COMMENT_LINE, PAGE_BREAK_TOKEN)
+  const html = marked.parse(withPlaceholder, { async: false }) as string
   const raw = generateJSON(html, EXTENSIONS)
   const { json } = stripCodeBlocks(JSON.stringify(raw)) // ceinture + bretelles
-  const doc = JSON.parse(json)
-  return { contentJson: json, contentText: docText(doc).trim() }
+  const doc = convertPageBreakPlaceholders(JSON.parse(json))
+  return { contentJson: JSON.stringify(doc), contentText: docText(doc).trim() }
 }

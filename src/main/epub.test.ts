@@ -28,4 +28,31 @@ describe('buildEpub', () => {
     expect(zip.file('OEBPS/chapter-2.xhtml')).toBeTruthy()
     expect(zip.file('OEBPS/nav.xhtml')).toBeTruthy()
   })
+
+  it('style.css définit .scene-break et .page-break, rendus dans les chapitres', async () => {
+    const db = openDb(':memory:')
+    const api = createApi(db)
+    const book = await api.books.create({ title: 'EPUB', author: 'JMS' })
+    const c1 = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(c1.id, JSON.stringify({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Avant.' }] },
+        { type: 'sceneBreak' },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Milieu.' }] },
+        { type: 'pageBreak' },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Fin.' }] }
+      ]
+    }), 'Avant. Milieu. Fin.')
+
+    const buffer = await buildEpub(db, book.id, [])
+    const zip = await JSZip.loadAsync(buffer)
+    const css = await zip.file('OEBPS/style.css')!.async('string')
+    expect(css).toContain('.scene-break')
+    expect(css).toContain('.page-break')
+    expect(css).toContain('page-break-after: always')
+    const ch1 = await zip.file('OEBPS/chapter-1.xhtml')!.async('string')
+    expect(ch1).toContain('<div class="scene-break">⁂</div>')
+    expect(ch1).toContain('<hr class="page-break"/>')
+  })
 })
