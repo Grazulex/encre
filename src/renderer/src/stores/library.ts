@@ -21,7 +21,7 @@ export const useLibraryStore = defineStore('library', {
         return book
       } catch (err) {
         console.error('Échec de la création du livre', err)
-        useUiStore().toast('Impossible de charger — élément introuvable.')
+        useUiStore().toast('Impossible de créer le livre.')
         throw err
       }
     },
