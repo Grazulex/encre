@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
+import { useShortcuts } from '../composables/useShortcuts'
 import ChapterList from '../components/ChapterList.vue'
 import EditorPane from '../components/EditorPane.vue'
 import StatusBar from '../components/StatusBar.vue'
@@ -20,11 +21,33 @@ const progress = computed(() => {
     ? `${words} / ${book.wordGoal.toLocaleString('fr-FR')} mots`
     : `${words} mots`
 })
+
+const focusMode = ref(false)
+
+function navigateChapter(direction: -1 | 1): void {
+  if (!store.currentChapter) return
+  const ids = store.chapters.map((c) => c.id)
+  const next = ids[ids.indexOf(store.currentChapter.id) + direction]
+  if (next != null) store.openChapter(next)
+}
+
+useShortcuts([
+  { combo: 'meta+shift+f', handler: () => (focusMode.value = !focusMode.value) },
+  { combo: 'meta+alt+arrowdown', handler: () => navigateChapter(1) },
+  { combo: 'meta+alt+arrowup', handler: () => navigateChapter(-1) },
+  // No-op quand le mode focus est déjà inactif : Échap n'a alors aucun effet
+  // sur l'état de l'app (rien n'est modifié). L'interface de useShortcuts
+  // appelle toujours preventDefault() sur une combinaison reconnue, y compris
+  // ici quand le mode focus est éteint ; c'est sans conséquence aujourd'hui
+  // (aucun autre consommateur d'Échap dans cette vue) mais à surveiller si un
+  // futur plan (palette ⌘K, modales) ajoute un usage concurrent d'Échap.
+  { combo: 'escape', handler: () => focusMode.value && (focusMode.value = false) }
+])
 </script>
 
 <template>
-  <div class="book-space">
-    <aside>
+  <div class="book-space" :class="{ focus: focusMode }">
+    <aside :aria-hidden="focusMode">
       <button class="back" type="button" @click="router.push('/')">
         <span class="chevron">←</span> Bibliothèque
       </button>
@@ -56,6 +79,15 @@ const progress = computed(() => {
   display: grid;
   grid-template-columns: 260px 1fr;
   height: 100vh;
+  transition: grid-template-columns 0.2s ease;
+}
+.book-space.focus {
+  grid-template-columns: 0 1fr;
+}
+.book-space.focus aside {
+  opacity: 0;
+  border-right-color: transparent;
+  pointer-events: none;
 }
 
 aside {
@@ -64,6 +96,10 @@ aside {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  opacity: 1;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.2s ease;
 }
 
 .back {
