@@ -9,7 +9,6 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useAiStore } from '../stores/ai'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
-import SnapshotList from './SnapshotList.vue'
 
 const ai = useAiStore()
 const store = useBookStore()
@@ -78,19 +77,12 @@ function regenerate(): void {
 // et cette bascule il y a deux aller-retours IPC (snapshot, éventuellement
 // sauvegarde) pendant lesquels un second clic resterait possible sans ce ref.
 const inserting = ref(false)
-// Ref directe vers SnapshotList (enfant réel de ce composant, pas un frère —
-// rien à voir avec le pont EditorPane du store ai) : seul moyen de lui faire
-// prendre en compte le nouveau snapshot 'avant insertion IA' créé par
-// insertDraftIntoEditor sans que SnapshotList ait à deviner l'événement via un
-// état partagé plus indirect.
-const snapshotList = ref<InstanceType<typeof SnapshotList> | null>(null)
 
 async function insertDraft(): Promise<void> {
   if (inserting.value) return
   inserting.value = true
   try {
-    const ok = await ai.insertDraft()
-    if (ok) await snapshotList.value?.refresh()
+    await ai.insertDraft()
   } finally {
     inserting.value = false
   }
@@ -217,7 +209,9 @@ watch(
         </div>
       </div>
 
-      <SnapshotList ref="snapshotList" />
+      <button type="button" class="cp-snapshots-link" @click="ai.openSnapshotManager()">
+        Gérer les snapshots
+      </button>
     </div>
   </div>
 </template>
@@ -438,5 +432,24 @@ watch(
 }
 .cp-stream-actions button {
   flex: 1;
+}
+
+/* Lien discret (Task 2) : remplace l'ancienne section repliable SnapshotList,
+   absorbée dans SnapshotManager (popover monté par EditorPane). Bordure
+   supérieure pour marquer la même séparation visuelle que l'ancienne section. */
+.cp-snapshots-link {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  margin-top: 4px;
+  padding: 12px 0 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.cp-snapshots-link:hover {
+  color: var(--accent);
 }
 </style>

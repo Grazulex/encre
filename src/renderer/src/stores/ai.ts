@@ -87,7 +87,16 @@ export const useAiStore = defineStore('ai', {
     // au prochain prepare(), si on change réellement de chapitre (session à
     // repartir de zéro) ou si on ne fait que rafraîchir les métadonnées d'un
     // panneau rouvert sur le même chapitre (session en cours préservée).
-    chapterId: null as number | null
+    chapterId: null as number | null,
+    // État d'ouverture du gestionnaire de snapshots (Task 2) : porté ici plutôt
+    // que localement dans EditorPane (qui monte le composant) parce que le
+    // déclencheur « Gérer les snapshots » vit dans ClaudePanel — même situation
+    // que le pont éditeur ci-dessous, EditorPane et ClaudePanel étant deux
+    // enfants FRÈRES de BookView. Ce store porte déjà la logique de
+    // restauration de snapshot (restoreSnapshot ci-dessous) ; ce flag d'UI
+    // partagé s'y ajoute naturellement plutôt que de créer un store dédié pour
+    // un simple booléen.
+    snapshotManagerOpen: false
   }),
   actions: {
     // À appeler une fois pour toute la durée de vie de l'app (App.vue,
@@ -220,6 +229,12 @@ export const useAiStore = defineStore('ai', {
     },
     toggle(): void {
       this.open = !this.open
+    },
+    openSnapshotManager(): void {
+      this.snapshotManagerOpen = true
+    },
+    closeSnapshotManager(): void {
+      this.snapshotManagerOpen = false
     },
     // Ne réinitialise QUE la session de génération (phase/brouillon/requête/
     // erreur/consigne) — jamais chapterId/hasSummary/entityChoices, qui

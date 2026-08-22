@@ -9,6 +9,7 @@ import { useEntitiesStore } from '../stores/entities'
 import { useAiStore } from '../stores/ai'
 import { EntityMention } from '../editor/mention'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
+import SnapshotManager from './SnapshotManager.vue'
 import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
 import { stripCodeBlocks } from '../../../shared/stripCodeBlocks'
 import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
@@ -593,6 +594,85 @@ onMounted(() => {
 })
 onBeforeUnmount(() => ai.unregisterEditor())
 
+// Snapshot manuel à la demande (Task 2) : bouton 📸 de l'en-tête → petit
+// popover inline (libellé facultatif, défaut « manuel ») → snapshots.create
+// avec le contenu ACTUEL de l'éditeur → toast. Entièrement séparé du chemin
+// insertion/restauration ci-dessus (aucune garde de péremption chapterId
+// nécessaire : la création se fait dans le même tick que la lecture de
+// store.currentChapter/ed.getJSON(), pas après un await qui laisserait le
+// temps de changer de chapitre).
+const snapshotPromptOpen = ref(false)
+const snapshotLabel = ref('manuel')
+const snapshotLabelEl = ref<HTMLInputElement | null>(null)
+const snapshotWrapEl = ref<HTMLElement | null>(null)
+const takingSnapshot = ref(false)
+
+function openSnapshotPrompt(): void {
+  snapshotLabel.value = 'manuel'
+  snapshotPromptOpen.value = true
+}
+
+function closeSnapshotPrompt(): void {
+  snapshotPromptOpen.value = false
+}
+
+async function confirmSnapshot(): Promise<void> {
+  const chapter = store.currentChapter
+  const ed = editor.value
+  if (!chapter || !ed || takingSnapshot.value) return
+  const reason = snapshotLabel.value.trim() || 'manuel'
+  takingSnapshot.value = true
+  try {
+    await window.encre.snapshots.create(chapter.id, JSON.stringify(ed.getJSON()), reason)
+    ui.toast('Snapshot créé.')
+    snapshotPromptOpen.value = false
+  } catch (err) {
+    console.error('Échec de la création du snapshot', err)
+    ui.toast('Impossible de créer le snapshot.')
+  } finally {
+    takingSnapshot.value = false
+  }
+}
+
+// Échap gérée ICI (comme les autres boîtes de ce fichier/de l'app), propagation
+// stoppée dès ce nœud pour ne jamais atteindre le listener global de mode
+// focus tant que le popover est ouvert. Entrée valide directement le libellé
+// tapé, sans avoir à cliquer sur « Créer ».
+function onSnapshotPromptKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeSnapshotPrompt()
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    confirmSnapshot()
+  }
+}
+
+// Fermeture au clic extérieur : popover léger anchoré au bouton, pas de
+// backdrop plein écran comme AutolinkDialog — un simple listener sur window,
+// posé/retiré à l'ouverture/fermeture plutôt que pour toute la durée de vie du
+// composant (évite d'écouter chaque clic de l'app quand le popover est fermé,
+// l'état de repos le plus fréquent).
+function onWindowMousedownForSnapshot(event: MouseEvent): void {
+  if (snapshotWrapEl.value?.contains(event.target as Node)) return
+  closeSnapshotPrompt()
+}
+
+watch(snapshotPromptOpen, async (open) => {
+  if (open) {
+    window.addEventListener('mousedown', onWindowMousedownForSnapshot)
+    await nextTick()
+    snapshotLabelEl.value?.focus()
+    snapshotLabelEl.value?.select()
+  } else {
+    window.removeEventListener('mousedown', onWindowMousedownForSnapshot)
+  }
+})
+
+onBeforeUnmount(() => window.removeEventListener('mousedown', onWindowMousedownForSnapshot))
+
 function rename(event: Event): void {
   const title = (event.target as HTMLInputElement).value.trim()
   if (title && store.currentChapter) store.renameChapter(store.currentChapter.id, title)
@@ -642,6 +722,44 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       >
         Assistant Claude
       </button>
+      <div ref="snapshotWrapEl" class="snapshot-wrap">
+        <button
+          type="button"
+          class="snapshot-btn"
+          title="Prendre un snapshot du chapitre"
+          aria-label="Prendre un snapshot du chapitre"
+          @click="openSnapshotPrompt"
+        >
+          📸
+        </button>
+        <div
+          v-if="snapshotPromptOpen"
+          class="snapshot-popover"
+          role="dialog"
+          aria-label="Prendre un snapshot"
+          @keydown="onSnapshotPromptKeydown"
+        >
+          <span class="field-label">Libellé du snapshot</span>
+          <input
+            ref="snapshotLabelEl"
+            v-model="snapshotLabel"
+            type="text"
+            class="snapshot-label-input"
+            spellcheck="false"
+          />
+          <div class="snapshot-popover-actions">
+            <button type="button" @click="closeSnapshotPrompt">Annuler</button>
+            <button
+              type="button"
+              class="primary"
+              :disabled="takingSnapshot"
+              @click="confirmSnapshot"
+            >
+              {{ takingSnapshot ? 'Création…' : 'Créer' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </header>
 
     <div class="summary-zone">
@@ -729,6 +847,7 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       @close="autolinkOpen = false"
       @apply="applyAutolink"
     />
+    <SnapshotManager v-if="ai.snapshotManagerOpen" />
   </div>
 </template>
 
@@ -847,6 +966,62 @@ header {
   color: var(--accent);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.snapshot-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.snapshot-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--fg-muted);
+}
+.snapshot-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.snapshot-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px -14px color-mix(in srgb, var(--fg) 40%, transparent);
+}
+.snapshot-label-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.snapshot-label-input:focus {
+  border-color: var(--accent);
+}
+.snapshot-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.snapshot-popover-actions button {
+  font-size: 11.5px;
+  padding: 5px 10px;
 }
 
 .summary-zone {
