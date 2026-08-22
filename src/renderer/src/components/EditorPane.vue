@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { watch, onMounted, onBeforeUnmount } from 'vue'
+import { watch, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
+import { useEntitiesStore } from '../stores/entities'
+import { EntityMention } from '../editor/mention'
 import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
-import type { ChapterStatus } from '../../../shared/types'
+import type { ChapterStatus, Entity } from '../../../shared/types'
 
 const store = useBookStore()
 const ui = useUiStore()
+const entitiesStore = useEntitiesStore()
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingChapterId: number | null = null
@@ -22,7 +25,7 @@ let pendingChapterId: number | null = null
 let editorChapterId: number | null = null
 
 const editor = useEditor({
-  extensions: [StarterKit],
+  extensions: [StarterKit, EntityMention],
   content: '',
   onUpdate: () => {
     if (editorChapterId === null) return
@@ -30,6 +33,19 @@ const editor = useEditor({
     if (editorChapterId === store.currentChapter?.id) store.markDirty()
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(flush, 800)
+  },
+  // Clic sur une mention → ouvre le tiroir de la fiche visée (Task 11).
+  // `direct` distingue un clic pile sur le nœud d'un clic qui ne fait que le
+  // traverser (mention imbriquée dans un nœud parent plus large) ; la
+  // mention étant un nœud atomique sans enfant, ça correspond exactement au
+  // clic sur la mention elle-même.
+  editorProps: {
+    handleClickOn(_view, _pos, node, _nodePos, _event, direct) {
+      if (!direct || node.type.name !== 'mention') return false
+      const id = node.attrs.id
+      if (typeof id === 'number') entitiesStore.openDrawer(id)
+      return true
+    }
   }
 })
 
@@ -80,6 +96,37 @@ watch(
   { immediate: true }
 )
 
+// Chips « entités de ce chapitre » (Task 11) : entièrement séparé du cycle
+// flush/generation-token ci-dessus, pour ne pas y toucher. Rafraîchi (a) au
+// changement de chapitre — même signal que le watch de chargement, mais un
+// effet Vue distinct — et (b) à chaque transition de store.saveState vers
+// 'saved', qui suit la fin d'un saveContentFor réussi (voir stores/book.ts).
+// Une sauvegarde en échec repasse par 'dirty', jamais par 'saved' : pas de
+// rafraîchissement sur échec, et aucune boucle possible puisque ce watcher
+// ne modifie jamais saveState lui-même.
+const chapterEntities = ref<Entity[]>([])
+
+async function refreshChapterEntities(): Promise<void> {
+  const id = store.currentChapter?.id
+  if (id == null) {
+    chapterEntities.value = []
+    return
+  }
+  try {
+    chapterEntities.value = await window.encre.entities.inChapter(id)
+  } catch (err) {
+    console.error('Échec du chargement des entités du chapitre', err)
+  }
+}
+
+watch(() => store.currentChapter?.id, refreshChapterEntities, { immediate: true })
+watch(
+  () => store.saveState,
+  (state, previous) => {
+    if (state === 'saved' && previous !== 'saved') refreshChapterEntities()
+  }
+)
+
 onMounted(() => {
   ui.registerQuitFlusher(() => flush())
 })
@@ -128,6 +175,19 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
         <option v-for="s in STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
       </select>
     </header>
+    <div v-if="chapterEntities.length" class="chapter-chips">
+      <button
+        v-for="entity in chapterEntities"
+        :key="entity.id"
+        type="button"
+        class="chip"
+        :class="{ 'chip-place': entity.kind === 'place' }"
+        @click="entitiesStore.openDrawer(entity.id)"
+      >
+        <span class="chip-badge">{{ entity.kind === 'character' ? '◆' : '●' }}</span>
+        {{ entity.name }}
+      </button>
+    </div>
     <EditorContent :editor="editor" class="page" />
   </div>
 </template>
@@ -218,6 +278,39 @@ header {
   outline: none;
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.chapter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 42rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 0 12px;
+  flex-shrink: 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  border: none;
+  border-radius: 100px;
+  padding: 3px 10px 3px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.chip:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.chip-badge {
+  font-size: 9px;
+}
+.chip.chip-place .chip-badge {
+  color: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 .page {

@@ -123,6 +123,22 @@ textarea:focus {
   background: var(--fg-muted);
 }
 
+/* Mentions @ dans l'éditeur (Task 11) : un soulignement fin plutôt qu'un
+   fond plein, pour rester lisible sans jamais rivaliser visuellement avec le
+   texte manuscrit. Personnages et lieux partagent la même teinte d'accent ;
+   seule l'opacité les distingue (60 % pour les lieux), ce qui reste
+   discernable dans les deux palettes sans introduire une couleur dédiée. */
+.mention {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.mention-place {
+  text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
