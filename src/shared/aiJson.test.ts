@@ -108,13 +108,15 @@ describe('parseAiJson', () => {
     }
   })
 
-  it('ne bloque pas avec beaucoup de crochets parasites', () => {
-    // 50 crochets ouvrants sans fermetures correspondantes valides
-    const manyBrackets = '[' + ' '.repeat(100) + '{"real":"json"}'
-    const result = parseAiJson<{ real: string }>(manyBrackets)
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.value).toEqual({ real: 'json' })
+  it('épuise les 10 candidats de crochets et retourne erreur', () => {
+    // 11 candidats invalides successifs: [a][b][c]...[k]
+    // Chacun extrait du [ au dernier ], donnant du JSON invalide
+    // Après 10 tentatives (MAX_CANDIDATES), renonce
+    const manyInvalidBrackets = '[a][b][c][d][e][f][g][h][i][j][k]'
+    const result = parseAiJson<unknown>(manyInvalidBrackets)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toMatch(/candidats|valide/i)
     }
   })
 
