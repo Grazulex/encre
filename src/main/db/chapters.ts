@@ -78,6 +78,10 @@ export function renameChapter(db: Db, id: number, title: string): void {
   db.prepare("UPDATE chapters SET title = ?, updated_at = datetime('now') WHERE id = ?").run(title, id)
 }
 
+export function saveChapterSummary(db: Db, id: number, summary: string): void {
+  db.prepare("UPDATE chapters SET summary = ?, updated_at = datetime('now') WHERE id = ?").run(summary, id)
+}
+
 export function setChapterStatus(db: Db, id: number, status: ChapterStatus): void {
   db.prepare("UPDATE chapters SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, id)
 }

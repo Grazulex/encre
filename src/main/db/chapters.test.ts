@@ -6,7 +6,7 @@ import { createEntity } from './entities'
 import {
   countWords, listChapters, getChapter, createChapter,
   saveChapterContent, renameChapter, setChapterStatus,
-  reorderChapters, deleteChapter, entityOccurrences, entitiesInChapter
+  reorderChapters, deleteChapter, entityOccurrences, entitiesInChapter, saveChapterSummary
 } from './chapters'
 
 let db: Db
@@ -61,6 +61,12 @@ describe('repository chapters', () => {
     expect(full.status).toBe('premier_jet')
     deleteChapter(db, c.id)
     expect(listChapters(db, bookId)).toHaveLength(0)
+  })
+
+  it('enregistre le résumé manuel', () => {
+    const c = createChapter(db, bookId, 'Ch. 1')
+    saveChapterSummary(db, c.id, 'Mara découvre la lettre.')
+    expect(getChapter(db, c.id).summary).toBe('Mara découvre la lettre.')
   })
 })
 
