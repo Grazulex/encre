@@ -45,6 +45,24 @@ describe('createApi', () => {
     expect(metas[0].wordCount).toBeGreaterThan(0)
   })
 
+  it('importe un fichier markdown isolé comme nouveau chapitre d\'un livre existant', async () => {
+    const { mkdtempSync, writeFileSync } = await import('fs')
+    const { tmpdir } = await import('os')
+    const { join } = await import('path')
+    const dir = mkdtempSync(join(tmpdir(), 'encre-import-chapter-'))
+    const filePath = join(dir, 'chapitre.md')
+    writeFileSync(filePath, '# Ch. importé\n\nDu **texte**.')
+    const db = openDb(':memory:')
+    const api = createApi(db)
+    const book = await api.books.create({ title: 'Livre existant' })
+    const { importChapterFromFile } = await import('./api')
+    const meta = importChapterFromFile(db, book.id, filePath)
+    expect(meta.title).toBe('Ch. importé')
+    expect(meta.wordCount).toBeGreaterThan(0)
+    const chapter = await api.chapters.get(meta.id)
+    expect(chapter.contentJson).toContain('bold')
+  })
+
   it('exporte le livre en markdown, un fichier par chapitre', async () => {
     // exposer une fonction interne testable : exportMarkdownToFolder(db, bookId, folder)
     const { mkdtempSync, readdirSync, readFileSync } = await import('fs')

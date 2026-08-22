@@ -2,15 +2,35 @@ import { copyFileSync, mkdirSync, unlinkSync, readFileSync, writeFileSync } from
 import { join, extname, dirname } from 'path'
 import type { Db } from './db/connection'
 import type { EncreApi } from '../shared/ipc-contract'
+import type { ChapterMeta } from '../shared/types'
 import * as books from './db/books'
 import * as chapters from './db/chapters'
 import * as entities from './db/entities'
 import * as outline from './db/outline'
 import * as timeline from './db/timeline'
-import { scanChapterFiles, mdToTiptapJson } from './importer'
+import { scanChapterFiles, mdToTiptapJson, titleForFile } from './importer'
 import { exportMarkdownToFolder, slugify } from './exporter'
 import { buildEpub } from './epub'
 import { buildPdf } from './pdf'
+
+// Import d'un fichier .md isolé comme nouveau chapitre d'un livre existant
+// (Task 8b) : lecture disque + conversion markdown→tiptap + createChapter +
+// saveChapterContent dans un seul db.transaction synchrone, même logique
+// transactionnelle qu'importer.importBook ci-dessous. Exportée séparément de
+// l'API (plutôt qu'inlinée dans importer.importChapter) pour être testable
+// sans passer par le dialog Electron.
+export function importChapterFromFile(db: Db, bookId: number, filePath: string): ChapterMeta {
+  const md = readFileSync(filePath, 'utf8')
+  const title = titleForFile(filePath, md)
+  const { contentJson, contentText } = mdToTiptapJson(md)
+  const run = db.transaction(() => {
+    const chapter = chapters.createChapter(db, bookId, title)
+    chapters.saveChapterContent(db, chapter.id, contentJson, contentText)
+    return chapter.id
+  })
+  const chapterId = run()
+  return chapters.getChapter(db, chapterId)
+}
 
 // `app` (onFlushRequest/flushDone) est un domaine événementiel côté renderer
 // (ipcRenderer.on/send) : il n'a pas de contrepartie invoke côté main, donc
@@ -152,6 +172,20 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
         })
         const bookId = run()
         return books.getBook(db, bookId)
+      },
+      // Import d'un seul fichier .md comme nouveau chapitre d'un livre déjà
+      // existant (Task 8b) — distinct d'importBook qui crée un livre entier.
+      // Toute la logique testable vit dans importChapterFromFile ; cette
+      // méthode ne fait que le dialog.
+      importChapter: async (bookId) => {
+        const { dialog } = await import('electron')
+        const res = await dialog.showOpenDialog({
+          title: 'Choisir un fichier Markdown à importer',
+          filters: [{ name: 'Markdown', extensions: ['md'] }],
+          properties: ['openFile']
+        })
+        if (res.canceled || res.filePaths.length === 0) return null
+        return importChapterFromFile(db, bookId, res.filePaths[0])
       }
     },
     exporter: {

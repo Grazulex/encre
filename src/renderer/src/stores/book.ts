@@ -102,6 +102,23 @@ export const useBookStore = defineStore('book', {
       await this.refreshChapters()
       await this.openChapter(meta.id)
     },
+    // Import d'un fichier .md isolé comme nouveau chapitre (Task 8b) — le
+    // dialog peut être annulé (retour null, silencieux) ; un échec de lecture
+    // ou de conversion remonte un toast dédié, distinct de l'échec générique
+    // de chargement utilisé ailleurs dans ce store.
+    async importChapter() {
+      if (!this.book) return
+      try {
+        const meta = await window.encre.importer.importChapter(this.book.id)
+        if (!meta) return
+        await this.refreshChapters()
+        await this.openChapter(meta.id)
+        useUiStore().toast(`« ${meta.title} » importé.`)
+      } catch (err) {
+        console.error("Échec de l'import du chapitre", err)
+        useUiStore().toast("Échec de l'import du fichier Markdown.")
+      }
+    },
     async renameChapter(id: number, title: string) {
       await window.encre.chapters.rename(id, title)
       await this.refreshChapters()

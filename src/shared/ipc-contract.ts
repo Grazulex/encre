@@ -52,6 +52,7 @@ export interface EncreApi {
   importer: {
     scanFolder(): Promise<{ folder: string; files: { file: string; title: string }[] } | null>  // showOpenDialog (dossier) + scanChapterFiles ; null si annulé
     importBook(folder: string, orderedFiles: string[], bookTitle: string): Promise<Book>       // création livre + chapitres dans l'ordre donné
+    importChapter(bookId: number): Promise<ChapterMeta | null>                                 // showOpenDialog (fichier .md) ; ajoute un chapitre au livre existant ; null si annulé
   }
   exporter: {
     markdown(bookId: number): Promise<string | null>                     // showOpenDialog (dossier cible) ; écrit NN-titre.md par chapitre ; retourne le dossier ; null si annulé

@@ -35,6 +35,10 @@ function cancelAdd(): void {
   newTitle.value = ''
 }
 
+function importChapter(): void {
+  store.importChapter().catch((err) => console.error("Échec de l'import du chapitre", err))
+}
+
 async function removeChapter(id: number, title: string): Promise<void> {
   if (confirm(`Supprimer « ${title} » ?`)) await store.removeChapter(id)
 }
@@ -44,7 +48,17 @@ async function removeChapter(id: number, title: string): Promise<void> {
   <nav class="chapters">
     <div class="head">
       <h2>Chapitres</h2>
-      <button class="add" type="button" title="Nouveau chapitre" @click="openAddForm">+</button>
+      <span class="head-actions">
+        <button
+          class="import"
+          type="button"
+          title="Importer un chapitre (.md)…"
+          @click="importChapter"
+        >
+          ⤓
+        </button>
+        <button class="add" type="button" title="Nouveau chapitre" @click="openAddForm">+</button>
+      </span>
     </div>
 
     <Transition name="unfold">
@@ -125,7 +139,14 @@ h2 {
   letter-spacing: 0.08em;
   color: var(--fg-muted);
 }
-.add {
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.add,
+.import {
   width: 22px;
   height: 22px;
   padding: 0;
@@ -137,7 +158,11 @@ h2 {
   border-color: transparent;
   color: var(--fg-muted);
 }
-.add:hover {
+.import {
+  font-size: 12px;
+}
+.add:hover,
+.import:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }

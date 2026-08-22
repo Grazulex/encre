@@ -52,7 +52,8 @@ const api: EncreApi = {
   importer: {
     scanFolder: () => ipcRenderer.invoke('importer:scanFolder'),
     importBook: (folder, orderedFiles, bookTitle) =>
-      ipcRenderer.invoke('importer:importBook', folder, orderedFiles, bookTitle)
+      ipcRenderer.invoke('importer:importBook', folder, orderedFiles, bookTitle),
+    importChapter: (bookId) => ipcRenderer.invoke('importer:importChapter', bookId)
   },
   exporter: {
     markdown: (bookId) => ipcRenderer.invoke('exporter:markdown', bookId),

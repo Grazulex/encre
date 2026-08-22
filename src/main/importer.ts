@@ -17,6 +17,16 @@ function titleFromFilename(file: string): string {
   return basename(file, '.md').replace(/^\d+[\s._-]*/, '').replace(/[_-]+/g, ' ').trim()
 }
 
+// Titre d'un chapitre importé : le premier `# Titre` du fichier s'il existe,
+// sinon le nom de fichier nettoyé (numéro de tri et séparateurs retirés).
+// Partagé par scanChapterFiles (import d'un dossier entier, Task 8) et
+// importChapterFromFile (import d'un fichier isolé, Task 8b) pour ne jamais
+// faire diverger les deux règles de titrage.
+export function titleForFile(filePath: string, content: string): string {
+  const heading = content.match(/^#\s+(.+)$/m)
+  return heading ? heading[1].trim() : titleFromFilename(filePath)
+}
+
 export function scanChapterFiles(folder: string): { file: string; title: string }[] {
   const files = readdirSync(folder)
     .filter((f) => f.toLowerCase().endsWith('.md'))
@@ -28,8 +38,7 @@ export function scanChapterFiles(folder: string): { file: string; title: string 
     })
   return files.map((f) => {
     const content = readFileSync(join(folder, f), 'utf8')
-    const heading = content.match(/^#\s+(.+)$/m)
-    return { file: f, title: heading ? heading[1].trim() : titleFromFilename(f) }
+    return { file: f, title: titleForFile(f, content) }
   })
 }
 
