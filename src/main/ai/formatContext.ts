@@ -14,7 +14,18 @@ export interface FormatPromptBundle {
   prompt: string
 }
 
-const SYSTEM_PROMPT =
+// Task 6b, fix round 2 (défaut utilisateur : zéro proposition en usage réel) :
+// le system prompt PRIME sur le prompt utilisateur. Tant que SYSTEM_PROMPT
+// restait inconditionnel ("et rien d'autre", "tu n'ajoutes ni ne retires de
+// contenu"), Claude refusait systématiquement les insertions que
+// PROPOSAL_BLOCK (prompt utilisateur, voir plus bas) autorisait pourtant — le
+// system prompt l'emportait. SYSTEM_PROMPT_STRICT reste BYTE-IDENTIQUE au
+// system prompt historique (mode par défaut, proposerSeparations=false).
+// SYSTEM_PROMPT_WITH_PROPOSALS l'étend d'une exception explicite plutôt que
+// de réécrire les phrases existantes, pour ne courir aucun risque de
+// relâcher involontairement la garantie « tu ne réécris JAMAIS » dans le
+// texte partagé par les deux modes.
+const SYSTEM_PROMPT_STRICT =
   "Tu es typographe littéraire. On te donne le texte d'un chapitre en Markdown. " +
   'Tu rends le MÊME texte, mots et ponctuation du récit inchangés, en normalisant ' +
   'UNIQUEMENT la mise en forme selon les conventions demandées : dialogues, listes, ' +
@@ -22,6 +33,14 @@ const SYSTEM_PROMPT =
   'Tu ne réécris JAMAIS une phrase, tu ne corriges pas le style, ' +
   "tu n'ajoutes ni ne retires de contenu. " +
   'Sortie : le Markdown complet du chapitre, rien d\'autre.'
+
+const SYSTEM_PROMPT_WITH_PROPOSALS =
+  SYSTEM_PROMPT_STRICT +
+  ' Exception, mode proposition activé : tu PEUX aussi INSÉRER de nouvelles ' +
+  'lignes-marqueurs `***` (transition de scène manifeste) ou ' +
+  '`<!-- page-break -->` (rupture structurelle majeure) — uniquement des ' +
+  'lignes entières de marqueur, sans jamais modifier, retirer ni déplacer un ' +
+  'seul mot du texte ni un marqueur existant.'
 
 const DIALOGUE_EXAMPLES: Record<FormatConventions['dialogue'], string> = {
   guillemets: '« Bonjour », dit-il.',
@@ -54,15 +73,18 @@ const PRESERVE_WITH_PROPOSALS =
 
 const PROPOSAL_BLOCK = [
   'Proposition de séparations manquantes (option activée) : en plus de la ' +
-    'préservation ci-dessus, tu PEUX ajouter de nouvelles lignes `***` aux ' +
-    'endroits du texte où une transition de scène manifeste se produit sans ' +
-    'séparateur (saut de temps, changement de lieu, changement de point de ' +
-    'vue). Plus rare et plus conservateur : tu peux aussi ajouter une ligne ' +
-    '`<!-- page-break -->` là où une rupture structurelle majeure est ' +
-    'évidente (début d\'une nouvelle partie). Règles strictes : ce ne sont que ' +
-    'des INSERTIONS de lignes de marqueur ; tu ne modifies, ne réécris ni ne ' +
-    'déplaces jamais une phrase du récit pour cela, et tu ne retires ni ne ' +
-    'déplaces jamais un marqueur déjà présent. Dans le doute, abstiens-toi.'
+    'préservation ci-dessus, ajoute une ligne `***` à CHAQUE endroit du texte ' +
+    'où une transition de scène manifeste se produit sans séparateur (saut de ' +
+    'temps, changement de lieu, changement de point de vue) — ce sont des cas ' +
+    'fréquents, ne sois pas timide sur ce point : préfère proposer une ' +
+    'transition clairement identifiable plutôt que de t\'abstenir. Plus rare ' +
+    'et plus conservateur : ajoute aussi une ligne `<!-- page-break -->` là ' +
+    'où une rupture structurelle majeure est évidente (début d\'une nouvelle ' +
+    'partie) — ici seulement, abstiens-toi si le doute est réel. Règles ' +
+    'strictes dans tous les cas : ce ne sont que des INSERTIONS de lignes de ' +
+    'marqueur ; tu ne modifies, ne réécris ni ne déplaces jamais une phrase ' +
+    'du récit pour cela, et tu ne retires ni ne déplaces jamais un marqueur ' +
+    'déjà présent.'
 ].join('\n')
 
 export function buildFormatPrompt(db: Db, chapterId: number, conventions: FormatConventions): FormatPromptBundle {
@@ -101,5 +123,7 @@ export function buildFormatPrompt(db: Db, chapterId: number, conventions: Format
     markdown
   )
 
-  return { system: SYSTEM_PROMPT, prompt: lines.join('\n') }
+  const system = conventions.proposerSeparations ? SYSTEM_PROMPT_WITH_PROPOSALS : SYSTEM_PROMPT_STRICT
+
+  return { system, prompt: lines.join('\n') }
 }

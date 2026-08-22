@@ -53,6 +53,32 @@ describe('buildFormatPrompt', () => {
     expect(system).toMatch(/Markdown/)
   })
 
+  it('proposerSeparations = false : system prompt strictement identique au system prompt historique (aucune dérive)', () => {
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
+    const { system } = buildFormatPrompt(db, chapterId, conventions)
+
+    expect(system).toBe(
+      "Tu es typographe littéraire. On te donne le texte d'un chapitre en Markdown. " +
+        'Tu rends le MÊME texte, mots et ponctuation du récit inchangés, en normalisant ' +
+        'UNIQUEMENT la mise en forme selon les conventions demandées : dialogues, listes, ' +
+        'séparateurs de scène (uniquement la ligne `***`), et rien d\'autre. ' +
+        'Tu ne réécris JAMAIS une phrase, tu ne corriges pas le style, ' +
+        "tu n'ajoutes ni ne retires de contenu. " +
+        'Sortie : le Markdown complet du chapitre, rien d\'autre.'
+    )
+  })
+
+  it('proposerSeparations = true : le system prompt autorise explicitement les insertions, sans perdre la garantie anti-réécriture', () => {
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: true }
+    const { system } = buildFormatPrompt(db, chapterId, conventions)
+
+    expect(system).toMatch(/ne réécris? jamais/i)
+    expect(system).toMatch(/exception/i)
+    expect(system).toMatch(/PEUX aussi INSÉRER/i)
+    expect(system).toContain('***')
+    expect(system).toContain('<!-- page-break -->')
+  })
+
   it("demande une sortie sans préambule ni recopie du titre CHAPITRE", () => {
     const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
