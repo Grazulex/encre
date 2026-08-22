@@ -56,22 +56,22 @@ function goToTimeline(): void {
 
 <template>
   <div class="chrono-report">
-    <p v-if="ai.chronoParseError" class="cp-error">
+    <p v-if="ai.chronoParseError" class="error-text">
       Réponse de vérification illisible — {{ ai.chronoParseError }}
     </p>
     <template v-else>
-      <p v-if="ai.chronoMalformedCount > 0" class="cp-hint">
+      <p v-if="ai.chronoMalformedCount > 0" class="hint">
         {{ ai.chronoMalformedCount }}
         incohérence{{ ai.chronoMalformedCount > 1 ? 's' : '' }} malformée{{
           ai.chronoMalformedCount > 1 ? 's' : ''
         }}
         ignorée{{ ai.chronoMalformedCount > 1 ? 's' : '' }}.
       </p>
-      <p v-if="ai.chronoUnknownIdCount > 0" class="cp-hint">
+      <p v-if="ai.chronoUnknownIdCount > 0" class="hint">
         {{ ai.chronoUnknownIdCount }} référence{{ ai.chronoUnknownIdCount > 1 ? 's' : '' }} à un
         chapitre ou événement introuvable ignorée{{ ai.chronoUnknownIdCount > 1 ? 's' : '' }}.
       </p>
-      <p v-if="ai.chronoIssues.length === 0" class="cp-hint">Aucune incohérence détectée.</p>
+      <p v-if="ai.chronoIssues.length === 0" class="hint">Aucune incohérence détectée.</p>
     </template>
 
     <ul v-if="!ai.chronoParseError && ai.chronoIssues.length > 0" class="chrono-list">
@@ -110,15 +110,6 @@ function goToTimeline(): void {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.cp-hint {
-  font-size: 12px;
-  color: var(--fg-muted);
-}
-.cp-error {
-  font-size: 12px;
-  color: var(--danger);
 }
 
 .chrono-list {

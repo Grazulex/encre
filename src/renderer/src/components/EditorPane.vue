@@ -1325,10 +1325,10 @@ header {
   gap: 6px;
   border: none;
   padding: 3px 4px 3px 0;
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   color: var(--fg-muted);
 }
 .summary-toggle:hover {
@@ -1373,13 +1373,6 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-.field-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--fg-muted);
 }
 
 /* Résumé et notes : texte de travail, pas manuscrit — hérite de --font-ui
@@ -1451,7 +1444,7 @@ header {
   min-height: 54px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--fg) 4%, var(--bg));
-  border-radius: 5px;
+  border-radius: var(--radius-s);
   padding: 6px 8px;
   font-size: 13px;
   line-height: 1.55;
@@ -1476,10 +1469,6 @@ header {
 .note-controls button:hover:not(:disabled) {
   color: var(--fg);
   background: color-mix(in srgb, var(--fg) 8%, transparent);
-}
-.note-controls button:disabled {
-  opacity: 0.25;
-  cursor: default;
 }
 
 .chapter-chips {

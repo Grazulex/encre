@@ -408,7 +408,7 @@ watch(
         </p>
 
         <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
-          <p v-if="ai.errorMessage && ai.task === 'write'" class="cp-error">{{ ai.errorMessage }}</p>
+          <p v-if="ai.errorMessage && ai.task === 'write'" class="error-text">{{ ai.errorMessage }}</p>
           <button type="button" class="primary" :disabled="!summaryReady" @click="launch(false)">
             Rédiger le brouillon
           </button>
@@ -487,7 +487,7 @@ watch(
               <input v-model="proposerSeparations" type="checkbox" :disabled="busy" />
               Proposer des séparations manquantes
             </label>
-            <p class="cp-hint">
+            <p class="hint">
               Suggère des *** aux transitions de scène — à valider dans l'aperçu.
             </p>
           </div>
@@ -499,7 +499,7 @@ watch(
         <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à harmoniser.</p>
 
         <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
-          <p v-if="ai.errorMessage && ai.task === 'format'" class="cp-error">{{ ai.errorMessage }}</p>
+          <p v-if="ai.errorMessage && ai.task === 'format'" class="error-text">{{ ai.errorMessage }}</p>
           <button type="button" class="primary" :disabled="!hasContent" @click="launchFormat">
             Harmoniser ce chapitre
           </button>
@@ -516,7 +516,7 @@ watch(
           <div v-if="ai.phase === 'streaming'" class="cp-stream-actions">
             <button type="button" @click="ai.cancel()">Annuler</button>
           </div>
-          <p v-else class="cp-hint">Vérification avant/après affichée à l'écran.</p>
+          <p v-else class="hint">Vérification avant/après affichée à l'écran.</p>
         </div>
       </template>
 
@@ -539,7 +539,7 @@ watch(
           v-if="ai.phase === 'idle' || ai.phase === 'error' || (ai.phase === 'done' && ai.task === 'review')"
           class="cp-launch"
         >
-          <p v-if="ai.errorMessage && ai.task === 'review'" class="cp-error">{{ ai.errorMessage }}</p>
+          <p v-if="ai.errorMessage && ai.task === 'review'" class="error-text">{{ ai.errorMessage }}</p>
           <button type="button" class="primary" :disabled="!hasContent || busy" @click="launchReview">
             {{ ai.task === 'review' && ai.phase === 'done' ? 'Relire à nouveau' : 'Relire ce chapitre' }}
           </button>
@@ -566,7 +566,7 @@ watch(
         <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à extraire.</p>
 
         <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
-          <p v-if="ai.errorMessage && ai.task === 'extract'" class="cp-error">
+          <p v-if="ai.errorMessage && ai.task === 'extract'" class="error-text">
             {{ ai.errorMessage }}
           </p>
           <button type="button" class="primary" :disabled="!hasContent || busy" @click="launchExtract">
@@ -585,7 +585,7 @@ watch(
           <div v-if="ai.phase === 'streaming'" class="cp-stream-actions">
             <button type="button" @click="ai.cancel()">Annuler</button>
           </div>
-          <p v-else class="cp-hint">Proposition affichée dans la boîte de dialogue.</p>
+          <p v-else class="hint">Proposition affichée dans la boîte de dialogue.</p>
         </div>
       </template>
 
@@ -607,7 +607,7 @@ watch(
           v-if="ai.phase === 'idle' || ai.phase === 'error' || (ai.phase === 'done' && ai.task === 'chrono')"
           class="cp-launch"
         >
-          <p v-if="ai.errorMessage && ai.task === 'chrono'" class="cp-error">{{ ai.errorMessage }}</p>
+          <p v-if="ai.errorMessage && ai.task === 'chrono'" class="error-text">{{ ai.errorMessage }}</p>
           <button type="button" class="primary" :disabled="busy" @click="launchChrono">
             {{ ai.task === 'chrono' && ai.phase === 'done' ? 'Vérifier à nouveau' : 'Vérifier le livre' }}
           </button>
@@ -733,13 +733,6 @@ watch(
   flex-direction: column;
   gap: 6px;
 }
-.field-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--fg-muted);
-}
 
 .cp-loading {
   font-size: 12.5px;
@@ -760,11 +753,6 @@ watch(
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: 8px;
   padding: 8px 10px;
-}
-
-.cp-hint {
-  font-size: 12px;
-  color: var(--fg-muted);
 }
 
 .cp-conventions {
@@ -901,10 +889,6 @@ watch(
 }
 .cp-launch button {
   width: 100%;
-}
-.cp-error {
-  font-size: 12px;
-  color: var(--danger);
 }
 
 .cp-stream {

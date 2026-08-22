@@ -81,18 +81,18 @@ function dismiss(index: number): void {
 
 <template>
   <div class="review-panel">
-    <p v-if="ai.reviewParseError" class="cp-error">
+    <p v-if="ai.reviewParseError" class="error-text">
       Réponse de relecture illisible — {{ ai.reviewParseError }}
     </p>
     <template v-else>
-      <p v-if="ai.reviewMalformedCount > 0" class="cp-hint">
+      <p v-if="ai.reviewMalformedCount > 0" class="hint">
         {{ ai.reviewMalformedCount }}
         suggestion{{ ai.reviewMalformedCount > 1 ? 's' : '' }} malformée{{
           ai.reviewMalformedCount > 1 ? 's' : ''
         }}
         ignorée{{ ai.reviewMalformedCount > 1 ? 's' : '' }}.
       </p>
-      <p v-if="ai.reviewSuggestions.length === 0" class="cp-hint">
+      <p v-if="ai.reviewSuggestions.length === 0" class="hint">
         Aucune suggestion pour ce chapitre.
       </p>
     </template>
@@ -150,15 +150,6 @@ function dismiss(index: number): void {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.cp-hint {
-  font-size: 12px;
-  color: var(--fg-muted);
-}
-.cp-error {
-  font-size: 12px;
-  color: var(--danger);
 }
 
 .review-banner {
