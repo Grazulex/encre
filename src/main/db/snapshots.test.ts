@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb, type Db } from './connection'
-import { createSnapshot, listSnapshots, getSnapshotContent } from './snapshots'
+import { createSnapshot, listSnapshots, getSnapshotContent, deleteSnapshot } from './snapshots'
 
 let db: Db
 beforeEach(() => {
@@ -45,17 +45,17 @@ describe('repository snapshots', () => {
     expect(retrieved).toBe(content)
   })
 
-  it('createSnapshot prune à 20 snapshots les plus récents par chapitre', () => {
+  it('createSnapshot prune à 50 snapshots les plus récents par chapitre', () => {
     db.prepare('INSERT INTO books (title) VALUES (?)').run('Livre')
     db.prepare('INSERT INTO chapters (book_id, position, title) VALUES (1, 1, ?)').run('Ch. 1')
 
-    // Créer 25 snapshots
-    for (let i = 0; i < 25; i++) {
+    // Créer 60 snapshots
+    for (let i = 0; i < 60; i++) {
       createSnapshot(db, 1, JSON.stringify({ i }), 'ia')
     }
 
     const list = listSnapshots(db, 1)
-    expect(list).toHaveLength(20)
+    expect(list).toHaveLength(50)
   })
 
   it('createSnapshot prune indépendamment par chapitre', () => {
@@ -69,5 +69,22 @@ describe('repository snapshots', () => {
 
     expect(listSnapshots(db, 1)).toHaveLength(15)
     expect(listSnapshots(db, 2)).toHaveLength(10)
+  })
+
+  it('deleteSnapshot supprime un snapshot spécifique', () => {
+    db.prepare('INSERT INTO books (title) VALUES (?)').run('Livre')
+    db.prepare('INSERT INTO chapters (book_id, position, title) VALUES (1, 1, ?)').run('Ch. 1')
+
+    const s1 = createSnapshot(db, 1, JSON.stringify({ id: 1 }), 'ia')
+    const s2 = createSnapshot(db, 1, JSON.stringify({ id: 2 }), 'manual')
+    const s3 = createSnapshot(db, 1, JSON.stringify({ id: 3 }), 'ia')
+
+    deleteSnapshot(db, s2.id)
+
+    const list = listSnapshots(db, 1)
+    expect(list).toHaveLength(2)
+    expect(list.map((s) => s.id)).not.toContain(s2.id)
+    expect(list.map((s) => s.id)).toContain(s1.id)
+    expect(list.map((s) => s.id)).toContain(s3.id)
   })
 })

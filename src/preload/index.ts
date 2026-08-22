@@ -86,7 +86,8 @@ const api: EncreApi = {
     listByChapter: (chapterId) => ipcRenderer.invoke('snapshots:listByChapter', chapterId),
     create: (chapterId, contentJson, reason) =>
       ipcRenderer.invoke('snapshots:create', chapterId, contentJson, reason),
-    content: (id) => ipcRenderer.invoke('snapshots:content', id)
+    content: (id) => ipcRenderer.invoke('snapshots:content', id),
+    remove: (id) => ipcRenderer.invoke('snapshots:remove', id)
   },
   series: {
     list: () => ipcRenderer.invoke('series:list'),

@@ -218,6 +218,24 @@ describe('createApi', () => {
     expect(content).toBe('{"type":"doc"}')
   })
 
+  it('snapshots.remove supprime un snapshot via l\'API', async () => {
+    const db = openDb(':memory:')
+    const api = createApi(db)
+    const book = await api.books.create({ title: 'Snapshots Remove' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+    const snap1 = await api.snapshots.create(chapter.id, '{"type":"doc"}', 'ia')
+    const snap2 = await api.snapshots.create(chapter.id, '{"type":"doc"}', 'manuel')
+
+    let list = await api.snapshots.listByChapter(chapter.id)
+    expect(list).toHaveLength(2)
+
+    await api.snapshots.remove(snap1.id)
+
+    list = await api.snapshots.listByChapter(chapter.id)
+    expect(list).toHaveLength(1)
+    expect(list[0].id).toBe(snap2.id)
+  })
+
   it('series.getOrCreate est idempotent et series.list la retourne', async () => {
     const api = createApi(openDb(':memory:'))
     const s1 = await api.series.getOrCreate('Les Chroniques de Verre')

@@ -12,13 +12,13 @@ export function createSnapshot(db: Db, chapterId: number, contentJson: string, r
 
     const insertedId = Number(result.lastInsertRowid)
 
-    // Prune: garder les 20 plus récents pour ce chapitre
+    // Prune: garder les 50 plus récents pour ce chapitre (usage manuel s'ajoute à l'IA)
     const toDelete = db
       .prepare(
         `SELECT id FROM snapshots
          WHERE chapter_id = ?
          ORDER BY created_at DESC, id DESC
-         LIMIT -1 OFFSET 20`
+         LIMIT -1 OFFSET 50`
       )
       .all(chapterId) as any[]
 
@@ -65,4 +65,8 @@ export function getSnapshotContent(db: Db, id: number): string {
   const row = db.prepare('SELECT content_json FROM snapshots WHERE id = ?').get(id) as any
   if (!row) throw new Error(`Snapshot introuvable: ${id}`)
   return row.content_json
+}
+
+export function deleteSnapshot(db: Db, id: number): void {
+  db.prepare('DELETE FROM snapshots WHERE id = ?').run(id)
 }

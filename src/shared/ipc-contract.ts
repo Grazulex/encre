@@ -81,6 +81,7 @@ export interface EncreApi {
     listByChapter(chapterId: number): Promise<Snapshot[]>
     create(chapterId: number, contentJson: string, reason: string): Promise<Snapshot>
     content(id: number): Promise<string>
+    remove(id: number): Promise<void>
   }
   series: {
     list(): Promise<Series[]>

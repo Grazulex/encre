@@ -361,7 +361,8 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
       listByChapter: async (chapterId) => snapshots.listSnapshots(db, chapterId),
       create: async (chapterId, contentJson, reason) =>
         snapshots.createSnapshot(db, chapterId, contentJson, reason),
-      content: async (id) => snapshots.getSnapshotContent(db, id)
+      content: async (id) => snapshots.getSnapshotContent(db, id),
+      remove: async (id) => snapshots.deleteSnapshot(db, id)
     },
     series: {
       list: async () => series.listSeries(db),
