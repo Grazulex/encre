@@ -57,6 +57,21 @@ function pruneRing(): void {
   while (ring.length > RING_LIMIT) ring.shift()
 }
 
+// Pont vers EditorPane (Task 7) : EditorPane et ClaudePanel sont deux enfants
+// FRÈRES de BookView (jamais l'un dans l'arbre de l'autre), donc ni defineExpose
+// ni un ref template ne peuvent les relier sans faire transiter BookView, hors
+// périmètre de cette tâche. EditorPane s'enregistre ici à son montage (mêmes
+// raisons et même forme que window.encre.ai.onChunk/onDone/onError ci-dessus :
+// variable de module, pas d'état Pinia, une fonction n'a rien à faire dans un
+// state réactif) et se désenregistre à son démontage ; ClaudePanel/SnapshotList
+// ne l'appellent jamais directement, seulement via les actions insertDraft/
+// restoreSnapshot ci-dessous.
+export interface EditorBridge {
+  insertDraft(chapterId: number, draft: string): Promise<boolean>
+  restoreSnapshot(chapterId: number, contentJson: string): Promise<boolean>
+}
+let editorBridge: EditorBridge | null = null
+
 export const useAiStore = defineStore('ai', {
   state: () => ({
     open: false,
@@ -206,15 +221,52 @@ export const useAiStore = defineStore('ai', {
     toggle(): void {
       this.open = !this.open
     },
+    // Ne réinitialise QUE la session de génération (phase/brouillon/requête/
+    // erreur/consigne) — jamais chapterId/hasSummary/entityChoices, qui
+    // décrivent le chapitre affiché, pas la génération en cours : après une
+    // insertion (voir insertDraft ci-dessous), le panneau reste ouvert sur le
+    // MÊME chapitre, dont le résumé et les fiches cochées restent valides
+    // sans nouvel aller-retour prepare(). Les vider ici forcerait un faux
+    // « Écrivez d'abord un résumé » le temps d'un rafraîchissement inutile.
     reset(): void {
       this.phase = 'idle'
       this.draft = ''
       this.requestId = null
       this.errorMessage = null
       this.instructions = ''
-      this.entityChoices = []
-      this.hasSummary = false
-      this.chapterId = null
+    },
+    // Pont EditorPane ↔ store (voir EditorBridge ci-dessus) : posé au montage
+    // d'EditorPane, retiré à son démontage. ClaudePanel/SnapshotList ne
+    // connaissent jamais EditorPane directement, seulement insertDraft/
+    // restoreSnapshot ci-dessous.
+    registerEditor(bridge: EditorBridge): void {
+      editorBridge = bridge
+    },
+    unregisterEditor(): void {
+      editorBridge = null
+    },
+    // Insertion contrôlée du brouillon (Task 7) : délègue tout le travail
+    // d'édition (snapshot + insertion TipTap) à EditorPane via le pont
+    // ci-dessus — ce store ne connaît ni l'éditeur ni ProseMirror. `false` en
+    // retour (snapshot ou éditeur indisponible) laisse la session intacte
+    // pour que l'auteur puisse réessayer ; reset() n'a lieu qu'après succès
+    // confirmé par EditorPane.
+    async insertDraft(): Promise<boolean> {
+      if (!editorBridge || this.chapterId == null) return false
+      const ok = await editorBridge.insertDraft(this.chapterId, this.draft)
+      if (ok) this.reset()
+      return ok
+    },
+    // Restauration d'un snapshot (Task 7) : ne touche jamais phase/draft — la
+    // restauration est indépendante d'une génération IA en cours ou terminée.
+    // Récupère le JSON du snapshot ici (seul ce store connaît chapterId), puis
+    // délègue l'application (snapshot du contenu actuel + remplacement +
+    // sauvegarde) à EditorPane, seul à savoir parler à l'éditeur/au store livre.
+    async restoreSnapshot(id: number): Promise<boolean> {
+      if (!editorBridge || this.chapterId == null) return false
+      const chapterId = this.chapterId
+      const contentJson = await window.encre.snapshots.content(id)
+      return editorBridge.restoreSnapshot(chapterId, contentJson)
     }
   }
 })

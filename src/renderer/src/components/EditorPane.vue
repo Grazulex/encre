@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { watch, onMounted, onBeforeUnmount, nextTick, ref } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
+import type { JSONContent } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
@@ -464,6 +465,119 @@ onBeforeUnmount(() => {
   unsubscribeSummaryFlusher?.()
   unsubscribeNotesFlusher?.()
 })
+
+// Insertion contrôlée du brouillon IA + restauration de snapshot (Task 7) :
+// zone entièrement ADDITIVE — ne lit editorChapterId que pour vérifier que
+// l'éditeur affiche bien le chapitre visé (garde de péremption, même principe
+// que loadChapterNotes/refreshChapterEntities), ne l'écrit jamais et ne touche
+// ni pendingChapterId ni watchGeneration. Les deux fonctions sont exposées au
+// store ai (registerEditor) plutôt qu'à ClaudePanel/SnapshotList directement :
+// EditorPane et ClaudePanel sont frères dans BookView, aucun ref direct
+// possible sans faire transiter BookView (voir stores/ai.ts, commentaire
+// EditorBridge).
+
+// Construit un nœud paragraphe TipTap à partir d'un segment de texte brut :
+// les retours à la ligne SIMPLES à l'intérieur d'un paragraphe (entre deux
+// `\n\n`) deviennent des sauts de ligne durs (hardBreak), pas de nouveaux
+// paragraphes — seul `\n\n` sépare les paragraphes (contrat de la tâche).
+function buildParagraphNode(text: string): Record<string, unknown> {
+  const lines = text.split('\n')
+  const content: Record<string, unknown>[] = []
+  lines.forEach((line, index) => {
+    if (index > 0) content.push({ type: 'hardBreak' })
+    if (line.length > 0) content.push({ type: 'text', text: line })
+  })
+  return content.length > 0 ? { type: 'paragraph', content } : { type: 'paragraph' }
+}
+
+// Insère le brouillon en fin de document : (1) snapshot du contenu ACTUEL
+// (avant toute modification) via IPC, raison fixe 'avant insertion IA' — un
+// échec ici (IPC indisponible) annule l'insertion plutôt que de modifier
+// l'éditeur sans filet de restauration ; (2) découpage du brouillon en
+// paragraphes réels sur `\n\n` (jamais du texte brut avec des `\n` — un seul
+// nœud texte avec des retours à la ligne littéraux ne serait PAS des
+// paragraphes pour TipTap/ProseMirror) puis insertion via
+// focus('end') + insertContent ; l'onUpdate existant se déclenche normalement
+// (docChanged) et programme le flush débouncé habituel — aucun appel manuel à
+// flush() ici. Retourne false sans rien modifier si l'éditeur n'affiche plus
+// le chapitre visé (panneau resté ouvert pendant une bascule de chapitre) ou
+// si le brouillon est vide après nettoyage.
+async function insertDraftIntoEditor(chapterId: number, draft: string): Promise<boolean> {
+  const ed = editor.value
+  if (!ed || editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return false
+  try {
+    await window.encre.snapshots.create(
+      chapterId,
+      JSON.stringify(ed.getJSON()),
+      'avant insertion IA'
+    )
+  } catch (err) {
+    console.error("Échec du snapshot avant insertion IA", err)
+    ui.toast('Impossible de créer un point de restauration — insertion annulée.')
+    return false
+  }
+  const paragraphs = draft
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+  if (paragraphs.length === 0) return false
+  ed.chain()
+    .focus('end')
+    .insertContent(paragraphs.map(buildParagraphNode))
+    .run()
+  ui.toast('Brouillon inséré — snapshot créé.')
+  return true
+}
+
+// Restaure un snapshot : (1) snapshot du contenu ACTUEL d'abord (raison
+// 'avant restauration', même logique de filet que l'insertion — on ne perd
+// jamais le texte qu'on écrase), (2) remplace le contenu de l'éditeur
+// (`setContent`, `emitUpdate: false` — onUpdate ne doit pas se déclencher ici,
+// la persistance suit une voie explicite, pas le cycle frappe/debounce), (3)
+// sauvegarde immédiate via store.saveContentFor avec le JSON restauré ET le
+// texte recalculé sur l'éditeur à jour — le chemin normal de sauvegarde,
+// pas un contournement : mêmes effets qu'un flush() (wordCount recalculé,
+// currentChapter.contentJson/contentText mis à jour, saveState géré), sans
+// passer par pendingChapterId/le minuteur de 800 ms (aucune frappe en cours à
+// regrouper ici). Guard chapterId identique à insertDraftIntoEditor.
+async function restoreSnapshotIntoEditor(chapterId: number, contentJson: string): Promise<boolean> {
+  const ed = editor.value
+  if (!ed || editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return false
+  try {
+    await window.encre.snapshots.create(
+      chapterId,
+      JSON.stringify(ed.getJSON()),
+      'avant restauration'
+    )
+  } catch (err) {
+    console.error('Échec du snapshot avant restauration', err)
+    ui.toast('Impossible de créer un point de restauration — restauration annulée.')
+    return false
+  }
+  let parsed: JSONContent
+  try {
+    parsed = JSON.parse(contentJson)
+  } catch (err) {
+    console.error('Contenu de snapshot illisible', err)
+    ui.toast('Ce point de restauration est illisible.')
+    return false
+  }
+  // Re-vérifié après les deux `await` ci-dessus : le panneau a pu rester
+  // ouvert pendant que l'utilisateur changeait de chapitre entre-temps.
+  if (editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return false
+  ed.commands.setContent(parsed, { emitUpdate: false })
+  await store.saveContentFor(chapterId, contentJson, ed.getText())
+  ui.toast('Contenu restauré — snapshot créé.')
+  return true
+}
+
+onMounted(() => {
+  ai.registerEditor({
+    insertDraft: insertDraftIntoEditor,
+    restoreSnapshot: restoreSnapshotIntoEditor
+  })
+})
+onBeforeUnmount(() => ai.unregisterEditor())
 
 function rename(event: Event): void {
   const title = (event.target as HTMLInputElement).value.trim()

@@ -1,13 +1,15 @@
 <script setup lang="ts">
 // Panneau Claude (Task 6) : colonne droite de BookView, section chapitres
 // uniquement. Le brouillon streamé ne touche JAMAIS l'éditeur tant que
-// l'auteur n'a pas cliqué sur Insérer (câblé en Task 7 — bouton présent mais
-// désactivé ici, voir template). Copier et Régénérer sont pleinement
-// fonctionnels dès cette tâche.
+// l'auteur n'a pas cliqué sur Insérer. Insérer (Task 7) délègue tout le
+// travail d'édition à EditorPane via le pont du store ai (registerEditor —
+// EditorPane et ce panneau sont frères dans BookView, jamais l'un dans
+// l'arbre de l'autre) : ce composant ne connaît ni l'éditeur ni ProseMirror.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useAiStore } from '../stores/ai'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
+import SnapshotList from './SnapshotList.vue'
 
 const ai = useAiStore()
 const store = useBookStore()
@@ -53,6 +55,29 @@ function regenerate(): void {
   const chapter = store.currentChapter
   if (!chapter) return
   ai.start(chapter.id, lastContinue.value)
+}
+
+// Garde locale contre le double-clic : le bouton disparaît dès que
+// ai.insertDraft() rappelle reset() (phase quitte 'done'), mais entre le clic
+// et cette bascule il y a deux aller-retours IPC (snapshot, éventuellement
+// sauvegarde) pendant lesquels un second clic resterait possible sans ce ref.
+const inserting = ref(false)
+// Ref directe vers SnapshotList (enfant réel de ce composant, pas un frère —
+// rien à voir avec le pont EditorPane du store ai) : seul moyen de lui faire
+// prendre en compte le nouveau snapshot 'avant insertion IA' créé par
+// insertDraftIntoEditor sans que SnapshotList ait à deviner l'événement via un
+// état partagé plus indirect.
+const snapshotList = ref<InstanceType<typeof SnapshotList> | null>(null)
+
+async function insertDraft(): Promise<void> {
+  if (inserting.value) return
+  inserting.value = true
+  try {
+    const ok = await ai.insertDraft()
+    if (ok) await snapshotList.value?.refresh()
+  } finally {
+    inserting.value = false
+  }
 }
 
 async function copyDraft(): Promise<void> {
@@ -167,12 +192,16 @@ watch(
             Annuler
           </button>
           <template v-else>
-            <button type="button" title="Task 7" disabled>Insérer</button>
-            <button type="button" @click="regenerate">Régénérer</button>
-            <button type="button" @click="copyDraft">Copier</button>
+            <button type="button" class="primary" :disabled="inserting" @click="insertDraft">
+              {{ inserting ? 'Insertion…' : 'Insérer' }}
+            </button>
+            <button type="button" :disabled="inserting" @click="regenerate">Régénérer</button>
+            <button type="button" :disabled="inserting" @click="copyDraft">Copier</button>
           </template>
         </div>
       </div>
+
+      <SnapshotList ref="snapshotList" />
     </div>
   </div>
 </template>
