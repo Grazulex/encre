@@ -4,13 +4,13 @@ import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
 import { useEntitiesStore } from '../stores/entities'
 import { useShortcuts } from '../composables/useShortcuts'
-import { SECTION_LABELS } from '../../../shared/labels'
 import SectionNav from '../components/SectionNav.vue'
 import ChapterList from '../components/ChapterList.vue'
 import EditorPane from '../components/EditorPane.vue'
 import StatusBar from '../components/StatusBar.vue'
 import EntitiesSection from '../components/EntitiesSection.vue'
 import OutlineSection from '../components/OutlineSection.vue'
+import TimelineSection from '../components/TimelineSection.vue'
 import EntityDrawer from '../components/EntityDrawer.vue'
 
 const props = defineProps<{ bookId: number }>()
@@ -113,9 +113,7 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
       <EntitiesSection v-if="store.section === 'personnages'" kind="character" />
       <EntitiesSection v-if="store.section === 'lieux'" kind="place" />
       <OutlineSection v-if="store.section === 'plan'" />
-      <p v-if="store.section === 'chronologie'" class="empty">
-        {{ SECTION_LABELS[store.section] }} — à venir.
-      </p>
+      <TimelineSection v-if="store.section === 'chronologie'" />
     </main>
     <EntityDrawer />
   </div>
