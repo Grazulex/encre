@@ -12,6 +12,8 @@ import * as snapshots from './db/snapshots'
 import * as series from './db/series'
 import { createAiSession, addAiMessage } from './db/aiSessions'
 import { buildWritePrompt } from './ai/context'
+import { buildFormatPrompt } from './ai/formatContext'
+import type { FormatConventions } from '../shared/types'
 import { AiService, type AiRunner } from './ai/service'
 import { createSdkRunner } from './ai/runner'
 import { scanChapterFiles, mdToTiptapJson, titleForFile } from './importer'
@@ -51,6 +53,13 @@ function defaultEmit(channel: string, payload: unknown): void {
       console.error(`defaultEmit: échec de diffusion (${channel})`, error)
     })
 }
+
+// Modèle fixe pour ai.startFormat (Task 6) : la harmonisation de mise en forme
+// est une tâche de pure typographie (pas de créativité requise), le renderer
+// n'a donc pas de sélecteur de modèle pour cette action — contrairement à
+// startWrite. 'sonnet' suffit et reste le plus rapide des trois alias déjà
+// utilisés côté écriture (voir stores/ai.ts, AiModel).
+const FORMAT_MODEL = 'sonnet'
 
 export interface CreateApiOptions {
   runner?: AiRunner
@@ -353,6 +362,42 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
         )
         return requestId
       },
+      // Harmonisation de mise en forme (Task 6) : même mécanique que startWrite
+      // (AiService.start, mêmes canaux ai:chunk/ai:done/ai:error, même contrat
+      // d'ordonnancement documenté ci-dessus), mais aucun choix de modèle exposé
+      // au renderer pour cette tâche ciblée — modèle fixe, rapide, suffisant pour
+      // une tâche de pure typographie (pas de créativité requise).
+      startFormat: async (chapterId, conventions: FormatConventions) => {
+        const chapter = chapters.getChapter(db, chapterId)
+        if (!chapter.contentText.trim()) {
+          throw new Error('Ce chapitre est vide : rien à harmoniser.')
+        }
+        const bundle = buildFormatPrompt(db, chapterId, conventions)
+        const sessionId = createAiSession(db, chapter.bookId, chapterId, 'format', FORMAT_MODEL)
+        addAiMessage(db, sessionId, 'user', bundle.prompt)
+
+        let requestId = ''
+        requestId = service.start(
+          { system: bundle.system, prompt: bundle.prompt, model: FORMAT_MODEL },
+          {
+            onChunk: (text) => emit('ai:chunk', { requestId, text }),
+            onDone: (full) => {
+              emit('ai:done', { requestId, text: full })
+              try {
+                addAiMessage(db, sessionId, 'assistant', full)
+              } catch (err) {
+                console.error('[ai.startFormat] échec addAiMessage (assistant) :', err)
+              }
+            },
+            onError: (message) => emit('ai:error', { requestId, message })
+          }
+        )
+        return requestId
+      },
+      // Conversion pure (aucune écriture en base) : réutilise mdToTiptapJson,
+      // déjà éprouvé par l'import de fichier — jamais de logique de conversion
+      // dupliquée entre import et application d'une harmonisation.
+      formatToJson: async (markdown) => mdToTiptapJson(markdown),
       cancel: async (requestId) => {
         service.cancel(requestId)
       }

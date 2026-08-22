@@ -1,7 +1,7 @@
 import type {
   Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
   Entity, EntityCreate, EntityKind, EntityOccurrence, EntityPatch,
-  OutlineNote, Series, Snapshot, TimelineEvent, TimelineEventPatch
+  FormatConventions, OutlineNote, Series, Snapshot, TimelineEvent, TimelineEventPatch
 } from './types'
 
 export interface EncreApi {
@@ -72,6 +72,19 @@ export interface EncreApi {
     // les événements dont le requestId est encore inconnu et les réconcilier une fois que
     // startWrite() résout (voir src/main/api.ts, commentaire au site d'appel).
     startWrite(chapterId: number, options: { instructions?: string; entityIds?: number[]; model: string; continueFromText: boolean }): Promise<string>  // requestId ; enregistre ai_session + messages
+    // Harmonisation de mise en forme (Task 6) : même contrat d'ordonnancement que
+    // startWrite ci-dessus (ai:chunk/ai:done/ai:error partagent les mêmes canaux,
+    // tamponnage/réconciliation identiques côté renderer) ; session enregistrée avec
+    // task='format'. Refuse (rejette) un chapitre dont le contenu texte est vide —
+    // rien à harmoniser. Pas de choix de modèle exposé ici (contrairement à
+    // startWrite) : le modèle utilisé pour cette tâche ciblée est fixé côté main.
+    startFormat(chapterId: number, conventions: FormatConventions): Promise<string>  // requestId ; enregistre ai_session (task='format') + messages
+    // Conversion pure Markdown → JSON TipTap (Task 6), réutilisant mdToTiptapJson
+    // (déjà utilisé par l'import de fichier) : ne touche à aucun chapitre en base,
+    // sert uniquement à préparer le contenu proposé par startFormat avant de
+    // l'appliquer via le chemin de restauration existant côté renderer (voir
+    // EditorPane.applyFormat / stores/ai.ts).
+    formatToJson(markdown: string): Promise<{ contentJson: string; contentText: string }>
     cancel(requestId: string): Promise<void>
     onChunk(cb: (p: { requestId: string; text: string }) => void): void   // ipcRenderer.on('ai:chunk') — hors invoke
     onDone(cb: (p: { requestId: string; text: string }) => void): void    // 'ai:done' (texte complet) — hors invoke

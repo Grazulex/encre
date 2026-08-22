@@ -51,6 +51,16 @@ export interface Series {
 
 export type AiRole = 'user' | 'assistant'
 
+// Conventions typographiques cibles pour l'harmonisation de mise en forme
+// (Task 6) — définies ici (plutôt que dans main/ai/formatContext.ts, qui les
+// consommait seul jusqu'ici) car le renderer doit désormais construire la
+// même forme pour l'appel IPC ai.startFormat ; formatContext.ts réexporte ce
+// type pour ne pas casser ses imports existants.
+export interface FormatConventions {
+  dialogue: 'guillemets' | 'tirets' // « … » vs — cadratins
+  listes: 'tirets' | 'puces'
+}
+
 export interface AiSessionRecord {
   id: number
   bookId: number

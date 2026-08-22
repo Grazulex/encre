@@ -615,10 +615,53 @@ async function restoreSnapshotIntoEditor(chapterId: number, contentJson: string)
   return true
 }
 
+// Applique le résultat d'une harmonisation de mise en forme (Task 6) : mêmes
+// mécanique et gardes que restoreSnapshotIntoEditor ci-dessus (snapshot du
+// contenu ACTUEL d'abord, setContent avec emitUpdate: false, saveContentFor
+// avec le JSON normalisé ET le texte recalculé sur l'éditeur à jour), avec
+// deux différences volontaires : (1) raison de snapshot 'avant harmonisation'
+// plutôt que 'avant restauration' — l'auteur doit pouvoir distinguer les deux
+// dans le gestionnaire de snapshots ; (2) le JSON reçu vient de
+// mdToTiptapJson (IPC ai.formatToJson, store.applyFormat) et non d'un
+// snapshot existant, mais on le fait quand même passer par stripCodeBlocks
+// ci-dessous — ceinture + bretelles, même défense qu'à la restauration,
+// négligeable en coût et sans risque de double-normalisation (idempotent).
+async function applyFormatIntoEditor(chapterId: number, contentJson: string): Promise<boolean> {
+  const ed = editor.value
+  if (!ed || editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return false
+  try {
+    await window.encre.snapshots.create(
+      chapterId,
+      JSON.stringify(ed.getJSON()),
+      'avant harmonisation'
+    )
+  } catch (err) {
+    console.error('Échec du snapshot avant harmonisation', err)
+    ui.toast('Impossible de créer un point de restauration — application annulée.')
+    return false
+  }
+  const { json: normalizedJson } = stripCodeBlocks(contentJson)
+  let parsed: JSONContent
+  try {
+    parsed = JSON.parse(normalizedJson)
+  } catch (err) {
+    console.error('Résultat de mise en forme illisible', err)
+    ui.toast('Résultat de mise en forme illisible — application annulée.')
+    return false
+  }
+  // Re-vérifié après les deux `await` ci-dessus, même raison que restoreSnapshotIntoEditor.
+  if (editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return false
+  ed.commands.setContent(parsed, { emitUpdate: false })
+  await store.saveContentFor(chapterId, normalizedJson, ed.getText())
+  ui.toast('Mise en forme appliquée — snapshot créé.')
+  return true
+}
+
 onMounted(() => {
   ai.registerEditor({
     insertDraft: insertDraftIntoEditor,
-    restoreSnapshot: restoreSnapshotIntoEditor
+    restoreSnapshot: restoreSnapshotIntoEditor,
+    applyFormat: applyFormatIntoEditor
   })
 })
 onBeforeUnmount(() => ai.unregisterEditor())

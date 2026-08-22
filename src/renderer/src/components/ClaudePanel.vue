@@ -9,10 +9,70 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useAiStore } from '../stores/ai'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
+import type { FormatConventions } from '../../../shared/types'
+import FormatDialog from './FormatDialog.vue'
 
 const ai = useAiStore()
 const store = useBookStore()
 const ui = useUiStore()
+
+// Deux onglets partageant le même panneau (Task 6) : « Écriture » (préexistant)
+// et « Mise en forme » (harmonisation typographique). Les deux tâches
+// partagent phase/draft/requestId côté store (un seul flux à la fois — voir
+// stores/ai.ts, AiTask) ; cet onglet local ne pilote QUE l'affichage, jamais
+// la génération elle-même : basculer d'onglet pendant un stream ne l'annule
+// pas, il continue en arrière-plan (ai.task indique lequel).
+const activeTab = ref<'ecriture' | 'mise-en-forme'>('ecriture')
+
+// Conventions de mise en forme (Task 6) : « mémorisées en session » (brief) —
+// sessionStorage plutôt que le store Pinia (qui ne persiste rien lui-même) ou
+// une table de préférences en base (aucune n'existe, et ce choix est
+// explicitement scopé à la session de l'appli, pas au livre). Lues une seule
+// fois à la création du composant ; sessionStorage peut lever (contexte
+// restreint) — les valeurs par défaut ci-dessous couvrent ce cas comme
+// l'absence de valeur déjà enregistrée.
+const FORMAT_DIALOGUE_KEY = 'encre.format.dialogue'
+const FORMAT_LISTES_KEY = 'encre.format.listes'
+
+function readFormatPref<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
+  try {
+    const value = sessionStorage.getItem(key)
+    return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const dialogueConvention = ref<FormatConventions['dialogue']>(
+  readFormatPref(FORMAT_DIALOGUE_KEY, 'guillemets', ['guillemets', 'tirets'] as const)
+)
+const listesConvention = ref<FormatConventions['listes']>(
+  readFormatPref(FORMAT_LISTES_KEY, 'tirets', ['tirets', 'puces'] as const)
+)
+watch(dialogueConvention, (value) => {
+  try {
+    sessionStorage.setItem(FORMAT_DIALOGUE_KEY, value)
+  } catch {
+    // sessionStorage indisponible : la convention reste active pour cette
+    // session en mémoire, seule la mémorisation entre panneaux est perdue.
+  }
+})
+watch(listesConvention, (value) => {
+  try {
+    sessionStorage.setItem(FORMAT_LISTES_KEY, value)
+  } catch {
+    // idem
+  }
+})
+
+function launchFormat(): void {
+  const chapter = store.currentChapter
+  if (!chapter || !hasContent.value || busy.value) return
+  ai.startFormat(chapter.id, {
+    dialogue: dialogueConvention.value,
+    listes: listesConvention.value
+  })
+}
 
 // prepare() re-déclenché à chaque ouverture du panneau (montage — v-if côté
 // BookView) ET à chaque changement de chapitre tant qu'il reste ouvert
@@ -133,86 +193,193 @@ watch(
       </button>
     </header>
 
+    <div class="cp-tabs" role="tablist" aria-label="Section de l'assistant">
+      <button
+        type="button"
+        role="tab"
+        class="cp-tab"
+        :class="{ active: activeTab === 'ecriture' }"
+        :aria-selected="activeTab === 'ecriture'"
+        @click="activeTab = 'ecriture'"
+      >
+        Écriture
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="cp-tab"
+        :class="{ active: activeTab === 'mise-en-forme' }"
+        :aria-selected="activeTab === 'mise-en-forme'"
+        @click="activeTab = 'mise-en-forme'"
+      >
+        Mise en forme
+      </button>
+    </div>
+
     <div class="cp-body">
-      <section class="cp-section">
-        <p v-if="ai.phase === 'preparing'" class="cp-loading">Préparation…</p>
-        <template v-else>
-          <div v-if="summaryReady" class="cp-summary">
-            <span class="field-label">Résumé du chapitre</span>
-            <p class="cp-summary-text">{{ summaryPreview }}</p>
-          </div>
-          <p v-else class="cp-warning">Écrivez d'abord un résumé dans « Résumé &amp; notes ».</p>
-        </template>
-      </section>
-
-      <section v-if="ai.entityChoices.length > 0" class="cp-section">
-        <span class="field-label">Fiches à inclure</span>
-        <ul class="cp-entities">
-          <li v-for="choice in ai.entityChoices" :key="choice.entity.id">
-            <label class="cp-entity" :class="{ disabled: busy }">
-              <input v-model="choice.checked" type="checkbox" :disabled="busy" />
-              <span class="cp-entity-badge" :class="{ place: choice.entity.kind === 'place' }">
-                {{ choice.entity.kind === 'character' ? '◆' : '●' }}
-              </span>
-              {{ choice.entity.name }}
-            </label>
-          </li>
-        </ul>
-      </section>
-
-      <section class="cp-section">
-        <span class="field-label">Consigne (facultatif)</span>
-        <textarea
-          v-model="ai.instructions"
-          class="cp-instructions"
-          rows="3"
-          placeholder="Une intention pour ce brouillon…"
-          :disabled="busy"
-        ></textarea>
-      </section>
-
-      <div class="cp-model-row">
-        <span class="field-label">Modèle</span>
-        <select v-model="ai.model" class="cp-model-select" :disabled="busy">
-          <option value="sonnet">Sonnet — rapide</option>
-          <option value="opus">Opus — soigné</option>
-          <option value="fable">Fable — le plus littéraire</option>
-        </select>
-      </div>
-
-      <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
-        <p v-if="ai.errorMessage" class="cp-error">{{ ai.errorMessage }}</p>
-        <button type="button" class="primary" :disabled="!summaryReady" @click="launch(false)">
-          Rédiger le brouillon
-        </button>
-        <button v-if="hasContent" type="button" :disabled="!summaryReady" @click="launch(true)">
-          Continuer le texte
-        </button>
-      </div>
-
-      <div v-if="ai.phase === 'streaming' || ai.phase === 'done'" class="cp-stream">
-        <span class="field-label">Brouillon</span>
-        <div ref="streamEl" class="cp-stream-text">
-          {{ ai.draft }}<span v-if="ai.phase === 'streaming'" class="cp-cursor">▍</span>
-        </div>
-        <div class="cp-stream-actions">
-          <button v-if="ai.phase === 'streaming'" type="button" @click="ai.cancel()">
-            Annuler
-          </button>
+      <template v-if="activeTab === 'ecriture'">
+        <section class="cp-section">
+          <p v-if="ai.phase === 'preparing'" class="cp-loading">Préparation…</p>
           <template v-else>
-            <button type="button" class="primary" :disabled="inserting" @click="insertDraft">
-              {{ inserting ? 'Insertion…' : 'Insérer' }}
-            </button>
-            <button type="button" :disabled="inserting" @click="regenerate">Régénérer</button>
-            <button type="button" :disabled="inserting" @click="copyDraft">Copier</button>
+            <div v-if="summaryReady" class="cp-summary">
+              <span class="field-label">Résumé du chapitre</span>
+              <p class="cp-summary-text">{{ summaryPreview }}</p>
+            </div>
+            <p v-else class="cp-warning">Écrivez d'abord un résumé dans « Résumé &amp; notes ».</p>
           </template>
+        </section>
+
+        <section v-if="ai.entityChoices.length > 0" class="cp-section">
+          <span class="field-label">Fiches à inclure</span>
+          <ul class="cp-entities">
+            <li v-for="choice in ai.entityChoices" :key="choice.entity.id">
+              <label class="cp-entity" :class="{ disabled: busy }">
+                <input v-model="choice.checked" type="checkbox" :disabled="busy" />
+                <span class="cp-entity-badge" :class="{ place: choice.entity.kind === 'place' }">
+                  {{ choice.entity.kind === 'character' ? '◆' : '●' }}
+                </span>
+                {{ choice.entity.name }}
+              </label>
+            </li>
+          </ul>
+        </section>
+
+        <section class="cp-section">
+          <span class="field-label">Consigne (facultatif)</span>
+          <textarea
+            v-model="ai.instructions"
+            class="cp-instructions"
+            rows="3"
+            placeholder="Une intention pour ce brouillon…"
+            :disabled="busy"
+          ></textarea>
+        </section>
+
+        <div class="cp-model-row">
+          <span class="field-label">Modèle</span>
+          <select v-model="ai.model" class="cp-model-select" :disabled="busy">
+            <option value="sonnet">Sonnet — rapide</option>
+            <option value="opus">Opus — soigné</option>
+            <option value="fable">Fable — le plus littéraire</option>
+          </select>
         </div>
-      </div>
+
+        <p v-if="busy && ai.task === 'format'" class="cp-warning">
+          Harmonisation en cours — patientez avant une nouvelle génération.
+        </p>
+
+        <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
+          <p v-if="ai.errorMessage && ai.task === 'write'" class="cp-error">{{ ai.errorMessage }}</p>
+          <button type="button" class="primary" :disabled="!summaryReady" @click="launch(false)">
+            Rédiger le brouillon
+          </button>
+          <button v-if="hasContent" type="button" :disabled="!summaryReady" @click="launch(true)">
+            Continuer le texte
+          </button>
+        </div>
+
+        <div v-if="ai.task === 'write' && (ai.phase === 'streaming' || ai.phase === 'done')" class="cp-stream">
+          <span class="field-label">Brouillon</span>
+          <div ref="streamEl" class="cp-stream-text">
+            {{ ai.draft }}<span v-if="ai.phase === 'streaming'" class="cp-cursor">▍</span>
+          </div>
+          <div class="cp-stream-actions">
+            <button v-if="ai.phase === 'streaming'" type="button" @click="ai.cancel()">
+              Annuler
+            </button>
+            <template v-else>
+              <button type="button" class="primary" :disabled="inserting" @click="insertDraft">
+                {{ inserting ? 'Insertion…' : 'Insérer' }}
+              </button>
+              <button type="button" :disabled="inserting" @click="regenerate">Régénérer</button>
+              <button type="button" :disabled="inserting" @click="copyDraft">Copier</button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template v-else>
+        <section class="cp-section">
+          <span class="field-label">Conventions</span>
+          <div class="cp-conventions">
+            <fieldset class="cp-radio-group" :disabled="busy">
+              <legend>Dialogue</legend>
+              <label class="cp-radio">
+                <input
+                  v-model="dialogueConvention"
+                  type="radio"
+                  name="cp-format-dialogue"
+                  value="guillemets"
+                />
+                Guillemets « … »
+              </label>
+              <label class="cp-radio">
+                <input
+                  v-model="dialogueConvention"
+                  type="radio"
+                  name="cp-format-dialogue"
+                  value="tirets"
+                />
+                Tirets — …
+              </label>
+            </fieldset>
+            <fieldset class="cp-radio-group" :disabled="busy">
+              <legend>Listes</legend>
+              <label class="cp-radio">
+                <input
+                  v-model="listesConvention"
+                  type="radio"
+                  name="cp-format-listes"
+                  value="tirets"
+                />
+                Tirets -
+              </label>
+              <label class="cp-radio">
+                <input
+                  v-model="listesConvention"
+                  type="radio"
+                  name="cp-format-listes"
+                  value="puces"
+                />
+                Puces •
+              </label>
+            </fieldset>
+          </div>
+        </section>
+
+        <p v-if="busy && ai.task === 'write'" class="cp-warning">
+          Écriture en cours — patientez avant d'harmoniser ce chapitre.
+        </p>
+        <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à harmoniser.</p>
+
+        <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
+          <p v-if="ai.errorMessage && ai.task === 'format'" class="cp-error">{{ ai.errorMessage }}</p>
+          <button type="button" class="primary" :disabled="!hasContent" @click="launchFormat">
+            Harmoniser ce chapitre
+          </button>
+        </div>
+
+        <div
+          v-if="ai.task === 'format' && (ai.phase === 'streaming' || ai.phase === 'done')"
+          class="cp-stream"
+        >
+          <span class="field-label">Texte harmonisé</span>
+          <div ref="streamEl" class="cp-stream-text">
+            {{ ai.draft }}<span v-if="ai.phase === 'streaming'" class="cp-cursor">▍</span>
+          </div>
+          <div v-if="ai.phase === 'streaming'" class="cp-stream-actions">
+            <button type="button" @click="ai.cancel()">Annuler</button>
+          </div>
+          <p v-else class="cp-hint">Vérification avant/après affichée à l'écran.</p>
+        </div>
+      </template>
 
       <button type="button" class="cp-snapshots-link" @click="ai.openSnapshotManager()">
         Gérer les snapshots
       </button>
     </div>
+
+    <FormatDialog v-if="ai.phase === 'done' && ai.task === 'format'" />
   </div>
 </template>
 
@@ -239,6 +406,32 @@ watch(
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+.cp-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cp-tab {
+  border: none;
+  border-radius: 6px 6px 0 0;
+  padding: 7px 12px 9px;
+  margin-bottom: -1px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  background: none;
+  border-bottom: 2px solid transparent;
+}
+.cp-tab:hover {
+  color: var(--fg);
+}
+.cp-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 .cp-close {
   flex-shrink: 0;
@@ -300,6 +493,49 @@ watch(
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: 8px;
   padding: 8px 10px;
+}
+
+.cp-hint {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.cp-conventions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cp-radio-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cp-radio-group:disabled {
+  opacity: 0.6;
+}
+.cp-radio-group legend {
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--fg-muted);
+}
+.cp-radio {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px;
+  font-size: 12.5px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.cp-radio input {
+  padding: 0;
+  accent-color: var(--accent);
 }
 
 .cp-entities {

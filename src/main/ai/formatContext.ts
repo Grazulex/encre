@@ -1,11 +1,13 @@
 import type { Db } from '../db/connection'
 import { getChapter } from '../db/chapters'
 import { tiptapToMarkdown } from '../../shared/export'
-
-export interface FormatConventions {
-  dialogue: 'guillemets' | 'tirets' // « … » vs — cadratins
-  listes: 'tirets' | 'puces'
-}
+// FormatConventions vit dans shared/types.ts (Task 6, controller precisions) :
+// le renderer doit construire la même forme pour l'appel IPC ai.startFormat,
+// or ce module-ci importe des dépendances main-only (db/chapters) qu'un
+// import renderer ne peut pas suivre. Réexporté pour ne pas casser les
+// consommateurs existants (formatContext.test.ts) qui importent le type d'ici.
+export type { FormatConventions } from '../../shared/types'
+import type { FormatConventions } from '../../shared/types'
 
 export interface FormatPromptBundle {
   system: string

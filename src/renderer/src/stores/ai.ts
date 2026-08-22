@@ -1,9 +1,32 @@
 import { defineStore } from 'pinia'
 import { useEntitiesStore } from './entities'
-import type { Entity } from '../../../shared/types'
+import type { Entity, FormatConventions } from '../../../shared/types'
 
 export type AiPhase = 'idle' | 'preparing' | 'streaming' | 'done' | 'error'
 export type AiModel = 'sonnet' | 'opus' | 'fable'
+// Tâche de la session IA en cours/dernière — écriture (Task 5/7) ou
+// harmonisation de mise en forme (Task 6). phase/draft/requestId/le tampon
+// d'événements (ring, voir plus bas) sont entièrement PARTAGÉS entre les deux
+// tâches (un seul flux à la fois, jamais deux générations simultanées) : ce
+// champ sert uniquement à ClaudePanel/FormatDialog pour savoir COMMENT
+// afficher ce flux (brouillon à insérer, ou Markdown à comparer avant/après)
+// et comment router "Appliquer" une fois 'done'.
+export type AiTask = 'write' | 'format'
+
+// Défense (BINDING, controller precisions Task 6) : si le modèle enveloppe sa
+// sortie dans un bloc de code Markdown (```` ```markdown ... ``` ```` ou
+// ```` ``` ... ``` ````) malgré la consigne système, on l'ôte avant de
+// réimporter le texte via mdToTiptapJson — sinon les ``` seraient traités
+// comme un bloc de code littéral du récit (ou, pire, deviendraient un noeud
+// de type inconnu pour le schéma courant). Ne traite que le cas où
+// l'INTÉGRALITÉ du texte est enveloppée d'une seule paire de fences (le seul
+// cas réaliste ici : buildFormatPrompt demande "le Markdown complet du
+// chapitre, rien d'autre").
+export function stripMarkdownFences(markdown: string): string {
+  const trimmed = markdown.trim()
+  const match = trimmed.match(/^```[^\n]*\n([\s\S]*?)\n?```$/)
+  return match ? match[1] : trimmed
+}
 
 export interface EntityChoice {
   entity: Entity
@@ -69,6 +92,11 @@ function pruneRing(): void {
 export interface EditorBridge {
   insertDraft(chapterId: number, draft: string): Promise<boolean>
   restoreSnapshot(chapterId: number, contentJson: string): Promise<boolean>
+  // Applique le résultat d'une harmonisation (Task 6) : snapshot du contenu
+  // ACTUEL avec la raison 'avant harmonisation' (distincte de 'avant
+  // restauration' ci-dessus), puis setContent + saveContentFor — mêmes gardes
+  // post-await que restoreSnapshot (voir EditorPane.applyFormatIntoEditor).
+  applyFormat(chapterId: number, contentJson: string): Promise<boolean>
 }
 let editorBridge: EditorBridge | null = null
 
@@ -76,6 +104,7 @@ export const useAiStore = defineStore('ai', {
   state: () => ({
     open: false,
     phase: 'idle' as AiPhase,
+    task: 'write' as AiTask, // voir AiTask ci-dessus — routage d'affichage seulement
     draft: '', // texte accumulé (chunks) ou final (ai:done)
     requestId: null as string | null,
     model: 'sonnet' as AiModel,
@@ -190,6 +219,7 @@ export const useAiStore = defineStore('ai', {
       }
     },
     async start(chapterId: number, continueFromText: boolean): Promise<void> {
+      this.task = 'write'
       this.draft = ''
       this.errorMessage = null
       this.phase = 'streaming'
@@ -214,6 +244,46 @@ export const useAiStore = defineStore('ai', {
         this.errorMessage =
           err instanceof Error ? err.message : "Échec du démarrage de l'écriture."
       }
+    },
+    // Lance une harmonisation de mise en forme (Task 6) — même squelette que
+    // start() ci-dessus (draft/erreur/phase remis à zéro, requestId inconnu
+    // jusqu'à résolution de l'invoke, reconcile() rejoue les événements déjà
+    // tamponnés), mais route vers ai.startFormat et pose task='format' pour
+    // que ClaudePanel/FormatDialog sachent comment traiter le flux et le
+    // résultat final (comparaison avant/après, pas insertion directe).
+    async startFormat(chapterId: number, conventions: FormatConventions): Promise<void> {
+      this.task = 'format'
+      this.draft = ''
+      this.errorMessage = null
+      this.phase = 'streaming'
+      this.requestId = null
+      try {
+        const requestId = await window.encre.ai.startFormat(chapterId, conventions)
+        this.requestId = requestId
+        this.reconcile(requestId)
+      } catch (err) {
+        console.error('Échec du démarrage de l’harmonisation', err)
+        this.phase = 'error'
+        this.errorMessage =
+          err instanceof Error ? err.message : "Échec du démarrage de l'harmonisation."
+      }
+    },
+    // Applique le Markdown harmonisé (this.draft, phase 'done', task
+    // 'format') : fence-stripping défensif (voir stripMarkdownFences),
+    // conversion en JSON TipTap via IPC (mdToTiptapJson vit en main, seul
+    // process où @tiptap/html/server est utilisable), puis délégation à
+    // EditorPane (snapshot 'avant harmonisation' + setContent + saveContentFor,
+    // gardes post-await) via le pont — même découpage store/EditorPane que
+    // restoreSnapshot ci-dessus. `false` en retour laisse la session 'done'
+    // intacte pour réessayer ; reset() n'a lieu qu'après succès confirmé.
+    async applyFormat(): Promise<boolean> {
+      if (!editorBridge || this.chapterId == null) return false
+      const chapterId = this.chapterId
+      const markdown = stripMarkdownFences(this.draft)
+      const { contentJson } = await window.encre.ai.formatToJson(markdown)
+      const ok = await editorBridge.applyFormat(chapterId, contentJson)
+      if (ok) this.reset()
+      return ok
     },
     async cancel(): Promise<void> {
       const requestId = this.requestId

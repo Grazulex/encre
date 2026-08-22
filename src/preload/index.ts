@@ -71,6 +71,8 @@ const api: EncreApi = {
   ai: {
     prepareWrite: (chapterId, entityIds) => ipcRenderer.invoke('ai:prepareWrite', chapterId, entityIds),
     startWrite: (chapterId, options) => ipcRenderer.invoke('ai:startWrite', chapterId, options),
+    startFormat: (chapterId, conventions) => ipcRenderer.invoke('ai:startFormat', chapterId, conventions),
+    formatToJson: (markdown) => ipcRenderer.invoke('ai:formatToJson', markdown),
     cancel: (requestId) => ipcRenderer.invoke('ai:cancel', requestId),
     onChunk: (cb) => {
       ipcRenderer.on('ai:chunk', (_event, payload) => cb(payload))
