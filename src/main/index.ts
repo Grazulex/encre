@@ -35,11 +35,13 @@ function createWindow(): void {
     const finish = (): void => {
       if (quitFlushDone) return
       quitFlushDone = true
+      clearTimeout(timer)
+      ipcMain.removeListener('app:flush-done', finish)
       mainWindow.close()
     }
     ipcMain.once('app:flush-done', finish)
     mainWindow.webContents.send('app:request-flush')
-    setTimeout(finish, 1500)
+    const timer = setTimeout(finish, 1500)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
