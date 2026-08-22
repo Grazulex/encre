@@ -61,6 +61,50 @@ export function isValidExtractEnrichissement(value: unknown): value is ExtractEn
   return true
 }
 
+export interface PairedEnrichissement<E extends { id: number }, F> {
+  entity: E
+  enrichissement: ExtractProposal['enrichissements'][number]
+  fields: F[]
+}
+
+/**
+ * Associe chaque enrichissement à SON entité et à SES champs exploitables,
+ * en UN SEUL passage (une seule paire map+filtre, jamais deux tableaux
+ * filtrés séparément puis recombinés par index).
+ *
+ * Régression évitée (Task 5, plan 3c — revue) : construire
+ * `enrichissementChoices` avec un filtre (entité trouvée ET au moins un
+ * champ exploitable) puis, à côté, `enrichissementSources` avec un filtre
+ * DIFFÉRENT (entité trouvée seulement) désynchronise les deux tableaux dès
+ * qu'un enrichissement a une entité connue mais aucun champ exploitable —
+ * tout ce qui suit dans `enrichissementSources` se retrouve décalé d'un cran
+ * par rapport à `enrichissementChoices`, et l'application finit par patcher
+ * la MAUVAISE fiche avec les valeurs d'un autre enrichissement. En ne
+ * produisant qu'UN SEUL tableau, où chaque élément porte directement son
+ * entité, son enrichissement source et ses champs, ce genre de décalage est
+ * structurellement impossible.
+ *
+ * `buildFields` est injecté (plutôt qu'un simple filtre alias/description/
+ * notes non vides codé en dur ici) pour que la logique d'affichage
+ * (libellés, aperçus — voir ExtractDialog.vue) reste côté composant ; ce
+ * module ne connaît que la FORME générique du résultat.
+ */
+export function pairEnrichissementsWithEntities<E extends { id: number }, F>(
+  enrichissements: ExtractProposal['enrichissements'],
+  entities: readonly E[],
+  buildFields: (enrichissement: ExtractProposal['enrichissements'][number]) => F[]
+): PairedEnrichissement<E, F>[] {
+  const paired: PairedEnrichissement<E, F>[] = []
+  for (const enrichissement of enrichissements) {
+    const entity = entities.find((e) => e.id === enrichissement.entityId)
+    if (!entity) continue
+    const fields = buildFields(enrichissement)
+    if (fields.length === 0) continue
+    paired.push({ entity, enrichissement, fields })
+  }
+  return paired
+}
+
 export interface FilteredExtractProposal {
   proposal: ExtractProposal
   malformedCount: number

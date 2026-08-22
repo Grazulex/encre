@@ -23,6 +23,7 @@ import { useBookStore } from '../stores/book'
 import { useEntitiesStore } from '../stores/entities'
 import { useUiStore } from '../stores/ui'
 import type { Entity, EntityPatch, ExtractProposal } from '../../../shared/types'
+import { pairEnrichissementsWithEntities } from '../../../shared/extractProposal'
 
 type Creation = ExtractProposal['creations'][number]
 type Enrichissement = ExtractProposal['enrichissements'][number]
@@ -31,6 +32,13 @@ type EnrichField = 'aliases' | 'description' | 'notes'
 interface CreationChoice {
   creation: Creation
   checked: boolean
+  // Doublon possible détecté côté client (Task 5, revue) : entité existante
+  // dont le nom ou un alias correspond (insensible à la casse) au nom ou à
+  // un alias de la création proposée — voir findPossibleDuplicate ci-dessous.
+  // N'empêche rien : décoche seulement la ligne par défaut et affiche un
+  // repère visuel, l'auteur reste libre de cocher quand même (doublon
+  // homonyme légitime, p. ex. deux personnages différents nommés « Marie »).
+  duplicateOf: Entity | null
 }
 
 interface FieldChoice {
@@ -42,6 +50,12 @@ interface FieldChoice {
 
 interface EnrichissementChoice {
   entity: Entity
+  // Enrichissement SOURCE de ces champs (valeurs proposées par l'IA,
+  // utilisées à l'application — voir applySelection). Porté directement sur
+  // le même objet que `entity`/`fields` (voir pairEnrichissementsWithEntities,
+  // shared/extractProposal.ts) : plus jamais de second tableau parallèle à
+  // tenir synchronisé par index (c'était le bug — voir revue Task 5).
+  source: Enrichissement
   fields: FieldChoice[]
 }
 
@@ -59,10 +73,32 @@ const FIELD_LABELS: Record<EnrichField, string> = {
   notes: 'Notes'
 }
 
+// Doublon possible (Task 5, revue) : compare nom ET alias de la création
+// proposée, insensible à la casse, à nom+alias de chaque entité déjà connue
+// du livre. Une correspondance sur un seul des deux jeux suffit — un
+// personnage déjà fiché sous un alias que l'IA propose comme nom principal
+// (ou l'inverse) est tout autant un doublon probable qu'une correspondance
+// de nom à nom.
+function findPossibleDuplicate(creation: Creation): Entity | null {
+  const proposedNames = [creation.name, ...creation.aliases]
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length > 0)
+  for (const entity of entitiesStore.entities) {
+    const knownNames = [entity.name, ...entity.aliases].map((s) => s.trim().toLowerCase())
+    if (proposedNames.some((name) => knownNames.includes(name))) return entity
+  }
+  return null
+}
+
 // Une seule fois au montage (voir en-tête de fichier) : chaque création
-// proposée est cochée par défaut (brief), affichable directement.
+// proposée est cochée par défaut (brief) SAUF si un doublon possible est
+// détecté (voir findPossibleDuplicate ci-dessus) — décochée par défaut mais
+// toujours sélectionnable, l'auteur tranche.
 const creationChoices = ref<CreationChoice[]>(
-  (ai.extractProposal?.creations ?? []).map((creation) => ({ creation, checked: true }))
+  (ai.extractProposal?.creations ?? []).map((creation) => {
+    const duplicateOf = findPossibleDuplicate(creation)
+    return { creation, checked: duplicateOf === null, duplicateOf }
+  })
 )
 
 function buildFieldChoices(enrichissement: Enrichissement): FieldChoice[] {
@@ -95,27 +131,18 @@ function buildFieldChoices(enrichissement: Enrichissement): FieldChoice[] {
 }
 
 // Par entité (brief : « par entité : chaque champ proposé = checkbox ») —
-// l'entité existe forcément dans le catalogue courant (ai.extractProposal a
-// déjà écarté les entityId inconnus, voir stores/ai.ts), le `!` ci-dessous
-// est donc sûr ; un enrichissement dont aucun champ n'est finalement
-// exploitable (les trois vides) n'a rien à afficher.
+// UN SEUL passage via pairEnrichissementsWithEntities (shared/
+// extractProposal.ts) : chaque élément produit porte directement son entité,
+// SON enrichissement source et ses champs exploitables ensemble — jamais un
+// second tableau filtré séparément à retrouver par index (voir le
+// commentaire de EnrichissementChoice ci-dessus et celui de la fonction
+// partagée pour la régression que cela évitait).
 const enrichissementChoices = ref<EnrichissementChoice[]>(
-  (ai.extractProposal?.enrichissements ?? [])
-    .map((enrichissement): EnrichissementChoice | null => {
-      const entity = entitiesStore.entities.find((e) => e.id === enrichissement.entityId)
-      if (!entity) return null
-      const fields = buildFieldChoices(enrichissement)
-      if (fields.length === 0) return null
-      return { entity, fields }
-    })
-    .filter((choice): choice is EnrichissementChoice => choice !== null)
-)
-
-// Garde les enrichissements bruts alignés sur enrichissementChoices (même
-// index) pour retrouver, à l'application, les valeurs PROPOSÉES par champ
-// (aliases/description/notes) sans les redupliquer dans FieldChoice.preview.
-const enrichissementSources = (ai.extractProposal?.enrichissements ?? []).filter((e) =>
-  entitiesStore.entities.some((entity) => entity.id === e.entityId)
+  pairEnrichissementsWithEntities(
+    ai.extractProposal?.enrichissements ?? [],
+    entitiesStore.entities,
+    buildFieldChoices
+  ).map(({ entity, enrichissement, fields }) => ({ entity, source: enrichissement, fields }))
 )
 
 const hasSelection = computed(
@@ -157,38 +184,53 @@ async function applySelection(): Promise<void> {
     for (const choice of creationChoices.value) {
       if (!choice.checked) continue
       const { creation } = choice
+      let entity: Entity
       try {
-        const entity = await window.encre.entities.create({
+        entity = await window.encre.entities.create({
           bookId: book.id,
           kind: creation.kind,
           name: creation.name
         })
-        const patch: EntityPatch = {}
-        if (creation.aliases.length > 0) patch.aliases = [...creation.aliases]
-        if (creation.description.trim()) patch.description = creation.description
-        if (Object.keys(patch).length > 0) {
-          await window.encre.entities.update(entity.id, patch)
-        }
-        createdCount++
       } catch (err) {
         console.error('Échec de la création de fiche depuis l’extraction', err)
         hadError = true
+        continue
+      }
+      // Décoche IMMÉDIATEMENT la ligne, avant le patch alias/description
+      // ci-dessous (Task 5, revue) : la fiche existe déjà en base dès cet
+      // instant — si le patch qui suit échoue, un nouveau clic sur
+      // « Appliquer la sélection » ne doit JAMAIS la recréer en double.
+      // EntityCreate (shared/types.ts) n'accepte que bookId/kind/name, d'où
+      // ce patch séparé plutôt qu'une création en un seul appel.
+      choice.checked = false
+      createdCount++
+      const patch: EntityPatch = {}
+      if (creation.aliases.length > 0) patch.aliases = [...creation.aliases]
+      if (creation.description.trim()) patch.description = creation.description
+      if (Object.keys(patch).length > 0) {
+        try {
+          await window.encre.entities.update(entity.id, patch)
+        } catch (err) {
+          console.error(
+            'Échec du complément (alias/description) de la fiche créée depuis l’extraction',
+            err
+          )
+          hadError = true
+        }
       }
     }
 
-    for (let i = 0; i < enrichissementChoices.value.length; i++) {
-      const choice = enrichissementChoices.value[i]
-      const source = enrichissementSources[i]
+    for (const choice of enrichissementChoices.value) {
       const checkedFields = choice.fields.filter((f) => f.checked)
       if (checkedFields.length === 0) continue
       const patch: EntityPatch = {}
       for (const field of checkedFields) {
         if (field.field === 'aliases') {
-          patch.aliases = mergeAliases(choice.entity.aliases, source.aliases ?? [])
+          patch.aliases = mergeAliases(choice.entity.aliases, choice.source.aliases ?? [])
         } else if (field.field === 'description') {
-          patch.description = appendText(choice.entity.description, source.description ?? '')
+          patch.description = appendText(choice.entity.description, choice.source.description ?? '')
         } else {
-          patch.notes = appendText(choice.entity.notes, source.notes ?? '')
+          patch.notes = appendText(choice.entity.notes, choice.source.notes ?? '')
         }
       }
       try {
@@ -327,6 +369,9 @@ onMounted(async () => {
               <p v-if="choice.creation.description" class="creation-description">
                 {{ choice.creation.description }}
               </p>
+              <span v-if="choice.duplicateOf" class="creation-duplicate-tag">
+                Doublon possible : {{ choice.duplicateOf.name }}
+              </span>
             </div>
           </label>
         </section>
@@ -514,6 +559,16 @@ header h2 {
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--fg-muted);
+}
+.creation-duplicate-tag {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: 100px;
+  padding: 2px 8px;
 }
 
 .enrich-group {

@@ -7,6 +7,7 @@
 // l'arbre de l'autre) : ce composant ne connaît ni l'éditeur ni ProseMirror.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useAiStore } from '../stores/ai'
+import type { AiTask } from '../stores/ai'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
 import type { FormatConventions } from '../../../shared/types'
@@ -142,7 +143,7 @@ const hasContent = computed(() => !!store.currentChapter?.contentText.trim())
 // TROIS autres tâches possibles (contrairement à ceux d'Écriture/Mise en
 // forme, chacun gaté sur une seule autre tâche précise), d'où cette table
 // plutôt qu'un ternaire imbriqué à chaque site d'appel.
-const TASK_LABELS: Record<string, string> = {
+const TASK_LABELS: Record<AiTask, string> = {
   write: 'Écriture',
   format: 'Mise en forme',
   review: 'Relecture',

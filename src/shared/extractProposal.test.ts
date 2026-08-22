@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   isValidExtractCreation,
   isValidExtractEnrichissement,
-  filterExtractProposal
+  filterExtractProposal,
+  pairEnrichissementsWithEntities
 } from './extractProposal'
 
 const VALID_CREATION = {
@@ -113,6 +114,48 @@ describe('isValidExtractEnrichissement', () => {
     expect(isValidExtractEnrichissement('une chaîne')).toBe(false)
     expect(isValidExtractEnrichissement(42)).toBe(false)
     expect(isValidExtractEnrichissement([])).toBe(false)
+  })
+})
+
+describe('pairEnrichissementsWithEntities', () => {
+  const ENTITIES = [
+    { id: 1, name: 'Vide' },
+    { id: 2, name: 'Pleine' }
+  ]
+  // buildFields minimal : un champ exploitable ssi `description` est présent
+  // (suffisant pour distinguer un enrichissement "vide" d'un enrichissement
+  // "plein" sans dépendre de la vraie logique d'affichage d'ExtractDialog).
+  const buildFields = (e: { description?: string }): string[] => (e.description ? ['description'] : [])
+
+  it('associe le SEUL enrichissement exploitable à SA propre entité, même précédé d’un enrichissement sans champ exploitable (régression)', () => {
+    const enrichissements = [
+      { entityId: 1 }, // aucun champ exploitable (buildFields → [])
+      { entityId: 2, description: 'Texte.' }
+    ]
+    const result = pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)
+    expect(result).toHaveLength(1)
+    expect(result[0].entity).toEqual(ENTITIES[1])
+    expect(result[0].enrichissement).toEqual(enrichissements[1])
+  })
+
+  it('écarte un enrichissement dont l’entité n’existe pas dans le catalogue fourni', () => {
+    const enrichissements = [{ entityId: 99, description: 'x' }]
+    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)).toEqual([])
+  })
+
+  it('écarte un enrichissement sans aucun champ exploitable, même avec une entité connue', () => {
+    const enrichissements = [{ entityId: 1 }]
+    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)).toEqual([])
+  })
+
+  it('préserve l’ordre des enrichissements pairés et associe chacun à SA propre entité', () => {
+    const enrichissements = [
+      { entityId: 2, description: 'a' },
+      { entityId: 1, description: 'b' }
+    ]
+    const result = pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)
+    expect(result.map((r) => r.entity.id)).toEqual([2, 1])
+    expect(result.map((r) => r.enrichissement.description)).toEqual(['a', 'b'])
   })
 })
 
