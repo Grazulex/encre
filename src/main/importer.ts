@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'fs'
 import { join, basename } from 'path'
 import { marked } from 'marked'
 import { generateJSON } from '@tiptap/html'
-import StarterKit from '@tiptap/starter-kit'
+import { StarterKit } from '@tiptap/starter-kit'
 import { stripCodeBlocks } from '../shared/stripCodeBlocks'
 
 const EXTENSIONS = [StarterKit.configure({ codeBlock: false, code: false })]

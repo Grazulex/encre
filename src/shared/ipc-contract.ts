@@ -49,6 +49,15 @@ export interface EncreApi {
     reorder(bookId: number, orderedIds: number[]): Promise<void>
     remove(id: number): Promise<void>
   }
+  importer: {
+    scanFolder(): Promise<{ folder: string; files: { file: string; title: string }[] } | null>  // showOpenDialog (dossier) + scanChapterFiles ; null si annulé
+    importBook(folder: string, orderedFiles: string[], bookTitle: string): Promise<Book>       // création livre + chapitres dans l'ordre donné
+  }
+  exporter: {
+    markdown(bookId: number): Promise<string | null>                     // showOpenDialog (dossier cible) ; écrit NN-titre.md par chapitre ; retourne le dossier ; null si annulé
+    epub(bookId: number, chapterIds: number[]): Promise<string | null>   // showSaveDialog ; branché Task 6 (stub temporaire)
+    pdf(bookId: number, chapterIds: number[]): Promise<string | null>    // showSaveDialog ; branché Task 7 (stub temporaire)
+  }
   app: {
     onFlushRequest(cb: () => void): void   // ipcRenderer.on('app:request-flush', cb) — hors invoke
     flushDone(): void                       // ipcRenderer.send('app:flush-done')
@@ -57,4 +66,4 @@ export interface EncreApi {
 
 // Canaux IPC : `${domaine}:${méthode}` — ex. 'books:list', 'chapters:saveContent'
 // `app` n'est pas un domaine invoke (événementiel pur) — non enregistré par registerIpc.
-export const API_DOMAINS = ['books', 'chapters', 'entities', 'outline', 'timeline'] as const
+export const API_DOMAINS = ['books', 'chapters', 'entities', 'outline', 'timeline', 'importer', 'exporter'] as const

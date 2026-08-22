@@ -49,6 +49,16 @@ const api: EncreApi = {
     reorder: (bookId, orderedIds) => ipcRenderer.invoke('timeline:reorder', bookId, orderedIds),
     remove: (id) => ipcRenderer.invoke('timeline:remove', id)
   },
+  importer: {
+    scanFolder: () => ipcRenderer.invoke('importer:scanFolder'),
+    importBook: (folder, orderedFiles, bookTitle) =>
+      ipcRenderer.invoke('importer:importBook', folder, orderedFiles, bookTitle)
+  },
+  exporter: {
+    markdown: (bookId) => ipcRenderer.invoke('exporter:markdown', bookId),
+    epub: (bookId, chapterIds) => ipcRenderer.invoke('exporter:epub', bookId, chapterIds),
+    pdf: (bookId, chapterIds) => ipcRenderer.invoke('exporter:pdf', bookId, chapterIds)
+  },
   app: {
     onFlushRequest: (cb) => {
       ipcRenderer.on('app:request-flush', () => cb())

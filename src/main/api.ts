@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, unlinkSync } from 'fs'
+import { copyFileSync, mkdirSync, unlinkSync, readFileSync } from 'fs'
 import { join, extname, dirname } from 'path'
 import type { Db } from './db/connection'
 import type { EncreApi } from '../shared/ipc-contract'
@@ -7,6 +7,8 @@ import * as chapters from './db/chapters'
 import * as entities from './db/entities'
 import * as outline from './db/outline'
 import * as timeline from './db/timeline'
+import { scanChapterFiles, mdToTiptapJson } from './importer'
+import { exportMarkdownToFolder } from './exporter'
 
 // `app` (onFlushRequest/flushDone) est un domaine événementiel côté renderer
 // (ipcRenderer.on/send) : il n'a pas de contrepartie invoke côté main, donc
@@ -116,6 +118,58 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
         timeline.setTimelineLinks(db, id, chapterIds, entityIds),
       reorder: async (bookId, orderedIds) => timeline.reorderTimeline(db, bookId, orderedIds),
       remove: async (id) => timeline.deleteTimelineEvent(db, id)
+    },
+    importer: {
+      scanFolder: async () => {
+        const { dialog } = await import('electron')
+        const res = await dialog.showOpenDialog({
+          title: 'Choisir un dossier à importer',
+          properties: ['openDirectory']
+        })
+        if (res.canceled || res.filePaths.length === 0) return null
+        const folder = res.filePaths[0]
+        return { folder, files: scanChapterFiles(folder) }
+      },
+      // Transactionnel : createBook + (createChapter + saveChapterContent) par
+      // fichier ordonné, y compris la lecture disque et la conversion
+      // markdown→tiptap, tournent dans un seul db.transaction synchrone — une
+      // erreur sur un fichier (lecture, parsing) annule tout, aucun livre ni
+      // chapitre à moitié importé ne reste en base.
+      importBook: async (folder, orderedFiles, bookTitle) => {
+        const titles = new Map(scanChapterFiles(folder).map((f) => [f.file, f.title]))
+        const run = db.transaction(() => {
+          const book = books.createBook(db, { title: bookTitle })
+          for (const file of orderedFiles) {
+            const title = titles.get(file) ?? file
+            const md = readFileSync(join(folder, file), 'utf8')
+            const { contentJson, contentText } = mdToTiptapJson(md)
+            const chapter = chapters.createChapter(db, book.id, title)
+            chapters.saveChapterContent(db, chapter.id, contentJson, contentText)
+          }
+          return book.id
+        })
+        const bookId = run()
+        return books.getBook(db, bookId)
+      }
+    },
+    exporter: {
+      markdown: async (bookId) => {
+        const { dialog } = await import('electron')
+        const res = await dialog.showOpenDialog({
+          title: 'Choisir un dossier de destination',
+          properties: ['openDirectory', 'createDirectory']
+        })
+        if (res.canceled || res.filePaths.length === 0) return null
+        return exportMarkdownToFolder(db, bookId, res.filePaths[0])
+      },
+      // Branché Task 6 : génération EPUB réelle.
+      epub: async () => {
+        throw new Error('EPUB: Task 6')
+      },
+      // Branché Task 7 : génération PDF réelle.
+      pdf: async () => {
+        throw new Error('PDF: Task 7')
+      }
     }
   }
 }
