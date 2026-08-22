@@ -86,14 +86,22 @@ export const useEntitiesStore = defineStore('entities', {
         useUiStore().toast("Échec de l'enregistrement de la fiche.")
       }
     },
+    // Suppression pure (audit UI/UX, sweep D3) : la confirmation ne vit plus
+    // ici (un store Pinia n'a pas de template pour monter une boîte de
+    // dialogue) mais chez CHAQUE appelant, via ConfirmDialog — voir
+    // EntityDrawer.confirmRemoval et EntityPage.confirmRemoval (composable
+    // useEntityFieldEditor). Même déplacement déjà fait pour
+    // useTimelineStore.remove (voir son commentaire).
     async remove(id: number) {
-      const entity = this.entities.find((e) => e.id === id)
-      const label = entity ? `« ${entity.name} »` : 'cette fiche'
-      if (!confirm(`Supprimer ${label} ?`)) return
-      await window.encre.entities.remove(id)
-      this.entities = this.entities.filter((e) => e.id !== id)
-      if (this.drawerEntityId === id) this.closeDrawer()
-      if (this.selectedId === id) this.selectedId = null
+      try {
+        await window.encre.entities.remove(id)
+        this.entities = this.entities.filter((e) => e.id !== id)
+        if (this.drawerEntityId === id) this.closeDrawer()
+        if (this.selectedId === id) this.selectedId = null
+      } catch (err) {
+        console.error('Échec de la suppression de la fiche', err)
+        useUiStore().toast('Échec de la suppression de la fiche.')
+      }
     },
     async openDrawer(id: number) {
       this.drawerEntityId = id

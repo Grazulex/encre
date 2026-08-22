@@ -271,7 +271,11 @@ function removeEvent(): void {
   confirmingRemoval.value = true
 }
 
+// Idempotent (sweep D3) : un second appel après le premier ne redéclenche pas
+// store.remove — même garde que EntityDrawer.confirmRemoval /
+// SnapshotManager.confirmPendingAction.
 function confirmRemoval(): void {
+  if (!confirmingRemoval.value) return
   confirmingRemoval.value = false
   store.remove(props.eventId)
 }

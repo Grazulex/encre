@@ -19,10 +19,11 @@
 // (Tab peut atteindre les éléments du fond) — une liste de deux actions
 // simples (Restaurer/Supprimer) ne justifie pas de bloquer tout le reste de
 // l'interface le temps qu'elle reste ouverte.
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useAiStore } from '../stores/ai'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
+import ConfirmDialog from './ConfirmDialog.vue'
 import type { Snapshot } from '../../../shared/types'
 
 const ai = useAiStore()
@@ -75,15 +76,45 @@ function close(): void {
   ai.closeSnapshotManager()
 }
 
+// Confirmation thémée (audit UI/UX, sweep D3) : les deux window.confirm()
+// natifs (restauration, suppression) sont remplacés par un unique
+// ConfirmDialog piloté par `pendingAction` — un seul état à la fois (le
+// bouton disabled="busyId != null" empêche déjà d'en armer un second pendant
+// qu'une action est en cours), le type distingue le message et l'action à
+// exécuter sur confirmation.
+const pendingAction = ref<{ type: 'restore' | 'remove'; snapshot: Snapshot } | null>(null)
+
+function requestRestore(snapshot: Snapshot): void {
+  if (busyId.value != null) return
+  pendingAction.value = { type: 'restore', snapshot }
+}
+function requestRemove(snapshot: Snapshot): void {
+  if (busyId.value != null) return
+  pendingAction.value = { type: 'remove', snapshot }
+}
+function cancelPendingAction(): void {
+  pendingAction.value = null
+}
+// Idempotent (même garde que TimelineEventCard.confirmRemoval) : pendingAction
+// est capturé puis remis à null AVANT l'action elle-même — un second appel
+// (double clic sur « Supprimer ») après le premier trouve `action` nul et ne
+// redéclenche rien.
+async function confirmPendingAction(): Promise<void> {
+  const action = pendingAction.value
+  pendingAction.value = null
+  if (!action) return
+  if (action.type === 'restore') await restore(action.snapshot)
+  else await remove(action.snapshot)
+}
+const pendingMessage = computed(() => {
+  if (!pendingAction.value) return ''
+  return pendingAction.value.type === 'restore'
+    ? 'Restaurer ce snapshot ? Le contenu actuel du chapitre sera remplacé (un point de restauration sera créé avant, pour pouvoir revenir en arrière).'
+    : 'Supprimer ce snapshot ? Cette action est définitive.'
+})
+
 async function restore(snapshot: Snapshot): Promise<void> {
   if (busyId.value != null) return
-  if (
-    !confirm(
-      'Restaurer ce snapshot ? Le contenu actuel du chapitre sera remplacé (un point de restauration sera créé avant, pour pouvoir revenir en arrière).'
-    )
-  ) {
-    return
-  }
   busyId.value = snapshot.id
   try {
     // Fix 3 (correctif review) : cible le chapitre DU SNAPSHOT, pas
@@ -102,7 +133,6 @@ async function restore(snapshot: Snapshot): Promise<void> {
 
 async function remove(snapshot: Snapshot): Promise<void> {
   if (busyId.value != null) return
-  if (!confirm('Supprimer ce snapshot ? Cette action est définitive.')) return
   busyId.value = snapshot.id
   try {
     await window.encre.snapshots.remove(snapshot.id)
@@ -171,14 +201,14 @@ function onKeydown(event: KeyboardEvent): void {
               <span class="reason">{{ snapshot.reason }}</span>
             </div>
             <div class="actions">
-              <button type="button" :disabled="busyId != null" @click="restore(snapshot)">
+              <button type="button" :disabled="busyId != null" @click="requestRestore(snapshot)">
                 {{ busyId === snapshot.id ? '…' : 'Restaurer' }}
               </button>
               <button
                 type="button"
                 class="danger"
                 :disabled="busyId != null"
-                @click="remove(snapshot)"
+                @click="requestRemove(snapshot)"
               >
                 {{ busyId === snapshot.id ? '…' : 'Supprimer' }}
               </button>
@@ -189,9 +219,34 @@ function onKeydown(event: KeyboardEvent): void {
     </div>
   </div>
   </Transition>
+  <!-- .confirm-lift : .snap-overlay ci-dessus a un z-index de 220, au-dessus
+       du z-index 200 partagé par ConfirmDialog (theme.css .overlay) — sans ce
+       wrapper, les deux calques `position: fixed` sont peints selon leur
+       z-index (220 > 200), pas selon l'ordre DOM, et le popover masquerait
+       visuellement la confirmation bien qu'elle reste « après » lui dans le
+       template. Ce wrapper ouvre son propre contexte d'empilement local
+       au-dessus des deux, sans toucher au z-index partagé (qui resterait
+       inchangé pour tous les autres dialogues de l'app). -->
+  <div v-if="pendingAction" class="confirm-lift">
+    <ConfirmDialog
+      :message="pendingMessage"
+      :confirm-label="pendingAction.type === 'restore' ? 'Restaurer' : 'Supprimer'"
+      @confirm="confirmPendingAction"
+      @cancel="cancelPendingAction"
+    />
+  </div>
 </template>
 
 <style scoped>
+/* Voir le commentaire dans le template : isole ConfirmDialog dans son propre
+   contexte d'empilement, au-dessus de .snap-overlay (z-index 220) quelle que
+   soit sa propre valeur de z-index (200, partagée avec les autres
+   dialogues). */
+.confirm-lift {
+  position: relative;
+  z-index: 300;
+}
+
 .snap-overlay {
   position: fixed;
   inset: 0;

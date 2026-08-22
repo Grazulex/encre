@@ -1,13 +1,37 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import EntityCard from './EntityCard.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const store = useEntitiesStore()
 
+// Confirmation thémée avant suppression (sweep D3) : stores/entities.ts
+// remove() est désormais une suppression pure (plus de window.confirm()
+// interne) — chaque appelant, dont ce bouton d'en-tête, doit désormais gater
+// lui-même l'appel avec ConfirmDialog.
+const pendingRemoval = ref(false)
+
 function removeCurrent(): void {
+  if (store.drawerEntityId != null) pendingRemoval.value = true
+}
+
+// Idempotent (comme TimelineEventCard.confirmRemoval) : un second appel après
+// le premier ne redéclenche pas store.remove, le drapeau étant déjà retombé.
+function confirmRemoval(): void {
+  if (!pendingRemoval.value) return
+  pendingRemoval.value = false
   if (store.drawerEntityId != null) store.remove(store.drawerEntityId)
 }
+
+function cancelRemoval(): void {
+  pendingRemoval.value = false
+}
+
+const removalMessage = computed(() => {
+  const name = store.drawerEntity?.name?.trim()
+  return `Supprimer ${name ? `« ${name} »` : 'cette fiche'} ?`
+})
 
 // Échap est intercepté ICI, sur le conteneur du tiroir, en phase bulle (donc
 // avant window) : quelle que soit la frappe qui déclenche l'événement (un
@@ -69,8 +93,13 @@ watch(
       <EntityCard
         :key="store.drawerEntityId"
         :entity-id="store.drawerEntityId"
-        compact
         :occurrences-override="store.occurrences"
+      />
+      <ConfirmDialog
+        v-if="pendingRemoval"
+        :message="removalMessage"
+        @confirm="confirmRemoval"
+        @cancel="cancelRemoval"
       />
     </aside>
   </Transition>
