@@ -43,6 +43,10 @@ describe('isValidReviewSuggestion', () => {
     expect(isValidReviewSuggestion({ ...VALID, quote: '' })).toBe(false)
   })
 
+  it('rejette une citation composée uniquement d’espaces (correctif M2)', () => {
+    expect(isValidReviewSuggestion({ ...VALID, quote: ' ' })).toBe(false)
+  })
+
   it('rejette un champ du mauvais type', () => {
     expect(isValidReviewSuggestion({ ...VALID, quote: 42 })).toBe(false)
     expect(isValidReviewSuggestion({ ...VALID, replacement: null })).toBe(false)

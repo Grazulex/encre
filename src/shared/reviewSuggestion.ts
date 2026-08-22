@@ -19,10 +19,14 @@ const VALID_TYPES: ReadonlySet<string> = new Set([
 
 /**
  * `true` si `value` a exactement la forme d'un `ReviewSuggestion` exploitable :
- * `type` parmi les 4 valeurs attendues, `quote` une chaîne NON VIDE (une
- * citation vide ne pourra jamais être localisée — `locateQuote` la rejette
- * déjà, autant l'écarter ici), `replacement` et `reason` des chaînes
- * (`replacement` peut légitimement être `''`, une suppression).
+ * `type` parmi les 4 valeurs attendues, `quote` une chaîne NON VIDE UNE FOIS
+ * TRIMMÉE (une citation blanche — espaces/tabulations/retours seuls — n'a pas
+ * plus de sens qu'une citation vide : `locateQuote` la rejetterait de toute
+ * façon puisqu'aucun texte du document ne peut être fait uniquement
+ * d'espaces au même endroit, mais autant l'écarter ici, au même point que la
+ * citation vide — correctif M2, aligné sur extract/chrono qui trimment déjà),
+ * `replacement` et `reason` des chaînes (`replacement` peut légitimement être
+ * `''`, une suppression).
  */
 export function isValidReviewSuggestion(value: unknown): value is ReviewSuggestion {
   if (!value || typeof value !== 'object') return false
@@ -31,7 +35,7 @@ export function isValidReviewSuggestion(value: unknown): value is ReviewSuggesti
     typeof v.type === 'string' &&
     VALID_TYPES.has(v.type) &&
     typeof v.quote === 'string' &&
-    v.quote.length > 0 &&
+    v.quote.trim().length > 0 &&
     typeof v.replacement === 'string' &&
     typeof v.reason === 'string'
   )
