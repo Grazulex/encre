@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import type { Book } from '../../../shared/types'
+import { BOOK_STATUS_LABELS } from '../../../shared/labels'
 
 const props = defineProps<{ book: Book }>()
 defineEmits<{ open: []; remove: [] }>()
 
-const STATUS_LABELS: Record<string, string> = {
-  en_cours: 'En cours',
-  termine: 'Terminé',
-  archive: 'Archivé'
-}
+const STATUS_LABELS = BOOK_STATUS_LABELS
 
 function progress(): string {
   const words = props.book.wordCount.toLocaleString('fr-FR')

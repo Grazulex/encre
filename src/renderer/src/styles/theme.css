@@ -9,7 +9,10 @@
   --bg: #faf8f4;
   --bg-panel: #f1ede4;
   --fg: #211f1b;
-  --fg-muted: #83796c;
+  /* #83796c contre --bg-panel #f1ede4 ne rendait que 3,66:1 (WCAG) — sous le
+     seuil AA de 4,5:1 pour du texte normal. Assombri en gardant la même
+     teinte (brun-gris chaud) jusqu'à #6e665a, qui rend 4,84:1. */
+  --fg-muted: #6e665a;
   --accent: #3d4d78;
   --border: #e3ddd0;
 }

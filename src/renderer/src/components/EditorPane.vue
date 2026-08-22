@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { watch, onBeforeUnmount } from 'vue'
+import { watch, onMounted, onBeforeUnmount } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { useBookStore } from '../stores/book'
+import { useUiStore } from '../stores/ui'
+import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
 import type { ChapterStatus } from '../../../shared/types'
 
 const store = useBookStore()
+const ui = useUiStore()
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingChapterId: number | null = null
@@ -77,8 +80,20 @@ watch(
   { immediate: true }
 )
 
+onMounted(() => {
+  ui.registerQuitFlusher(() => flush())
+})
+
+// Le flush ici est fire-and-forget (onBeforeUnmount ne peut pas attendre une
+// promesse) : historiquement une frappe juste avant démontage pouvait donc se
+// perdre si la fermeture de l'app survenait au même instant. Ce n'est plus le
+// cas depuis Task 7 — la fermeture passe désormais par la poignée de main
+// IPC (onFlushRequest / flushDone), qui, elle, attend réellement le flusher
+// enregistré via ui.registerQuitFlusher avant de laisser la fenêtre se
+// fermer.
 onBeforeUnmount(() => {
   flush()
+  ui.registerQuitFlusher(null)
 })
 
 function rename(event: Event): void {
@@ -86,12 +101,9 @@ function rename(event: Event): void {
   if (title && store.currentChapter) store.renameChapter(store.currentChapter.id, title)
 }
 
-const STATUSES: { value: ChapterStatus; label: string }[] = [
-  { value: 'brouillon', label: 'Brouillon' },
-  { value: 'premier_jet', label: 'Premier jet' },
-  { value: 'relu', label: 'Relu' },
-  { value: 'final', label: 'Final' }
-]
+const STATUSES: { value: ChapterStatus; label: string }[] = (
+  Object.keys(CHAPTER_STATUS_LABELS) as ChapterStatus[]
+).map((value) => ({ value, label: CHAPTER_STATUS_LABELS[value] }))
 </script>
 
 <template>

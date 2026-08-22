@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useUiStore } from './ui'
 import type { Book, Chapter, ChapterMeta, ChapterStatus } from '../../../shared/types'
 
 export const useBookStore = defineStore('book', {
@@ -20,17 +21,27 @@ export const useBookStore = defineStore('book', {
       this.saveState = 'dirty'
     },
     async open(bookId: number) {
-      this.book = await window.encre.books.get(bookId)
-      this.chapters = await window.encre.chapters.listByBook(bookId)
-      this.currentChapter = null
-      if (this.chapters.length > 0) await this.openChapter(this.chapters[0].id)
+      try {
+        this.book = await window.encre.books.get(bookId)
+        this.chapters = await window.encre.chapters.listByBook(bookId)
+        this.currentChapter = null
+        if (this.chapters.length > 0) await this.openChapter(this.chapters[0].id)
+      } catch (err) {
+        console.error('Échec du chargement du livre', err)
+        useUiStore().toast('Impossible de charger — élément introuvable.')
+      }
     },
     async refreshChapters() {
       if (!this.book) return
       this.chapters = await window.encre.chapters.listByBook(this.book.id)
     },
     async openChapter(id: number) {
-      this.currentChapter = await window.encre.chapters.get(id)
+      try {
+        this.currentChapter = await window.encre.chapters.get(id)
+      } catch (err) {
+        console.error('Échec du chargement du chapitre', err)
+        useUiStore().toast('Impossible de charger — élément introuvable.')
+      }
     },
     async createChapter(title: string) {
       if (!this.book) return
@@ -71,24 +82,23 @@ export const useBookStore = defineStore('book', {
     // de chapitre sans perdre la dernière frappe en attente).
     async saveContentFor(id: number, contentJson: string, contentText: string) {
       this.saveState = 'saving'
+      let wordCount: number
       try {
-        const { wordCount } = await window.encre.chapters.saveContent(
-          id,
-          contentJson,
-          contentText
-        )
-        const meta = this.chapters.find((c) => c.id === id)
-        if (meta) meta.wordCount = wordCount
-        if (this.currentChapter?.id === id) this.currentChapter.wordCount = wordCount
-        this.saveState = 'saved'
-        this.saveError = null
-      } catch {
+        ;({ wordCount } = await window.encre.chapters.saveContent(id, contentJson, contentText))
+      } catch (err) {
         // On revient à 'dirty' (plutôt que de rester bloqué sur 'saving') pour
         // que la frappe suivante réarme normalement le minuteur de sauvegarde ;
         // saveError reste affiché tant qu'aucune sauvegarde n'a réussi depuis.
         this.saveState = 'dirty'
         this.saveError = "Échec de l'enregistrement — nouvelle tentative…"
+        console.error('Échec de sauvegarde', err)
+        return
       }
+      const meta = this.chapters.find((c) => c.id === id)
+      if (meta) meta.wordCount = wordCount
+      if (this.currentChapter?.id === id) this.currentChapter.wordCount = wordCount
+      this.saveState = 'saved'
+      this.saveError = null
     },
     async saveContent(contentJson: string, contentText: string) {
       if (this.currentChapter)

@@ -47,7 +47,7 @@ useShortcuts([
 
 <template>
   <div class="book-space" :class="{ focus: focusMode }">
-    <aside :aria-hidden="focusMode">
+    <aside :aria-hidden="focusMode" :inert="focusMode">
       <button class="back" type="button" @click="router.push('/')">
         <span class="chevron">←</span> Bibliothèque
       </button>

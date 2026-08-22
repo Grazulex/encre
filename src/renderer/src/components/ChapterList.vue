@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import { useBookStore } from '../stores/book'
+import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
 
 const store = useBookStore()
 const adding = ref(false)
@@ -14,12 +15,7 @@ const STATUS_DOTS: Record<string, string> = {
   final: '●'
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  brouillon: 'Brouillon',
-  premier_jet: 'Premier jet',
-  relu: 'Relu',
-  final: 'Final'
-}
+const STATUS_LABELS = CHAPTER_STATUS_LABELS
 
 async function openAddForm(): Promise<void> {
   adding.value = true
