@@ -733,6 +733,27 @@ export const useAiStore = defineStore('ai', {
       if (!editorBridge) return false
       const contentJson = await window.encre.snapshots.content(id)
       return editorBridge.restoreSnapshot(chapterId, contentJson)
+    },
+    // Ferme le rapport de chronologie (Fix I1, vague finale 3c) : bouton
+    // « Fermer le rapport » de ChronoReport.vue. Contrairement à reset()
+    // ci-dessus (générique, appelé après insertion/harmonisation réussie),
+    // celui-ci vide aussi chronoIssues/chronoParseError/les deux compteurs —
+    // reset() ne les touche jamais (ils survivent normalement à une
+    // insertion d'écriture, tâche indépendante). Garde `this.task === 'chrono'`
+    // : ChronoReport n'est monté que dans ce cas (voir ClaudePanel), mais un
+    // clic tardif après bascule vers une autre tâche (le flux est unique et
+    // partagé, voir AiTask ci-dessus) ne doit RIEN réinitialiser d'une
+    // génération désormais en cours pour cette autre tâche.
+    closeChronoReport(): void {
+      if (this.task !== 'chrono') return
+      this.phase = 'idle'
+      this.draft = ''
+      this.requestId = null
+      this.errorMessage = null
+      this.chronoIssues = []
+      this.chronoParseError = null
+      this.chronoMalformedCount = 0
+      this.chronoUnknownIdCount = 0
     }
   }
 })

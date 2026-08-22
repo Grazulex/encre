@@ -434,7 +434,22 @@ watch(
           Harmonisation en cours — patientez avant une nouvelle génération.
         </p>
 
-        <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
+        <!-- Fix I1 (vague finale 3c) : `ai.phase`/`ai.task` sont partagés par
+             les cinq tâches — un `phase === 'done'` d'une AUTRE tâche (ex.
+             chronologie, dont le rapport reste affiché tant qu'on ne change
+             pas de LIVRE, voir setBook) ne doit jamais faire disparaître ce
+             lanceur. `ai.task !== 'write'` couvre ce cas sans rouvrir le
+             lanceur pendant le PROPRE 'done' de l'écriture, qui a sa propre
+             affordance de relance (bloc cp-stream ci-dessous : Insérer/
+             Régénérer/Copier). -->
+        <div
+          v-if="
+            ai.phase === 'idle' ||
+            ai.phase === 'error' ||
+            (ai.phase === 'done' && ai.task !== 'write')
+          "
+          class="cp-launch"
+        >
           <p v-if="ai.errorMessage && ai.task === 'write'" class="error-text">{{ ai.errorMessage }}</p>
           <button type="button" class="primary" :disabled="!summaryReady" @click="launch(false)">
             Rédiger le brouillon
@@ -525,7 +540,18 @@ watch(
         </p>
         <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à harmoniser.</p>
 
-        <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
+        <!-- Fix I1 (vague finale 3c) : même garde que l'onglet Écriture
+             ci-dessus — un 'done' d'une autre tâche ne masque plus ce
+             lanceur ; le PROPRE 'done' de la mise en forme reste géré par
+             son bloc cp-stream (aperçu avant/après + FormatDialog). -->
+        <div
+          v-if="
+            ai.phase === 'idle' ||
+            ai.phase === 'error' ||
+            (ai.phase === 'done' && ai.task !== 'format')
+          "
+          class="cp-launch"
+        >
           <p v-if="ai.errorMessage && ai.task === 'format'" class="error-text">{{ ai.errorMessage }}</p>
           <button type="button" class="primary" :disabled="!hasContent" @click="launchFormat">
             Harmoniser ce chapitre
@@ -553,8 +579,15 @@ watch(
         </p>
         <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à relire.</p>
 
+        <!-- Fix I1 (vague finale 3c) : à la différence d'Écriture/Mise en
+             forme ci-dessus, la relecture a DÉJÀ sa propre affordance de
+             relance inline (bouton « Relire à nouveau » ci-dessous, pas de
+             bloc cp-stream séparé) — son PROPRE 'done' doit donc rester dans
+             cette condition (`ai.phase === 'done'` tout court couvre les deux
+             cas à la fois : propre 'done' ET 'done' d'une autre tâche,
+             équivalent à `ai.task === 'review'` OU `ai.task !== 'review'`). -->
         <div
-          v-if="ai.phase === 'idle' || ai.phase === 'error' || (ai.phase === 'done' && ai.task === 'review')"
+          v-if="ai.phase === 'idle' || ai.phase === 'error' || ai.phase === 'done'"
           class="cp-launch"
         >
           <p v-if="ai.errorMessage && ai.task === 'review'" class="error-text">{{ ai.errorMessage }}</p>
@@ -583,7 +616,18 @@ watch(
         </p>
         <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à extraire.</p>
 
-        <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
+        <!-- Fix I1 (vague finale 3c) : même garde que l'onglet Écriture —
+             le PROPRE 'done' de l'extraction reste géré par son bloc
+             cp-stream (aperçu + ExtractDialog), un 'done' d'une autre tâche
+             ne masque plus ce lanceur. -->
+        <div
+          v-if="
+            ai.phase === 'idle' ||
+            ai.phase === 'error' ||
+            (ai.phase === 'done' && ai.task !== 'extract')
+          "
+          class="cp-launch"
+        >
           <p v-if="ai.errorMessage && ai.task === 'extract'" class="error-text">
             {{ ai.errorMessage }}
           </p>
@@ -612,8 +656,16 @@ watch(
           {{ TASK_LABELS[ai.task] }} en cours — patientez avant de vérifier ce livre.
         </p>
 
+        <!-- Fix I1 (vague finale 3c) : cette garde couvrait déjà le PROPRE
+             'done' de la chronologie (bouton « Vérifier à nouveau »
+             ci-dessous), mais pas un 'done' d'une AUTRE tâche restée affichée
+             (ex. une relecture non fermée sur ce même chapitre) — qui masquait
+             ce lanceur exactement comme le bug I1 décrit pour les quatre
+             autres onglets. Même correctif, étendu ici par symétrie (au-delà
+             des quatre onglets cités dans le ticket) : `ai.phase === 'done'`
+             tout court couvre les deux cas, propre 'done' ET 'done' étranger. -->
         <div
-          v-if="ai.phase === 'idle' || ai.phase === 'error' || (ai.phase === 'done' && ai.task === 'chrono')"
+          v-if="ai.phase === 'idle' || ai.phase === 'error' || ai.phase === 'done'"
           class="cp-launch"
         >
           <p v-if="ai.errorMessage && ai.task === 'chrono'" class="error-text">{{ ai.errorMessage }}</p>

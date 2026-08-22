@@ -52,6 +52,17 @@ function goToChapter(chapterId: number): void {
 function goToTimeline(): void {
   bookStore.setSection('chronologie')
 }
+
+// « Fermer le rapport » (Fix I1, vague finale 3c) : le rapport reste affiché
+// tant que le livre n'a pas changé (péremption NIVEAU LIVRE, voir setBook
+// côté store) — sans ce bouton, un rapport « propre » (aucune incohérence)
+// ou déjà consulté n'a aucun moyen d'être refermé autrement qu'en relançant
+// une vérification ou en changeant de livre. Délègue entièrement à
+// closeChronoReport (stores/ai.ts) : phase repasse à 'idle', ce qui démonte
+// ce composant et fait réapparaître le bouton « Vérifier le livre ».
+function closeReport(): void {
+  ai.closeChronoReport()
+}
 </script>
 
 <template>
@@ -102,6 +113,10 @@ function goToTimeline(): void {
         </div>
       </li>
     </ul>
+
+    <div class="chrono-actions">
+      <button type="button" class="chrono-close" @click="closeReport">Fermer le rapport</button>
+    </div>
   </div>
 </template>
 
@@ -169,5 +184,18 @@ function goToTimeline(): void {
 }
 .chrono-chip:hover {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Bouton sobre (Fix I1, vague finale 3c) : le style bouton PAR DÉFAUT du
+   thème (bordure fine, pas de fond — voir theme.css) est déjà le style
+   « secondaire » de l'app, contrairement à .primary (fond plein) réservé aux
+   actions principales — « Fermer le rapport » n'en est pas une. */
+.chrono-close {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.chrono-close:hover {
+  color: var(--accent);
 }
 </style>
