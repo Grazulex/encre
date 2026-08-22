@@ -3,7 +3,7 @@ import { useEntitiesStore } from './entities'
 import type { Entity } from '../../../shared/types'
 
 export type AiPhase = 'idle' | 'preparing' | 'streaming' | 'done' | 'error'
-export type AiModel = 'sonnet' | 'opus'
+export type AiModel = 'sonnet' | 'opus' | 'fable'
 
 export interface EntityChoice {
   entity: Entity

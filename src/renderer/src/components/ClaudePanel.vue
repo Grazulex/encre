@@ -141,8 +141,9 @@ watch(
       <div class="cp-model-row">
         <span class="field-label">Modèle</span>
         <select v-model="ai.model" class="cp-model-select" :disabled="busy">
-          <option value="sonnet">Sonnet</option>
-          <option value="opus">Opus</option>
+          <option value="sonnet">Sonnet — rapide</option>
+          <option value="opus">Opus — soigné</option>
+          <option value="fable">Fable — le plus littéraire</option>
         </select>
       </div>
 
