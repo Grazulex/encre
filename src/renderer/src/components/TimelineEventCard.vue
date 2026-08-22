@@ -111,16 +111,50 @@ function focusTitle(): void {
 defineExpose({ focusTitle })
 
 // --- Popover de liens (chapitres/entités du livre) ----------------------
+// Téléporté dans <body> (Teleport) et positionné en `position: fixed` à
+// partir du rectangle du bouton « + Lier » : la carte vit dans `.rail`,
+// scrollable (`.section { overflow-y: auto }`) dans TimelineSection — un
+// popover simplement `position: absolute` à l'intérieur y serait rogné par
+// ce conteneur dès que la carte n'est pas tout en haut de la liste (vérifié
+// par une reproduction isolée : `overflow-y: auto` d'un ancêtre clippe bien
+// un descendant en position absolue qui le dépasse, y compris pour le test
+// de collision — `elementFromPoint` ne retrouve plus l'élément passé la
+// limite du conteneur). Le Teleport sort le popover de ce conteneur, réglant
+// le problème à la racine plutôt que par un correctif de z-index (inefficace
+// ici, le clipping n'est pas un problème d'empilement).
 const popoverOpen = ref(false)
 const popoverEl = ref<HTMLElement | null>(null)
+const toggleRef = ref<HTMLElement | null>(null)
+const popoverPos = ref({ top: 0, left: 0 })
+
+function updatePopoverPosition(): void {
+  const rect = toggleRef.value?.getBoundingClientRect()
+  if (!rect) return
+  // Un simple clamp horizontal (pas de logique de retournement au-dessus du
+  // bouton) : suffisant pour rester dans la fenêtre sans complexifier un
+  // popover qui reste par ailleurs simple, conformément au brief.
+  popoverPos.value = {
+    top: rect.bottom + 6,
+    left: Math.min(rect.left, window.innerWidth - 296)
+  }
+}
 
 async function openPopover(): Promise<void> {
+  updatePopoverPosition()
   popoverOpen.value = true
+  // Repositionne tant que le popover est ouvert : un défilement de la liste
+  // (capture:true, car un scroll sur `.section` ne remonte pas forcément
+  // jusqu'à window en phase bulle) ou un redimensionnement de la fenêtre ne
+  // doit pas laisser le popover décroché de son bouton.
+  window.addEventListener('scroll', updatePopoverPosition, true)
+  window.addEventListener('resize', updatePopoverPosition)
   await nextTick()
   popoverEl.value?.focus()
 }
 function closePopover(): void {
   popoverOpen.value = false
+  window.removeEventListener('scroll', updatePopoverPosition, true)
+  window.removeEventListener('resize', updatePopoverPosition)
 }
 // Échap intercepté ICI, en stoppant la propagation dès ce nœud — même
 // principe que AutolinkDialog/EntityDrawer : le focus est déplacé sur le
@@ -135,13 +169,21 @@ function onPopoverKeydown(e: KeyboardEvent): void {
 }
 // Clic hors du popover : fermeture, comme un menu déroulant standard.
 // mousedown (pas click) pour fermer avant qu'un éventuel click sur un autre
-// élément de la carte ne s'exécute.
+// élément de la carte ne s'exécute. Fonctionne sans changement malgré le
+// Teleport : Node.contains() suit l'arbre DOM réel, pas la position visuelle
+// d'origine du nœud dans le template.
 function onDocumentMousedown(e: MouseEvent): void {
   if (!popoverOpen.value) return
   if (popoverEl.value && !popoverEl.value.contains(e.target as Node)) closePopover()
 }
 onMounted(() => window.addEventListener('mousedown', onDocumentMousedown))
-onBeforeUnmount(() => window.removeEventListener('mousedown', onDocumentMousedown))
+onBeforeUnmount(() => {
+  window.removeEventListener('mousedown', onDocumentMousedown)
+  // Défensif : si la carte est démontée (événement supprimé) pendant que son
+  // popover est ouvert, ces listeners ne doivent pas survivre au composant.
+  window.removeEventListener('scroll', updatePopoverPosition, true)
+  window.removeEventListener('resize', updatePopoverPosition)
+})
 
 function isChapterLinked(id: number): boolean {
   return event.value?.chapterIds.includes(id) ?? false
@@ -231,41 +273,46 @@ function removeEvent(): void {
       </button>
 
       <span class="link-picker">
-        <button type="button" class="link-toggle" @click="openPopover">+ Lier</button>
-        <div
-          v-if="popoverOpen"
-          ref="popoverEl"
-          class="popover"
-          role="dialog"
-          aria-label="Lier des chapitres et des fiches"
-          tabindex="-1"
-          @keydown="onPopoverKeydown"
-        >
-          <section class="popover-group">
-            <h4>Chapitres</h4>
-            <p v-if="bookStore.chapters.length === 0" class="popover-empty">Aucun chapitre.</p>
-            <label v-for="c in bookStore.chapters" :key="c.id" class="popover-row">
-              <input
-                type="checkbox"
-                :checked="isChapterLinked(c.id)"
-                @change="toggleChapterLink(c.id)"
-              />
-              <span>{{ c.title }}</span>
-            </label>
-          </section>
-          <section class="popover-group">
-            <h4>Personnages &amp; lieux</h4>
-            <p v-if="entitiesStore.entities.length === 0" class="popover-empty">Aucune fiche.</p>
-            <label v-for="e in entitiesStore.entities" :key="e.id" class="popover-row">
-              <input
-                type="checkbox"
-                :checked="isEntityLinked(e.id)"
-                @change="toggleEntityLink(e.id)"
-              />
-              <span>{{ e.name }}</span>
-            </label>
-          </section>
-        </div>
+        <button ref="toggleRef" type="button" class="link-toggle" @click="openPopover">
+          + Lier
+        </button>
+        <Teleport to="body">
+          <div
+            v-if="popoverOpen"
+            ref="popoverEl"
+            class="popover"
+            role="dialog"
+            aria-label="Lier des chapitres et des fiches"
+            tabindex="-1"
+            :style="{ top: `${popoverPos.top}px`, left: `${popoverPos.left}px` }"
+            @keydown="onPopoverKeydown"
+          >
+            <section class="popover-group">
+              <h4>Chapitres</h4>
+              <p v-if="bookStore.chapters.length === 0" class="popover-empty">Aucun chapitre.</p>
+              <label v-for="c in bookStore.chapters" :key="c.id" class="popover-row">
+                <input
+                  type="checkbox"
+                  :checked="isChapterLinked(c.id)"
+                  @change="toggleChapterLink(c.id)"
+                />
+                <span>{{ c.title }}</span>
+              </label>
+            </section>
+            <section class="popover-group">
+              <h4>Personnages &amp; lieux</h4>
+              <p v-if="entitiesStore.entities.length === 0" class="popover-empty">Aucune fiche.</p>
+              <label v-for="e in entitiesStore.entities" :key="e.id" class="popover-row">
+                <input
+                  type="checkbox"
+                  :checked="isEntityLinked(e.id)"
+                  @change="toggleEntityLink(e.id)"
+                />
+                <span>{{ e.name }}</span>
+              </label>
+            </section>
+          </div>
+        </Teleport>
       </span>
     </div>
   </article>
@@ -393,9 +440,6 @@ function removeEvent(): void {
   cursor: default;
 }
 
-.link-picker {
-  position: relative;
-}
 .link-toggle {
   font-size: 11.5px;
   padding: 3px 9px;
@@ -408,11 +452,16 @@ function removeEvent(): void {
   border-color: var(--accent);
 }
 
+/* `position: fixed` (pas `absolute`) : le popover est téléporté dans <body>
+   (voir <Teleport> dans le template) pour échapper au clipping de
+   `.section { overflow-y: auto }` dans TimelineSection — un popover
+   simplement absolu à l'intérieur de ce conteneur défilant serait rogné dès
+   que la carte n'est pas tout en haut de la liste. `top`/`left` sont donc
+   calculés en JS (popoverPos, coordonnées viewport) plutôt que fixés en CSS
+   relativement à `.link-picker`. */
 .popover {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 6px);
-  left: 0;
+  position: fixed;
+  z-index: 90;
   width: 280px;
   max-height: 320px;
   overflow-y: auto;
