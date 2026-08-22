@@ -3,19 +3,14 @@ import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
 import ChapterList from '../components/ChapterList.vue'
+import EditorPane from '../components/EditorPane.vue'
+import StatusBar from '../components/StatusBar.vue'
 
 const props = defineProps<{ bookId: number }>()
 const store = useBookStore()
 const router = useRouter()
 
 onMounted(() => store.open(props.bookId))
-
-const STATUS_LABELS: Record<string, string> = {
-  brouillon: 'Brouillon',
-  premier_jet: 'Premier jet',
-  relu: 'Relu',
-  final: 'Final'
-}
 
 const progress = computed(() => {
   const book = store.book
@@ -45,14 +40,13 @@ const progress = computed(() => {
       <ChapterList />
     </aside>
     <main>
-      <p v-if="!store.currentChapter" class="empty">Créez un chapitre pour commencer à écrire.</p>
-      <div v-else class="placeholder">
-        <p v-if="store.currentChapter" class="status">
-          {{ STATUS_LABELS[store.currentChapter.status] }}
-        </p>
-        <h2>{{ store.currentChapter.title }}</h2>
-        <p class="note">(éditeur en Task 9)</p>
-      </div>
+      <p v-if="!store.currentChapter" class="empty">
+        Créez un chapitre pour commencer à écrire.
+      </p>
+      <template v-else>
+        <EditorPane />
+        <StatusBar />
+      </template>
     </main>
   </div>
 </template>
@@ -119,38 +113,14 @@ aside {
 }
 
 main {
-  overflow-y: auto;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .empty {
+  margin: auto;
   color: var(--fg-muted);
   text-align: center;
   font-size: 13px;
-}
-.placeholder {
-  text-align: center;
-  max-width: 420px;
-  padding: 32px;
-}
-.placeholder .status {
-  color: var(--fg-muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 8px;
-}
-.placeholder h2 {
-  font-family: var(--font-manuscript);
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--fg);
-}
-.placeholder .note {
-  color: var(--fg-muted);
-  font-size: 13px;
-  margin-top: 10px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--border);
 }
 </style>
