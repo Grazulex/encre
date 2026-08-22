@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb, type Db } from './connection'
 import { createBook } from './books'
+import { getBook } from './books'
+import { createEntity } from './entities'
 import {
   countWords, listChapters, getChapter, createChapter,
   saveChapterContent, renameChapter, setChapterStatus,
-  reorderChapters, deleteChapter
+  reorderChapters, deleteChapter, entityOccurrences, entitiesInChapter
 } from './chapters'
 
 let db: Db
@@ -59,5 +61,38 @@ describe('repository chapters', () => {
     expect(full.status).toBe('premier_jet')
     deleteChapter(db, c.id)
     expect(listChapters(db, bookId)).toHaveLength(0)
+  })
+})
+
+describe('mentions et occurrences', () => {
+  it('synchronise la table mentions à la sauvegarde et bump le livre', () => {
+    const mara = createEntity(db, { bookId, kind: 'character', name: 'Mara' })
+    const c = createChapter(db, bookId, 'Ch. 1')
+    const before = getBook(db, bookId).updatedAt
+    const json = JSON.stringify({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'mention', attrs: { id: mara.id, label: 'Mara' } }] }]
+    })
+    db.prepare("UPDATE books SET updated_at = '2000-01-01 00:00:00' WHERE id = ?").run(bookId)
+    saveChapterContent(db, c.id, json, 'Mara')
+    expect(entitiesInChapter(db, c.id).map((e) => e.name)).toEqual(['Mara'])
+    expect(entityOccurrences(db, mara.id)).toEqual([
+      { chapterId: c.id, chapterTitle: 'Ch. 1', chapterPosition: 1 }
+    ])
+    expect(getBook(db, bookId).updatedAt).not.toBe('2000-01-01 00:00:00')
+    // retrait de la mention → index nettoyé
+    saveChapterContent(db, c.id, '{"type":"doc","content":[]}', '')
+    expect(entitiesInChapter(db, c.id)).toEqual([])
+    void before
+  })
+
+  it('ignore les ids de mention qui ne correspondent à aucune entité', () => {
+    const c = createChapter(db, bookId, 'Ch. 1')
+    const json = JSON.stringify({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'mention', attrs: { id: 999, label: 'Fantôme' } }] }]
+    })
+    expect(() => saveChapterContent(db, c.id, json, 'Fantôme')).not.toThrow()
+    expect(entitiesInChapter(db, c.id)).toEqual([])
   })
 })

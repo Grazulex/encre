@@ -1,5 +1,7 @@
 import type { Db } from './connection'
-import type { Chapter, ChapterMeta, ChapterStatus } from '../../shared/types'
+import type { Chapter, ChapterMeta, ChapterStatus, Entity, EntityOccurrence } from '../../shared/types'
+import { extractMentionIds } from '../../shared/mentions'
+import { entityRowToEntity } from './entities'
 
 export function countWords(text: string): number {
   const trimmed = text.trim()
@@ -52,11 +54,23 @@ export function saveChapterContent(
   db: Db, id: number, contentJson: string, contentText: string
 ): { wordCount: number } {
   const wordCount = countWords(contentText)
-  db.prepare(
-    `UPDATE chapters
-     SET content_json = ?, content_text = ?, word_count = ?, updated_at = datetime('now')
-     WHERE id = ?`
-  ).run(contentJson, contentText, wordCount, id)
+  const mentionIds = extractMentionIds(contentJson)
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE chapters
+       SET content_json = ?, content_text = ?, word_count = ?, updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(contentJson, contentText, wordCount, id)
+    db.prepare('DELETE FROM mentions WHERE chapter_id = ?').run(id)
+    const insert = db.prepare(
+      'INSERT OR IGNORE INTO mentions (chapter_id, entity_id) SELECT ?, id FROM entities WHERE id = ?'
+    )
+    for (const entityId of mentionIds) insert.run(id, entityId)
+    db.prepare(
+      `UPDATE books SET updated_at = datetime('now')
+       WHERE id = (SELECT book_id FROM chapters WHERE id = ?)`
+    ).run(id)
+  })()
   return { wordCount }
 }
 
@@ -77,4 +91,24 @@ export function reorderChapters(db: Db, bookId: number, orderedIds: number[]): v
 
 export function deleteChapter(db: Db, id: number): void {
   db.prepare('DELETE FROM chapters WHERE id = ?').run(id)
+}
+
+export function entityOccurrences(db: Db, entityId: number): EntityOccurrence[] {
+  return db
+    .prepare(
+      `SELECT c.id AS chapterId, c.title AS chapterTitle, c.position AS chapterPosition
+       FROM mentions m JOIN chapters c ON c.id = m.chapter_id
+       WHERE m.entity_id = ? ORDER BY c.position`
+    )
+    .all(entityId) as EntityOccurrence[]
+}
+
+export function entitiesInChapter(db: Db, chapterId: number): Entity[] {
+  const rows = db
+    .prepare(
+      `SELECT e.* FROM mentions m JOIN entities e ON e.id = m.entity_id
+       WHERE m.chapter_id = ? ORDER BY e.kind, e.name`
+    )
+    .all(chapterId)
+  return rows.map(entityRowToEntity)
 }

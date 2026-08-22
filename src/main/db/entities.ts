@@ -1,7 +1,7 @@
 import type { Db } from './connection'
 import type { Entity, EntityCreate, EntityKind, EntityPatch } from '../../shared/types'
 
-function rowToEntity(row: any): Entity {
+export function entityRowToEntity(row: any): Entity {
   return {
     id: row.id,
     bookId: row.book_id,
@@ -21,13 +21,13 @@ export function listEntities(db: Db, bookId: number, kind?: EntityKind): Entity[
   const rows = kind
     ? db.prepare('SELECT * FROM entities WHERE book_id = ? AND kind = ? ORDER BY name').all(bookId, kind)
     : db.prepare('SELECT * FROM entities WHERE book_id = ? ORDER BY kind, name').all(bookId)
-  return rows.map(rowToEntity)
+  return rows.map(entityRowToEntity)
 }
 
 export function getEntity(db: Db, id: number): Entity {
   const row = db.prepare('SELECT * FROM entities WHERE id = ?').get(id)
   if (!row) throw new Error(`Entité introuvable: ${id}`)
-  return rowToEntity(row)
+  return entityRowToEntity(row)
 }
 
 export function createEntity(db: Db, input: EntityCreate): Entity {
