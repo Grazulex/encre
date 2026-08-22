@@ -6,6 +6,7 @@ import icon from '../../resources/icon.png?asset'
 import { openDb } from './db/connection'
 import { createApi } from './api'
 import { registerIpc } from './ipc'
+import { backupDatabase, pruneBackups, shouldBackup } from './backup'
 
 // Protocole privilégié `encre-media` : seule voie d'affichage des images
 // (couvertures de livres, photos de fiches personnages/lieux) dans le
@@ -100,6 +101,25 @@ app.whenReady().then(() => {
   registerMediaProtocol(join(app.getPath('userData'), 'media'))
 
   const db = openDb(join(app.getPath('userData'), 'library.db'))
+  const backupsDir = join(app.getPath('userData'), 'backups')
+
+  // Daily backup with 24h check
+  const performBackup = (): void => {
+    if (shouldBackup(backupsDir, new Date())) {
+      backupDatabase(db, backupsDir, new Date())
+        .then((path) => {
+          console.log(`Backup créé: ${path}`)
+          pruneBackups(backupsDir, new Date())
+        })
+        .catch(console.error)
+    }
+  }
+
+  performBackup()
+
+  // Check every 6 hours
+  setInterval(performBackup, 6 * 60 * 60 * 1000)
+
   registerIpc(createApi(db))
 
   createWindow()
