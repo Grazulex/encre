@@ -32,9 +32,30 @@ const ui = useUiStore()
 // l'affichage, jamais la génération elle-même : basculer d'onglet pendant un
 // stream ne l'annule pas, il continue en arrière-plan (ai.task indique
 // lequel).
-const activeTab = ref<'ecriture' | 'mise-en-forme' | 'relecture' | 'extraction' | 'chronologie'>(
-  'ecriture'
-)
+type PanelTab = 'ecriture' | 'mise-en-forme' | 'relecture' | 'extraction' | 'chronologie'
+const activeTab = ref<PanelTab>('ecriture')
+
+// Navigation par flèches dans les onglets (audit UI/UX, proposition #9) :
+// role="tablist"/role="tab"/aria-selected promettaient déjà ce comportement
+// sans qu'aucun handler ni roving tabindex n'existe — 5 Tab étaient
+// nécessaires pour traverser la rangée. TAB_ORDER fixe l'ordre visuel (celui
+// du template ci-dessous) : ←/→ déplace activeTab de façon circulaire et
+// focus le bouton nouvellement actif, tabindex="0" uniquement sur celui-ci
+// (-1 sur les autres) pour que Tab n'entre dans la rangée qu'une seule fois.
+const TAB_ORDER: PanelTab[] = ['ecriture', 'mise-en-forme', 'relecture', 'extraction', 'chronologie']
+const tabRefs: (HTMLElement | null)[] = []
+function setTabRef(index: number, el: Element | null): void {
+  tabRefs[index] = el instanceof HTMLElement ? el : null
+}
+function onTabsKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  event.preventDefault()
+  const currentIndex = TAB_ORDER.indexOf(activeTab.value)
+  const direction = event.key === 'ArrowLeft' ? -1 : 1
+  const nextIndex = (currentIndex + direction + TAB_ORDER.length) % TAB_ORDER.length
+  activeTab.value = TAB_ORDER[nextIndex]
+  tabRefs[nextIndex]?.focus()
+}
 
 // Conventions de mise en forme (Task 6) : « mémorisées en session » (brief) —
 // sessionStorage plutôt que le store Pinia (qui ne persiste rien lui-même) ou
@@ -292,13 +313,20 @@ watch(
          Le nom complet reste disponible via aria-label/title (accessibilité,
          infobulle) et TASK_LABELS ci-dessus garde les noms longs pour les
          bandeaux « <tâche> en cours… », qui ont la place de rester clairs. -->
-    <div class="cp-tabs" role="tablist" aria-label="Section de l'assistant">
+    <div
+      class="cp-tabs"
+      role="tablist"
+      aria-label="Section de l'assistant"
+      @keydown="onTabsKeydown"
+    >
       <button
+        :ref="(el) => setTabRef(0, el as Element | null)"
         type="button"
         role="tab"
         class="cp-tab"
         :class="{ active: activeTab === 'ecriture' }"
         :aria-selected="activeTab === 'ecriture'"
+        :tabindex="activeTab === 'ecriture' ? 0 : -1"
         aria-label="Écriture"
         title="Écriture"
         @click="activeTab = 'ecriture'"
@@ -306,11 +334,13 @@ watch(
         Écriture
       </button>
       <button
+        :ref="(el) => setTabRef(1, el as Element | null)"
         type="button"
         role="tab"
         class="cp-tab"
         :class="{ active: activeTab === 'mise-en-forme' }"
         :aria-selected="activeTab === 'mise-en-forme'"
+        :tabindex="activeTab === 'mise-en-forme' ? 0 : -1"
         aria-label="Mise en forme"
         title="Mise en forme"
         @click="activeTab = 'mise-en-forme'"
@@ -318,11 +348,13 @@ watch(
         Forme
       </button>
       <button
+        :ref="(el) => setTabRef(2, el as Element | null)"
         type="button"
         role="tab"
         class="cp-tab"
         :class="{ active: activeTab === 'relecture' }"
         :aria-selected="activeTab === 'relecture'"
+        :tabindex="activeTab === 'relecture' ? 0 : -1"
         aria-label="Relecture"
         title="Relecture"
         @click="activeTab = 'relecture'"
@@ -330,11 +362,13 @@ watch(
         Relecture
       </button>
       <button
+        :ref="(el) => setTabRef(3, el as Element | null)"
         type="button"
         role="tab"
         class="cp-tab"
         :class="{ active: activeTab === 'extraction' }"
         :aria-selected="activeTab === 'extraction'"
+        :tabindex="activeTab === 'extraction' ? 0 : -1"
         aria-label="Extraction"
         title="Extraction (fiches)"
         @click="activeTab = 'extraction'"
@@ -342,11 +376,13 @@ watch(
         Fiches
       </button>
       <button
+        :ref="(el) => setTabRef(4, el as Element | null)"
         type="button"
         role="tab"
         class="cp-tab"
         :class="{ active: activeTab === 'chronologie' }"
         :aria-selected="activeTab === 'chronologie'"
+        :tabindex="activeTab === 'chronologie' ? 0 : -1"
         aria-label="Chronologie"
         title="Chronologie"
         @click="activeTab = 'chronologie'"
@@ -393,15 +429,6 @@ watch(
             :disabled="busy"
           ></textarea>
         </section>
-
-        <div class="cp-model-row">
-          <span class="field-label">Modèle</span>
-          <select v-model="ai.model" class="cp-model-select" :disabled="busy">
-            <option value="sonnet">Sonnet — rapide</option>
-            <option value="opus">Opus — soigné</option>
-            <option value="fable">Fable — le plus littéraire</option>
-          </select>
-        </div>
 
         <p v-if="busy && ai.task === 'format'" class="cp-warning">
           Harmonisation en cours — patientez avant une nouvelle génération.
@@ -521,15 +548,6 @@ watch(
       </template>
 
       <template v-else-if="activeTab === 'relecture'">
-        <div class="cp-model-row">
-          <span class="field-label">Modèle</span>
-          <select v-model="ai.model" class="cp-model-select" :disabled="busy">
-            <option value="sonnet">Sonnet — rapide</option>
-            <option value="opus">Opus — soigné</option>
-            <option value="fable">Fable — le plus littéraire</option>
-          </select>
-        </div>
-
         <p v-if="busy && ai.task !== 'review'" class="cp-warning">
           {{ TASK_LABELS[ai.task] }} en cours — patientez avant de relire ce chapitre.
         </p>
@@ -590,15 +608,6 @@ watch(
       </template>
 
       <template v-else>
-        <div class="cp-model-row">
-          <span class="field-label">Modèle</span>
-          <select v-model="ai.model" class="cp-model-select" :disabled="busy">
-            <option value="sonnet">Sonnet — rapide</option>
-            <option value="opus">Opus — soigné</option>
-            <option value="fable">Fable — le plus littéraire</option>
-          </select>
-        </div>
-
         <p v-if="busy && ai.task !== 'chrono'" class="cp-warning">
           {{ TASK_LABELS[ai.task] }} en cours — patientez avant de vérifier ce livre.
         </p>
@@ -625,6 +634,26 @@ watch(
 
         <ChronoReport v-if="ai.task === 'chrono' && ai.phase === 'done'" />
       </template>
+
+      <!-- Position stable du sélecteur de modèle (audit UI/UX, proposition
+           #6) : une seule copie de ce bloc, ancrée juste au-dessus du lien
+           « Gérer les snapshots », plutôt que trois copies identiques à des
+           positions différentes selon l'onglet (4ᵉ section en Écriture, 1ʳᵉ
+           en Relecture/Chronologie) — le contrôle ne doit plus sauter de
+           place quand l'auteur bascule d'onglet. Absent en Mise en forme et
+           Extraction : ces deux tâches n'exposent aucun choix de modèle
+           (fixé côté main, voir launchFormat/launchExtract ci-dessus). -->
+      <div
+        v-if="activeTab === 'ecriture' || activeTab === 'relecture' || activeTab === 'chronologie'"
+        class="cp-model-row"
+      >
+        <span class="field-label">Modèle</span>
+        <select v-model="ai.model" class="cp-model-select" :disabled="busy">
+          <option value="sonnet">Sonnet — rapide</option>
+          <option value="opus">Opus — soigné</option>
+          <option value="fable">Fable — le plus littéraire</option>
+        </select>
+      </div>
 
       <button type="button" class="cp-snapshots-link" @click="ai.openSnapshotManager()">
         Gérer les snapshots
