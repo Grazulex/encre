@@ -137,12 +137,24 @@ function buildFieldChoices(enrichissement: Enrichissement): FieldChoice[] {
 // second tableau filtré séparément à retrouver par index (voir le
 // commentaire de EnrichissementChoice ci-dessus et celui de la fonction
 // partagée pour la régression que cela évitait).
-const enrichissementChoices = ref<EnrichissementChoice[]>(
+// Résultat calculé une seule fois au montage (comme creationChoices
+// ci-dessus) : `duplicateCount` (correctif M1, vague finale 3c) compte les
+// enrichissements écartés parce qu'un enrichissement PRÉCÉDENT portait déjà
+// le même entityId — affiché ci-dessous à côté des autres compteurs
+// (malformées, entité inconnue), voir pairEnrichissementsWithEntities pour
+// le raisonnement complet (shared/extractProposal.ts).
+const { pairs: enrichissementPairs, duplicateCount: enrichissementDuplicateCount } =
   pairEnrichissementsWithEntities(
     ai.extractProposal?.enrichissements ?? [],
     entitiesStore.entities,
     buildFieldChoices
-  ).map(({ entity, enrichissement, fields }) => ({ entity, source: enrichissement, fields }))
+  )
+const enrichissementChoices = ref<EnrichissementChoice[]>(
+  enrichissementPairs.map(({ entity, enrichissement, fields }) => ({
+    entity,
+    source: enrichissement,
+    fields
+  }))
 )
 
 const hasSelection = computed(
@@ -351,6 +363,12 @@ onMounted(async () => {
             ai.extractUnknownEntityCount > 1 ? 's' : ''
           }}
           (entité inconnue).
+        </p>
+        <p v-if="enrichissementDuplicateCount > 0" class="extract-hint">
+          {{ enrichissementDuplicateCount }}
+          proposition{{ enrichissementDuplicateCount > 1 ? 's' : '' }} en double ignorée{{
+            enrichissementDuplicateCount > 1 ? 's' : ''
+          }}.
         </p>
 
         <template v-if="creationChoices.length === 0 && enrichissementChoices.length === 0">

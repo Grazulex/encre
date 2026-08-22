@@ -133,19 +133,20 @@ describe('pairEnrichissementsWithEntities', () => {
       { entityId: 2, description: 'Texte.' }
     ]
     const result = pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)
-    expect(result).toHaveLength(1)
-    expect(result[0].entity).toEqual(ENTITIES[1])
-    expect(result[0].enrichissement).toEqual(enrichissements[1])
+    expect(result.pairs).toHaveLength(1)
+    expect(result.pairs[0].entity).toEqual(ENTITIES[1])
+    expect(result.pairs[0].enrichissement).toEqual(enrichissements[1])
+    expect(result.duplicateCount).toBe(0)
   })
 
   it('écarte un enrichissement dont l’entité n’existe pas dans le catalogue fourni', () => {
     const enrichissements = [{ entityId: 99, description: 'x' }]
-    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)).toEqual([])
+    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields).pairs).toEqual([])
   })
 
   it('écarte un enrichissement sans aucun champ exploitable, même avec une entité connue', () => {
     const enrichissements = [{ entityId: 1 }]
-    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)).toEqual([])
+    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields).pairs).toEqual([])
   })
 
   it('préserve l’ordre des enrichissements pairés et associe chacun à SA propre entité', () => {
@@ -154,8 +155,30 @@ describe('pairEnrichissementsWithEntities', () => {
       { entityId: 1, description: 'b' }
     ]
     const result = pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)
-    expect(result.map((r) => r.entity.id)).toEqual([2, 1])
-    expect(result.map((r) => r.enrichissement.description)).toEqual(['a', 'b'])
+    expect(result.pairs.map((r) => r.entity.id)).toEqual([2, 1])
+    expect(result.pairs.map((r) => r.enrichissement.description)).toEqual(['a', 'b'])
+  })
+
+  it('déduplique par entityId : ne garde que le PREMIER enrichissement, compte les suivants (correctif M1)', () => {
+    const enrichissements = [
+      { entityId: 1, description: 'premier' },
+      { entityId: 1, description: 'second' }
+    ]
+    const result = pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)
+    expect(result.pairs).toHaveLength(1)
+    expect(result.pairs[0].entity).toEqual(ENTITIES[0])
+    expect(result.pairs[0].enrichissement.description).toBe('premier')
+    expect(result.duplicateCount).toBe(1)
+  })
+
+  it('compte un doublon même si le premier enrichissement de cet entityId est sans champ exploitable', () => {
+    const enrichissements = [
+      { entityId: 1 }, // aucun champ exploitable, mais marque entityId 1 comme déjà vu
+      { entityId: 1, description: 'ignoré aussi (doublon)' }
+    ]
+    const result = pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields)
+    expect(result.pairs).toEqual([])
+    expect(result.duplicateCount).toBe(1)
   })
 })
 

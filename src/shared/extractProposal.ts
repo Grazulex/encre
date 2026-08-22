@@ -67,6 +67,14 @@ export interface PairedEnrichissement<E extends { id: number }, F> {
   fields: F[]
 }
 
+export interface PairEnrichissementsResult<E extends { id: number }, F> {
+  pairs: PairedEnrichissement<E, F>[]
+  // Nombre d'enrichissements écartés parce qu'un enrichissement PRÉCÉDENT
+  // portait déjà le même entityId (correctif M1, vague finale 3c) — voir
+  // ci-dessous.
+  duplicateCount: number
+}
+
 /**
  * Associe chaque enrichissement à SON entité et à SES champs exploitables,
  * en UN SEUL passage (une seule paire map+filtre, jamais deux tableaux
@@ -84,6 +92,19 @@ export interface PairedEnrichissement<E extends { id: number }, F> {
  * entité, son enrichissement source et ses champs, ce genre de décalage est
  * structurellement impossible.
  *
+ * Déduplication par entityId (correctif M1, vague finale 3c) : un modèle qui
+ * renvoie DEUX enrichissements pour la même fiche fait patcher cette fiche
+ * DEUX FOIS dans ExtractDialog.applySelection, l'un après l'autre — mais
+ * `appendText`/`mergeAliases` y calculent chaque patch à partir de
+ * `choice.entity.description`/`.aliases`, lus une seule fois AVANT toute
+ * application (voir ExtractDialog.vue) : le second patch ignore donc le texte
+ * déjà ajouté par le premier et l'écrase au lieu de s'y ajouter à la suite.
+ * Seul le PREMIER enrichissement d'un entityId donné est conservé ici (ordre
+ * de `enrichissements`, celui envoyé par le modèle) ; les suivants pour le
+ * même entityId sont écartés et comptés dans `duplicateCount`, qu'
+ * ExtractDialog affiche à côté de ses autres compteurs (malformées, entité
+ * inconnue).
+ *
  * `buildFields` est injecté (plutôt qu'un simple filtre alias/description/
  * notes non vides codé en dur ici) pour que la logique d'affichage
  * (libellés, aperçus — voir ExtractDialog.vue) reste côté composant ; ce
@@ -93,16 +114,23 @@ export function pairEnrichissementsWithEntities<E extends { id: number }, F>(
   enrichissements: ExtractProposal['enrichissements'],
   entities: readonly E[],
   buildFields: (enrichissement: ExtractProposal['enrichissements'][number]) => F[]
-): PairedEnrichissement<E, F>[] {
+): PairEnrichissementsResult<E, F> {
   const paired: PairedEnrichissement<E, F>[] = []
+  const seenEntityIds = new Set<number>()
+  let duplicateCount = 0
   for (const enrichissement of enrichissements) {
+    if (seenEntityIds.has(enrichissement.entityId)) {
+      duplicateCount++
+      continue
+    }
+    seenEntityIds.add(enrichissement.entityId)
     const entity = entities.find((e) => e.id === enrichissement.entityId)
     if (!entity) continue
     const fields = buildFields(enrichissement)
     if (fields.length === 0) continue
     paired.push({ entity, enrichissement, fields })
   }
-  return paired
+  return { pairs: paired, duplicateCount }
 }
 
 export interface FilteredExtractProposal {
