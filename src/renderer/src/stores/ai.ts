@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { useEntitiesStore } from './entities'
-import type { Entity, FormatConventions } from '../../../shared/types'
+import type { Entity, FormatConventions, ReviewSuggestion } from '../../../shared/types'
 import { sanitizeFormatOutput } from '../../../shared/sanitizeFormatOutput'
+import { parseAiJson } from '../../../shared/aiJson'
 
 export type AiPhase = 'idle' | 'preparing' | 'streaming' | 'done' | 'error'
 export type AiModel = 'sonnet' | 'opus' | 'fable'
@@ -11,8 +12,11 @@ export type AiModel = 'sonnet' | 'opus' | 'fable'
 // tâches (un seul flux à la fois, jamais deux générations simultanées) : ce
 // champ sert uniquement à ClaudePanel/FormatDialog pour savoir COMMENT
 // afficher ce flux (brouillon à insérer, ou Markdown à comparer avant/après)
-// et comment router "Appliquer" une fois 'done'.
-export type AiTask = 'write' | 'format'
+// et comment router "Appliquer" une fois 'done'. 'review' (Task 3, plan 3c) :
+// relecture — le brouillon final n'est jamais un texte à insérer/comparer
+// mais un JSON de ReviewSuggestion[] (voir reviewSuggestions ci-dessous),
+// parsé une seule fois à phase==='done' via parseAiJson (aiJson.ts, Task 1).
+export type AiTask = 'write' | 'format' | 'review'
 
 // Task 6b : la sanitisation défensive de la sortie d'harmonisation (fences +
 // préambule/écho de titre) vit désormais dans shared/sanitizeFormatOutput.ts
@@ -92,6 +96,21 @@ export interface EditorBridge {
   // restauration' ci-dessus), puis setContent + saveContentFor — mêmes gardes
   // post-await que restoreSnapshot (voir EditorPane.applyFormatIntoEditor).
   applyFormat(chapterId: number, contentJson: string): Promise<boolean>
+  // Applique UNE suggestion de relecture (Task 3) : localise la première
+  // occurrence exacte de `quote` dans le document et la remplace par
+  // `replacement` ('' = suppression) via une transaction ProseMirror ciblée
+  // (PAS un setContent complet, contrairement à applyFormat/restoreSnapshot
+  // ci-dessus). Le premier appel réussi d'une session de relecture donnée
+  // prend un snapshot 'avant relecture' au préalable — EditorPane porte seul
+  // cette règle (compteur interne, voir son commentaire), ce store ne s'en
+  // préoccupe pas ici. 'not-found' (citation caduque, texte modifié
+  // entre-temps) n'est jamais une erreur bloquante ; 'stale' = chapitre changé
+  // ou éditeur indisponible pendant l'opération.
+  applySuggestion(
+    chapterId: number,
+    quote: string,
+    replacement: string
+  ): Promise<'applied' | 'not-found' | 'stale'>
 }
 let editorBridge: EditorBridge | null = null
 
@@ -112,6 +131,16 @@ export const useAiStore = defineStore('ai', {
     // repartir de zéro) ou si on ne fait que rafraîchir les métadonnées d'un
     // panneau rouvert sur le même chapitre (session en cours préservée).
     chapterId: null as number | null,
+    // Relecture (Task 3) : peuplé UNIQUEMENT à phase==='done' avec
+    // task==='review' (voir apply() ci-dessous), à partir du parsing défensif
+    // de this.draft. reviewParseError porte le message d'échec de parseAiJson
+    // (ou une réponse structurellement invalide — pas un tableau) pour
+    // affichage côté ReviewPanel ; les deux sont réinitialisés à chaque
+    // startReview(). Le statut PAR SUGGESTION (pending/applied/dismissed/
+    // notFound) est un détail d'affichage porté par ReviewPanel.vue, jamais
+    // par ce store (reviewSuggestions reste la donnée brute reçue de l'IA).
+    reviewSuggestions: [] as ReviewSuggestion[],
+    reviewParseError: null as string | null,
     // État d'ouverture du gestionnaire de snapshots (Task 2) : porté ici plutôt
     // que localement dans EditorPane (qui monte le composant) parce que le
     // déclencheur « Gérer les snapshots » vit dans ClaudePanel — même situation
@@ -159,6 +188,22 @@ export const useAiStore = defineStore('ai', {
       } else if (kind === 'done') {
         this.draft = payload.text ?? this.draft
         this.phase = 'done'
+        // Parsing défensif de la sortie de relecture (Task 3) : SEULEMENT ici,
+        // une fois le flux réellement terminé — jamais sur des chunks
+        // intermédiaires, qui ne forment pas un JSON complet. Un tableau vide
+        // (Claude "reste silencieux") est un succès normal, pas une erreur.
+        if (this.task === 'review') {
+          const result = parseAiJson<ReviewSuggestion[]>(this.draft)
+          if (result.ok && Array.isArray(result.value)) {
+            this.reviewSuggestions = result.value
+            this.reviewParseError = null
+          } else {
+            this.reviewSuggestions = []
+            this.reviewParseError = result.ok
+              ? 'Réponse inattendue (pas un tableau de suggestions).'
+              : result.error
+          }
+        }
       } else {
         this.errorMessage = payload.message ?? 'Erreur inconnue.'
         this.phase = 'error'
@@ -282,6 +327,52 @@ export const useAiStore = defineStore('ai', {
       const ok = await editorBridge.applyFormat(chapterId, contentJson)
       if (ok) this.reset()
       return ok
+    },
+    // Lance une relecture (Task 3, plan 3c) — même squelette que startFormat
+    // ci-dessus (draft/erreur/phase remis à zéro, requestId inconnu jusqu'à
+    // résolution de l'invoke, reconcile() rejoue les événements déjà
+    // tamponnés) ; task='review' pour que ClaudePanel/ReviewPanel sachent
+    // comment traiter le flux, et pour que apply() ci-dessus sache parser
+    // this.draft en ReviewSuggestion[] une fois 'done'. reviewSuggestions/
+    // reviewParseError d'une éventuelle relecture précédente sont vidés ici,
+    // pas seulement à la réception du nouveau résultat — sans quoi ReviewPanel
+    // afficherait un instant l'ANCIEN lot de suggestions pendant le stream.
+    // Contrairement à startFormat, le modèle est un paramètre explicite de
+    // l'IPC (voir ipc-contract.ts) : this.model, sélecteur partagé par tous
+    // les onglets du panneau.
+    async startReview(chapterId: number): Promise<void> {
+      this.task = 'review'
+      this.draft = ''
+      this.errorMessage = null
+      this.phase = 'streaming'
+      this.requestId = null
+      this.reviewSuggestions = []
+      this.reviewParseError = null
+      try {
+        const requestId = await window.encre.ai.startReview(chapterId, { model: this.model })
+        this.requestId = requestId
+        this.reconcile(requestId)
+      } catch (err) {
+        console.error('Échec du démarrage de la relecture', err)
+        this.phase = 'error'
+        this.errorMessage =
+          err instanceof Error ? err.message : 'Échec du démarrage de la relecture.'
+      }
+    },
+    // Applique une suggestion de relecture par son index dans
+    // this.reviewSuggestions (Task 3) : délègue tout le travail d'édition
+    // (repérage de la citation, transaction ciblée, snapshot avant la
+    // première application de la session) à EditorPane via le pont
+    // ci-dessus — ce store ne connaît ni l'éditeur ni ProseMirror, même
+    // découpage que insertDraft/applyFormat. Contrairement à ces deux-là,
+    // n'appelle JAMAIS reset() : une relecture reste affichée (et
+    // actionnable suggestion par suggestion) après une application réussie,
+    // jusqu'à ce que l'auteur ferme le panneau ou relance une relecture.
+    async applySuggestion(index: number): Promise<'applied' | 'not-found' | 'stale'> {
+      if (!editorBridge || this.chapterId == null) return 'stale'
+      const suggestion = this.reviewSuggestions[index]
+      if (!suggestion) return 'stale'
+      return editorBridge.applySuggestion(this.chapterId, suggestion.quote, suggestion.replacement)
     },
     async cancel(): Promise<void> {
       const requestId = this.requestId

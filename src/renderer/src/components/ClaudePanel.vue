@@ -11,18 +11,21 @@ import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
 import type { FormatConventions } from '../../../shared/types'
 import FormatDialog from './FormatDialog.vue'
+import ReviewPanel from './ReviewPanel.vue'
 
 const ai = useAiStore()
 const store = useBookStore()
 const ui = useUiStore()
 
-// Deux onglets partageant le même panneau (Task 6) : « Écriture » (préexistant)
-// et « Mise en forme » (harmonisation typographique). Les deux tâches
-// partagent phase/draft/requestId côté store (un seul flux à la fois — voir
-// stores/ai.ts, AiTask) ; cet onglet local ne pilote QUE l'affichage, jamais
-// la génération elle-même : basculer d'onglet pendant un stream ne l'annule
-// pas, il continue en arrière-plan (ai.task indique lequel).
-const activeTab = ref<'ecriture' | 'mise-en-forme'>('ecriture')
+// Trois onglets partageant le même panneau (Task 6, puis Task 3 plan 3c) :
+// « Écriture » (préexistant), « Mise en forme » (harmonisation typographique)
+// et « Relecture » (suggestions ciblées appliquées une à une). Les trois
+// tâches partagent phase/draft/requestId côté store (un seul flux à la
+// fois — voir stores/ai.ts, AiTask) ; cet onglet local ne pilote QUE
+// l'affichage, jamais la génération elle-même : basculer d'onglet pendant un
+// stream ne l'annule pas, il continue en arrière-plan (ai.task indique
+// lequel).
+const activeTab = ref<'ecriture' | 'mise-en-forme' | 'relecture'>('ecriture')
 
 // Conventions de mise en forme (Task 6) : « mémorisées en session » (brief) —
 // sessionStorage plutôt que le store Pinia (qui ne persiste rien lui-même) ou
@@ -94,6 +97,16 @@ function launchFormat(): void {
     listes: listesConvention.value,
     proposerSeparations: proposerSeparations.value
   })
+}
+
+// Lance une relecture (Task 3, plan 3c) — même garde que launchFormat
+// ci-dessus (chapitre présent, contenu non vide, aucune génération déjà en
+// cours). Le modèle utilisé est ai.model, le même sélecteur partagé que
+// l'onglet Écriture (rendu à nouveau ci-dessous dans l'onglet Relecture).
+function launchReview(): void {
+  const chapter = store.currentChapter
+  if (!chapter || !hasContent.value || busy.value) return
+  ai.startReview(chapter.id)
 }
 
 // prepare() re-déclenché à chaque ouverture du panneau (montage — v-if côté
@@ -236,6 +249,16 @@ watch(
       >
         Mise en forme
       </button>
+      <button
+        type="button"
+        role="tab"
+        class="cp-tab"
+        :class="{ active: activeTab === 'relecture' }"
+        :aria-selected="activeTab === 'relecture'"
+        @click="activeTab = 'relecture'"
+      >
+        Relecture
+      </button>
     </div>
 
     <div class="cp-body">
@@ -320,7 +343,7 @@ watch(
         </div>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeTab === 'mise-en-forme'">
         <section class="cp-section">
           <span class="field-label">Conventions</span>
           <div class="cp-conventions">
@@ -401,6 +424,45 @@ watch(
           </div>
           <p v-else class="cp-hint">Vérification avant/après affichée à l'écran.</p>
         </div>
+      </template>
+
+      <template v-else>
+        <div class="cp-model-row">
+          <span class="field-label">Modèle</span>
+          <select v-model="ai.model" class="cp-model-select" :disabled="busy">
+            <option value="sonnet">Sonnet — rapide</option>
+            <option value="opus">Opus — soigné</option>
+            <option value="fable">Fable — le plus littéraire</option>
+          </select>
+        </div>
+
+        <p v-if="busy && ai.task !== 'review'" class="cp-warning">
+          {{ ai.task === 'write' ? 'Écriture' : 'Mise en forme' }} en cours — patientez avant de
+          relire ce chapitre.
+        </p>
+        <p v-if="!hasContent" class="cp-warning">Ce chapitre est vide : rien à relire.</p>
+
+        <div
+          v-if="ai.phase === 'idle' || ai.phase === 'error' || (ai.phase === 'done' && ai.task === 'review')"
+          class="cp-launch"
+        >
+          <p v-if="ai.errorMessage && ai.task === 'review'" class="cp-error">{{ ai.errorMessage }}</p>
+          <button type="button" class="primary" :disabled="!hasContent || busy" @click="launchReview">
+            {{ ai.task === 'review' && ai.phase === 'done' ? 'Relire à nouveau' : 'Relire ce chapitre' }}
+          </button>
+        </div>
+
+        <div v-if="ai.task === 'review' && ai.phase === 'streaming'" class="cp-stream">
+          <span class="field-label">Analyse en cours…</span>
+          <div ref="streamEl" class="cp-stream-text">
+            {{ ai.draft }}<span class="cp-cursor">▍</span>
+          </div>
+          <div class="cp-stream-actions">
+            <button type="button" @click="ai.cancel()">Annuler</button>
+          </div>
+        </div>
+
+        <ReviewPanel v-if="ai.task === 'review' && ai.phase === 'done'" />
       </template>
 
       <button type="button" class="cp-snapshots-link" @click="ai.openSnapshotManager()">

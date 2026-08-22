@@ -13,6 +13,7 @@ import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import SnapshotManager from './SnapshotManager.vue'
 import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
 import { stripCodeBlocks } from '../../../shared/stripCodeBlocks'
+import { locateQuote, type DocNode } from '../../../shared/quoteLocator'
 import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
 import type { ChapterStatus, Entity, OutlineNote } from '../../../shared/types'
 import { autoGrowClamped } from '../utils/autoGrow'
@@ -657,11 +658,74 @@ async function applyFormatIntoEditor(chapterId: number, contentJson: string): Pr
   return true
 }
 
+// Applique UNE suggestion de relecture (Task 3, plan 3c) : contrairement à
+// applyFormatIntoEditor/restoreSnapshotIntoEditor ci-dessus, ne remplace PAS
+// tout le document — localise la première occurrence exacte de `quote` (via
+// locateQuote, shared/quoteLocator.ts — pur/testable, voir son fichier) et la
+// remplace par une transaction ProseMirror ciblée. `not-found` (citation
+// caduque : texte modifié depuis la génération de la suggestion) n'est
+// jamais une erreur, juste un statut affiché par ReviewPanel — vérifié AVANT
+// tout snapshot, pour ne jamais prendre de snapshot pour une suggestion qui
+// ne sera finalement pas appliquée.
+let reviewSnapshotTaken = false
+// Réinitialisé à chaque NOUVEAU lot de suggestions (ai.reviewSuggestions
+// change de référence à chaque parsing réussi dans le store, voir
+// stores/ai.ts apply()) : un snapshot 'avant relecture' doit être repris
+// avant la première application d'une relecture RELANCÉE, pas seulement de
+// la toute première de la session app. Watcher posé une seule fois pour la
+// durée de vie du composant, comme les autres écouteurs de ce fichier.
+watch(
+  () => ai.reviewSuggestions,
+  () => {
+    reviewSnapshotTaken = false
+  }
+)
+
+async function applySuggestionIntoEditor(
+  chapterId: number,
+  quote: string,
+  replacement: string
+): Promise<'applied' | 'not-found' | 'stale'> {
+  const ed = editor.value
+  if (!ed || editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return 'stale'
+  if (!locateQuote(ed.getJSON() as DocNode, quote).found) return 'not-found'
+  if (!reviewSnapshotTaken) {
+    try {
+      await window.encre.snapshots.create(
+        chapterId,
+        JSON.stringify(ed.getJSON()),
+        'avant relecture'
+      )
+      reviewSnapshotTaken = true
+    } catch (err) {
+      console.error('Échec du snapshot avant relecture', err)
+      ui.toast('Impossible de créer un point de restauration — application annulée.')
+      return 'stale'
+    }
+    // Re-vérifié après l'`await` ci-dessus, même garde que les autres ponts.
+    if (editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return 'stale'
+  }
+  // Relocalisé sur le document ACTUEL plutôt que de réutiliser le résultat du
+  // premier appel ci-dessus (avant le snapshot) : aucune autre source
+  // n'écrit dans l'éditeur pendant ce court aller-retour IPC, mais recalculer
+  // ici coûte peu et évite de dépendre de cette hypothèse.
+  const result = locateQuote(ed.getJSON() as DocNode, quote)
+  if (!result.found) return 'not-found'
+  const tr = ed.state.tr
+  if (replacement.length > 0) tr.insertText(replacement, result.from, result.to)
+  else tr.delete(result.from, result.to)
+  ed.view.dispatch(tr)
+  await store.saveContentFor(chapterId, JSON.stringify(ed.getJSON()), ed.getText())
+  ui.toast('Suggestion appliquée.')
+  return 'applied'
+}
+
 onMounted(() => {
   ai.registerEditor({
     insertDraft: insertDraftIntoEditor,
     restoreSnapshot: restoreSnapshotIntoEditor,
-    applyFormat: applyFormatIntoEditor
+    applyFormat: applyFormatIntoEditor,
+    applySuggestion: applySuggestionIntoEditor
   })
 })
 onBeforeUnmount(() => ai.unregisterEditor())
