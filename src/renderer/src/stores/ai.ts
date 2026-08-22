@@ -20,7 +20,6 @@ interface BufferedAiEvent {
   requestId: string
   kind: AiEventKind
   payload: AiEventPayload
-  ts: number
 }
 
 // CONTRAT D'ORDONNANCEMENT (voir src/main/api.ts et src/shared/ipc-contract.ts) :
@@ -34,20 +33,27 @@ interface BufferedAiEvent {
 // requestId est encore inconnu au moment de l'arrivée.
 let listenersRegistered = false
 
-// Petit tampon circulaire (taille ET âge bornés) : couvre à la fois
-// (a) un événement arrivé avant que startWrite() n'ait résolu — rejoué dès que
-// le requestId est connu (voir reconcile) — et (b) un événement tardif d'une
-// requête déjà abandonnée (annulée, remplacée par une nouvelle génération) —
-// jamais rejoué faute de correspondance, il vieillit simplement hors du
-// tampon. Module-scope (pas d'état du store) : un seul tampon partagé, cohérent
-// avec le fait que les écouteurs eux-mêmes sont posés une seule fois.
+// Petit tampon circulaire : couvre à la fois (a) un événement arrivé avant
+// que startWrite() n'ait résolu — rejoué dès que le requestId est connu (voir
+// reconcile) — et (b) un événement tardif d'une requête déjà abandonnée
+// (annulée, remplacée par une nouvelle génération) — jamais rejoué faute de
+// correspondance, il reste juste dans le tampon jusqu'à éviction par la
+// limite de taille. Module-scope (pas d'état du store) : un seul tampon
+// partagé, cohérent avec le fait que les écouteurs eux-mêmes sont posés une
+// seule fois.
+//
+// Bornage par COMPTE uniquement (FIFO, pas d'âge) : une purge par âge
+// pourrait faire expirer des chunks encore légitimement en attente si
+// l'invoke startWrite met exceptionnellement plus de quelques secondes à
+// résoudre (main bloqué) — ce serait alors exactement le chunk perdu que ce
+// tampon existe pour éviter. 100 événements représente une marge très large
+// par rapport à n'importe quelle fenêtre réaliste de résolution d'un invoke
+// (le flux ne produit typiquement qu'une poignée de chunks par seconde) :
+// aucune perte par le temps, seule la mémoire est bornée.
 const RING_LIMIT = 100
-const RING_MAX_AGE_MS = 5000
 let ring: BufferedAiEvent[] = []
 
 function pruneRing(): void {
-  const cutoff = Date.now() - RING_MAX_AGE_MS
-  while (ring.length > 0 && ring[0].ts < cutoff) ring.shift()
   while (ring.length > RING_LIMIT) ring.shift()
 }
 
@@ -89,11 +95,17 @@ export const useAiStore = defineStore('ai', {
         this.apply(kind, payload)
         return
       }
+      ring.push({ requestId: payload.requestId, kind, payload })
       pruneRing()
-      ring.push({ requestId: payload.requestId, kind, payload, ts: Date.now() })
     },
     apply(kind: AiEventKind, payload: AiEventPayload): void {
       if (kind === 'chunk') {
+        // Un chunk en retard (dupliqué, ou arrivé après coup pour une requête
+        // déjà finalisée) ne doit jamais rouvrir un brouillon déjà clos —
+        // sans cette garde, un tel chunk repasserait phase à 'streaming' et
+        // ferait réapparaître les boutons de stream sur un brouillon que
+        // l'auteur croit déjà terminé (ou en erreur).
+        if (this.phase === 'done' || this.phase === 'error') return
         this.phase = 'streaming'
         this.draft += payload.text ?? ''
       } else if (kind === 'done') {
