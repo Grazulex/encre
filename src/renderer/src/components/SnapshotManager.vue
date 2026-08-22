@@ -86,7 +86,10 @@ async function restore(snapshot: Snapshot): Promise<void> {
   }
   busyId.value = snapshot.id
   try {
-    const ok = await ai.restoreSnapshot(snapshot.id)
+    // Fix 3 (correctif review) : cible le chapitre DU SNAPSHOT, pas
+    // ai.chapterId (obsolète si le panneau IA n'est pas monté ou si l'auteur a
+    // changé de chapitre depuis) — voir stores/ai.ts.restoreSnapshot.
+    const ok = await ai.restoreSnapshot(snapshot.id, snapshot.chapterId)
     if (!ok) ui.toast('Restauration impossible pour ce chapitre.')
     await refresh()
   } catch (err) {

@@ -342,12 +342,22 @@ export const useAiStore = defineStore('ai', {
     },
     // Restauration d'un snapshot (Task 7) : ne touche jamais phase/draft — la
     // restauration est indépendante d'une génération IA en cours ou terminée.
-    // Récupère le JSON du snapshot ici (seul ce store connaît chapterId), puis
-    // délègue l'application (snapshot du contenu actuel + remplacement +
-    // sauvegarde) à EditorPane, seul à savoir parler à l'éditeur/au store livre.
-    async restoreSnapshot(id: number): Promise<boolean> {
-      if (!editorBridge || this.chapterId == null) return false
-      const chapterId = this.chapterId
+    // Récupère le JSON du snapshot ici, puis délègue l'application (snapshot
+    // du contenu actuel + remplacement + sauvegarde) à EditorPane, seul à
+    // savoir parler à l'éditeur/au store livre.
+    //
+    // Fix 3 (correctif review) : `chapterId` est désormais un paramètre —
+    // celui DU SNAPSHOT (snapshot.chapterId côté appelant), pas this.chapterId.
+    // this.chapterId n'est tenu à jour que pendant qu'EditorPane est monté
+    // (voir prepare() ci-dessus) ; SnapshotManager peut s'ouvrir depuis
+    // ClaudePanel sur un autre chapitre que celui affiché à l'instant dans
+    // l'éditeur, ou après un changement de chapitre panneau fermé — restaurer
+    // via this.chapterId visait alors le mauvais chapitre (ou aucun, si null),
+    // faisant systématiquement échouer la garde d'EditorPane. Les gardes
+    // post-await d'EditorPane (restoreSnapshotIntoEditor) restent le filet de
+    // sécurité final, inchangées.
+    async restoreSnapshot(id: number, chapterId: number): Promise<boolean> {
+      if (!editorBridge) return false
       const contentJson = await window.encre.snapshots.content(id)
       return editorBridge.restoreSnapshot(chapterId, contentJson)
     }
