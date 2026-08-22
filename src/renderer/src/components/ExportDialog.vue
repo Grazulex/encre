@@ -141,10 +141,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="export-overlay" @click.self="requestClose">
+  <Transition name="dialog" appear>
+  <div class="overlay" @click.self="requestClose">
     <div
       ref="cardEl"
-      class="export-card"
+      class="export-card dialog-card"
       role="dialog"
       aria-modal="true"
       aria-label="Exporter le livre"
@@ -212,35 +213,14 @@ onMounted(async () => {
       </footer>
     </div>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
-.export-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: color-mix(in srgb, var(--fg) 25%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
 .export-card {
   width: 460px;
   max-width: 100%;
   max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 24px 60px -20px color-mix(in srgb, var(--fg) 45%, transparent);
-  overflow: hidden;
-}
-.export-card:focus,
-.export-card:focus-visible {
-  outline: none;
 }
 
 header {
@@ -255,15 +235,6 @@ header {
 header h2 {
   font-size: 14px;
   font-weight: 600;
-}
-.kbd {
-  display: inline-block;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 10.5px;
-  color: var(--fg-muted);
-  background: var(--bg);
 }
 
 .body {
@@ -346,13 +317,6 @@ header h2 {
   align-items: center;
   justify-content: space-between;
 }
-.field-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--fg-muted);
-}
 .chapters-toggle {
   display: flex;
   gap: 8px;
@@ -411,27 +375,5 @@ footer {
 }
 .ghost {
   color: var(--fg-muted);
-}
-
-.spinner {
-  display: inline-block;
-  width: 11px;
-  height: 11px;
-  margin-right: 6px;
-  vertical-align: -1px;
-  border: 2px solid color-mix(in srgb, var(--bg) 40%, transparent);
-  border-top-color: var(--bg);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation-duration: 1.8s;
-  }
 }
 </style>

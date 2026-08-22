@@ -245,8 +245,9 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <div class="palette-overlay" @click.self="close">
-    <div class="palette-card" role="dialog" aria-modal="true" aria-label="Palette de commandes">
+  <Transition name="dialog" appear>
+  <div class="overlay" @click.self="close">
+    <div class="palette-card dialog-card" role="dialog" aria-modal="true" aria-label="Palette de commandes">
       <div class="input-row">
         <input
           ref="inputEl"
@@ -287,31 +288,14 @@ function onKeydown(event: KeyboardEvent): void {
       </div>
     </div>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
-.palette-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: color-mix(in srgb, var(--fg) 25%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
 .palette-card {
   width: 520px;
   max-width: 100%;
   max-height: 70vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 24px 60px -20px color-mix(in srgb, var(--fg) 45%, transparent);
-  overflow: hidden;
 }
 
 .input-row {
@@ -344,10 +328,10 @@ function onKeydown(event: KeyboardEvent): void {
 
 .group-label {
   padding: 10px 10px 4px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   color: var(--fg-muted);
 }
 
@@ -357,7 +341,7 @@ function onKeydown(event: KeyboardEvent): void {
   text-align: left;
   border: none;
   border-left: 2px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-s);
   padding: 8px 10px;
   font-size: 13px;
   color: var(--fg);
@@ -395,13 +379,6 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 .kbd {
-  display: inline-block;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
   margin-right: 2px;
-  font-size: 10.5px;
-  color: var(--fg-muted);
-  background: var(--bg);
 }
 </style>

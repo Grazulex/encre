@@ -182,6 +182,7 @@ onBeforeUnmount(flushAll)
 </script>
 
 <template>
+  <Transition name="dialog" appear>
   <div v-if="store.book" class="settings-overlay" @click.self="close">
     <div
       ref="dialogEl"
@@ -290,6 +291,7 @@ onBeforeUnmount(flushAll)
       </footer>
     </div>
   </div>
+  </Transition>
 </template>
 
 <style scoped>

@@ -136,6 +136,7 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
+  <Transition name="dialog" appear>
   <div class="snap-overlay" @click.self="close">
     <div
       ref="cardEl"
@@ -187,6 +188,7 @@ function onKeydown(event: KeyboardEvent): void {
       </div>
     </div>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -332,9 +334,5 @@ header h2 {
 .actions button.danger:hover:not(:disabled) {
   color: var(--danger);
   border-color: var(--danger);
-}
-.actions button:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 </style>

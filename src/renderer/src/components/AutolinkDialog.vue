@@ -98,10 +98,11 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <div class="autolink-overlay" @click.self="close">
+  <Transition name="dialog" appear>
+  <div class="overlay" @click.self="close">
     <div
       ref="dialogEl"
-      class="autolink-card"
+      class="autolink-card dialog-card"
       role="dialog"
       aria-modal="true"
       aria-label="Lier les entités"
@@ -138,35 +139,14 @@ function onKeydown(event: KeyboardEvent): void {
       </footer>
     </div>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
-.autolink-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: color-mix(in srgb, var(--fg) 25%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
 .autolink-card {
   width: 420px;
   max-width: 100%;
   max-height: 70vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 24px 60px -20px color-mix(in srgb, var(--fg) 45%, transparent);
-  overflow: hidden;
-}
-.autolink-card:focus,
-.autolink-card:focus-visible {
-  outline: none;
 }
 
 header {
@@ -198,10 +178,10 @@ header h2 {
   align-items: center;
   gap: 6px;
   padding: 6px 4px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   color: var(--fg-muted);
 }
 .group-label .name {
@@ -257,15 +237,5 @@ footer {
   padding: 12px 16px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
-}
-
-.kbd {
-  display: inline-block;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 10.5px;
-  color: var(--fg-muted);
-  background: var(--bg);
 }
 </style>
