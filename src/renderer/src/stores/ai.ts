@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { useEntitiesStore } from './entities'
+import { useBookStore } from './book'
+import { useTimelineStore } from './timeline'
 import type {
+  ChronoIssue,
   Entity,
   ExtractProposal,
   FormatConventions,
@@ -10,6 +13,7 @@ import { sanitizeFormatOutput } from '../../../shared/sanitizeFormatOutput'
 import { parseAiJson } from '../../../shared/aiJson'
 import { isValidReviewSuggestion } from '../../../shared/reviewSuggestion'
 import { filterExtractProposal } from '../../../shared/extractProposal'
+import { isValidChronoIssue, filterChronoIssueIds } from '../../../shared/chronoIssue'
 
 export type AiPhase = 'idle' | 'preparing' | 'streaming' | 'done' | 'error'
 export type AiModel = 'sonnet' | 'opus' | 'fable'
@@ -26,7 +30,12 @@ export type AiModel = 'sonnet' | 'opus' | 'fable'
 // 'extract' (Task 5, plan 3c) : extraction de fiches — le brouillon final est
 // UN SEUL objet JSON ExtractProposal (voir extractProposal ci-dessous), pas
 // un tableau, parsé une seule fois à phase==='done' comme 'review'.
-export type AiTask = 'write' | 'format' | 'review' | 'extract'
+// 'chrono' (Task 6, plan 3c) : vérification de chronologie NIVEAU LIVRE (pas
+// un chapitre précis) — le brouillon final est un tableau JSON de ChronoIssue
+// (voir chronoIssues ci-dessous), parsé une seule fois à phase==='done' comme
+// 'review'. Étant book-level, cette tâche a son propre suivi de péremption
+// (chronoBookId/setBook ci-dessous) indépendant de chapterId/prepare().
+export type AiTask = 'write' | 'format' | 'review' | 'extract' | 'chrono'
 
 // Task 6b : la sanitisation défensive de la sortie d'harmonisation (fences +
 // préambule/écho de titre) vit désormais dans shared/sanitizeFormatOutput.ts
@@ -182,6 +191,29 @@ export const useAiStore = defineStore('ai', {
     extractParseError: null as string | null,
     extractMalformedCount: 0,
     extractUnknownEntityCount: 0,
+    // Vérification de chronologie (Task 6, plan 3c) : peuplé UNIQUEMENT à
+    // phase==='done' avec task==='chrono' (voir apply() ci-dessous), à partir
+    // du parsing défensif de this.draft — MÊME principe que reviewSuggestions
+    // ci-dessus (tableau JSON), en DEUX temps comme extractProposal : d'abord
+    // la FORME de chaque incohérence (isValidChronoIssue,
+    // src/shared/chronoIssue.ts, comptée dans chronoMalformedCount), puis, sur
+    // les incohérences bien formées, filterChronoIssueIds retire les
+    // chapterIds/eventIds qui ne correspondent plus à aucun chapitre/
+    // événement du catalogue courant du livre (id inventé, ou chapitre/
+    // événement supprimé entre-temps) — comptés dans chronoUnknownIdCount,
+    // sans jamais faire disparaître l'incohérence elle-même (sa description
+    // reste exploitable même si un seul id qu'elle cite est caduc).
+    chronoIssues: [] as ChronoIssue[],
+    chronoParseError: null as string | null,
+    chronoMalformedCount: 0,
+    chronoUnknownIdCount: 0,
+    // Livre pour lequel la session de chronologie en cours/dernière a été
+    // lancée (setBook ci-dessous) — DISTINCT de `chapterId` (voir prepare()) :
+    // la chronologie est une tâche NIVEAU LIVRE, donc elle doit survivre à un
+    // changement de CHAPITRE (l'auteur navigue entre les chapitres du même
+    // livre sans perdre le rapport affiché), mais doit être purgée à un
+    // changement de LIVRE (un rapport pour un autre livre n'a plus sa place).
+    chronoBookId: null as number | null,
     // État d'ouverture du gestionnaire de snapshots (Task 2) : porté ici plutôt
     // que localement dans EditorPane (qui monte le composant) parce que le
     // déclencheur « Gérer les snapshots » vit dans ClaudePanel — même situation
@@ -282,6 +314,41 @@ export const useAiStore = defineStore('ai', {
             this.extractUnknownEntityCount = 0
             this.extractParseError = result.ok
               ? 'Réponse inattendue (pas un objet d’extraction).'
+              : result.error
+          }
+        } else if (this.task === 'chrono') {
+          // Parsing défensif de la sortie de chronologie (Task 6, plan 3c) —
+          // même moment (uniquement à 'done') et même raisonnement que
+          // 'review' ci-dessus : un tableau JSON, filtré élément par élément.
+          const result = parseAiJson<unknown[]>(this.draft)
+          if (result.ok && Array.isArray(result.value)) {
+            const valid = result.value.filter(isValidChronoIssue)
+            // Second filtre, RENDERER-ONLY (voir commentaire du state
+            // ci-dessus) : les chapterIds/eventIds de chaque incohérence sont
+            // recoupés avec le catalogue COURANT du livre — jamais l'incohérence
+            // entière écartée pour autant, seulement ses ids caducs retirés.
+            const knownChapterIds = new Set(useBookStore().chapters.map((c) => c.id))
+            const knownEventIds = new Set(useTimelineStore().events.map((e) => e.id))
+            let unknownIdCount = 0
+            const filtered = valid.map((issue) => {
+              const { issue: trimmed, removedIdCount } = filterChronoIssueIds(
+                issue,
+                knownChapterIds,
+                knownEventIds
+              )
+              unknownIdCount += removedIdCount
+              return trimmed
+            })
+            this.chronoIssues = filtered
+            this.chronoMalformedCount = result.value.length - valid.length
+            this.chronoUnknownIdCount = unknownIdCount
+            this.chronoParseError = null
+          } else {
+            this.chronoIssues = []
+            this.chronoMalformedCount = 0
+            this.chronoUnknownIdCount = 0
+            this.chronoParseError = result.ok
+              ? 'Réponse inattendue (pas un tableau d’incohérences).'
               : result.error
           }
         }
@@ -488,6 +555,66 @@ export const useAiStore = defineStore('ai', {
         this.phase = 'error'
         this.errorMessage =
           err instanceof Error ? err.message : "Échec du démarrage de l'extraction."
+      }
+    },
+    // Suivi de péremption NIVEAU LIVRE (Task 6, plan 3c) — à appeler à chaque
+    // ouverture de livre / changement de livre (ClaudePanel, watcher sur
+    // store.book?.id), PAS à chaque changement de chapitre : contrairement à
+    // prepare() ci-dessus (dont le isNewChapter réinitialise déjà phase/draft/
+    // review*/extract* à CHAQUE chapitre, y compris au sein d'un même livre),
+    // la chronologie est book-level et doit rester affichée quand l'auteur
+    // navigue simplement d'un chapitre à l'autre du MÊME livre. Elle n'est
+    // purgée qu'ici, quand chronoBookId change réellement — y compris pour un
+    // livre SANS AUCUN chapitre (prepare() n'est alors jamais appelé, faute de
+    // currentChapter, donc c'est le seul filet de sécurité contre un rapport
+    // d'un livre précédent resté affiché).
+    setBook(bookId: number): void {
+      const isNewBook = this.chronoBookId !== bookId
+      this.chronoBookId = bookId
+      if (!isNewBook) return
+      this.chronoIssues = []
+      this.chronoParseError = null
+      this.chronoMalformedCount = 0
+      this.chronoUnknownIdCount = 0
+      if (this.task === 'chrono') {
+        this.draft = ''
+        this.requestId = null
+        this.errorMessage = null
+        this.phase = 'idle'
+      }
+    },
+    // Lance une vérification de chronologie NIVEAU LIVRE (Task 6, plan 3c) —
+    // même squelette que startReview ci-dessus (draft/erreur/phase remis à
+    // zéro, requestId inconnu jusqu'à résolution de l'invoke, reconcile()
+    // rejoue les événements déjà tamponnés) ; task='chrono' pour que
+    // ClaudePanel/ChronoReport sachent comment traiter le flux, et pour que
+    // apply() ci-dessus sache parser this.draft en ChronoIssue[] une fois
+    // 'done'. Recharge la chronologie du livre AVANT de lancer la génération
+    // (plutôt que de supposer TimelineSection déjà visitée) : ChronoReport a
+    // besoin des événements courants (titres affichés dans ses puces, et
+    // filtrage des eventIds caducs dans apply() ci-dessus) même si l'auteur
+    // n'a jamais ouvert la section Chronologie de ce livre. Comme startReview,
+    // le modèle est un paramètre explicite (this.model, sélecteur partagé).
+    async startChrono(bookId: number): Promise<void> {
+      this.task = 'chrono'
+      this.draft = ''
+      this.errorMessage = null
+      this.phase = 'streaming'
+      this.requestId = null
+      this.chronoIssues = []
+      this.chronoParseError = null
+      this.chronoMalformedCount = 0
+      this.chronoUnknownIdCount = 0
+      try {
+        await useTimelineStore().load(bookId)
+        const requestId = await window.encre.ai.startChrono(bookId, { model: this.model })
+        this.requestId = requestId
+        this.reconcile(requestId)
+      } catch (err) {
+        console.error('Échec du démarrage de la vérification de chronologie', err)
+        this.phase = 'error'
+        this.errorMessage =
+          err instanceof Error ? err.message : 'Échec du démarrage de la vérification.'
       }
     },
     // Applique une suggestion de relecture par son index dans

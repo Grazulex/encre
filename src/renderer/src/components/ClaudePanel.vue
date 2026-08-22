@@ -14,21 +14,27 @@ import type { FormatConventions } from '../../../shared/types'
 import FormatDialog from './FormatDialog.vue'
 import ReviewPanel from './ReviewPanel.vue'
 import ExtractDialog from './ExtractDialog.vue'
+import ChronoReport from './ChronoReport.vue'
 
 const ai = useAiStore()
 const store = useBookStore()
 const ui = useUiStore()
 
-// Quatre onglets partageant le même panneau (Task 6, puis Task 3 et Task 5
-// plan 3c) : « Écriture » (préexistant), « Mise en forme » (harmonisation
-// typographique), « Relecture » (suggestions ciblées appliquées une à une)
-// et « Extraction » (fiches personnages/lieux proposées depuis le texte du
-// chapitre, validées dans ExtractDialog). Les quatre tâches partagent
-// phase/draft/requestId côté store (un seul flux à la fois — voir
-// stores/ai.ts, AiTask) ; cet onglet local ne pilote QUE l'affichage, jamais
-// la génération elle-même : basculer d'onglet pendant un stream ne l'annule
-// pas, il continue en arrière-plan (ai.task indique lequel).
-const activeTab = ref<'ecriture' | 'mise-en-forme' | 'relecture' | 'extraction'>('ecriture')
+// Cinq onglets partageant le même panneau (Task 6, puis Task 3, Task 5 et
+// Task 6 plan 3c) : « Écriture » (préexistant), « Mise en forme »
+// (harmonisation typographique), « Relecture » (suggestions ciblées
+// appliquées une à une), « Extraction » (fiches personnages/lieux proposées
+// depuis le texte du chapitre, validées dans ExtractDialog) et
+// « Chronologie » (vérification NIVEAU LIVRE — pas un chapitre précis — des
+// incohérences temporelles, affichées inline dans ChronoReport). Les cinq
+// tâches partagent phase/draft/requestId côté store (un seul flux à la
+// fois — voir stores/ai.ts, AiTask) ; cet onglet local ne pilote QUE
+// l'affichage, jamais la génération elle-même : basculer d'onglet pendant un
+// stream ne l'annule pas, il continue en arrière-plan (ai.task indique
+// lequel).
+const activeTab = ref<'ecriture' | 'mise-en-forme' | 'relecture' | 'extraction' | 'chronologie'>(
+  'ecriture'
+)
 
 // Conventions de mise en forme (Task 6) : « mémorisées en session » (brief) —
 // sessionStorage plutôt que le store Pinia (qui ne persiste rien lui-même) ou
@@ -121,6 +127,32 @@ function launchExtract(): void {
   ai.startExtract(chapter.id)
 }
 
+// Lance une vérification de chronologie (Task 6, plan 3c) — NIVEAU LIVRE :
+// contrairement à launchReview/launchExtract ci-dessus, ne dépend ni du
+// chapitre courant ni de son contenu (store.book, pas store.currentChapter) —
+// fonctionne quel que soit le chapitre ouvert dans ce livre, comme demandé
+// par le brief. Même garde `busy` que les autres lancements (un seul flux
+// partagé à la fois, voir stores/ai.ts).
+function launchChrono(): void {
+  const book = store.book
+  if (!book || busy.value) return
+  ai.startChrono(book.id)
+}
+
+// Suivi de péremption NIVEAU LIVRE du rapport de chronologie (voir
+// stores/ai.ts, setBook) : DISTINCT du watcher chapterId ci-dessous — la
+// chronologie doit survivre à un changement de chapitre au sein d'un même
+// livre, mais être purgée à un changement de LIVRE. { immediate: true }
+// couvre aussi bien l'ouverture initiale du panneau que le retour sur un
+// livre différent.
+watch(
+  () => store.book?.id,
+  (id) => {
+    if (id != null) ai.setBook(id)
+  },
+  { immediate: true }
+)
+
 // prepare() re-déclenché à chaque ouverture du panneau (montage — v-if côté
 // BookView) ET à chaque changement de chapitre tant qu'il reste ouvert
 // (même watcher, { immediate: true } couvrant les deux cas). prepare()
@@ -147,7 +179,8 @@ const TASK_LABELS: Record<AiTask, string> = {
   write: 'Écriture',
   format: 'Mise en forme',
   review: 'Relecture',
-  extract: 'Extraction'
+  extract: 'Extraction',
+  chrono: 'Chronologie'
 }
 
 // ai.hasSummary ne se rafraîchit qu'à prepare() (montage du panneau /
@@ -292,6 +325,16 @@ watch(
         @click="activeTab = 'extraction'"
       >
         Extraction
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="cp-tab"
+        :class="{ active: activeTab === 'chronologie' }"
+        :aria-selected="activeTab === 'chronologie'"
+        @click="activeTab = 'chronologie'"
+      >
+        Chronologie
       </button>
     </div>
 
@@ -498,7 +541,7 @@ watch(
         <ReviewPanel v-if="ai.task === 'review' && ai.phase === 'done'" />
       </template>
 
-      <template v-else>
+      <template v-else-if="activeTab === 'extraction'">
         <p v-if="busy && ai.task !== 'extract'" class="cp-warning">
           {{ TASK_LABELS[ai.task] }} en cours — patientez avant d'extraire des fiches de ce
           chapitre.
@@ -527,6 +570,43 @@ watch(
           </div>
           <p v-else class="cp-hint">Proposition affichée dans la boîte de dialogue.</p>
         </div>
+      </template>
+
+      <template v-else>
+        <div class="cp-model-row">
+          <span class="field-label">Modèle</span>
+          <select v-model="ai.model" class="cp-model-select" :disabled="busy">
+            <option value="sonnet">Sonnet — rapide</option>
+            <option value="opus">Opus — soigné</option>
+            <option value="fable">Fable — le plus littéraire</option>
+          </select>
+        </div>
+
+        <p v-if="busy && ai.task !== 'chrono'" class="cp-warning">
+          {{ TASK_LABELS[ai.task] }} en cours — patientez avant de vérifier ce livre.
+        </p>
+
+        <div
+          v-if="ai.phase === 'idle' || ai.phase === 'error' || (ai.phase === 'done' && ai.task === 'chrono')"
+          class="cp-launch"
+        >
+          <p v-if="ai.errorMessage && ai.task === 'chrono'" class="cp-error">{{ ai.errorMessage }}</p>
+          <button type="button" class="primary" :disabled="busy" @click="launchChrono">
+            {{ ai.task === 'chrono' && ai.phase === 'done' ? 'Vérifier à nouveau' : 'Vérifier le livre' }}
+          </button>
+        </div>
+
+        <div v-if="ai.task === 'chrono' && ai.phase === 'streaming'" class="cp-stream">
+          <span class="field-label">Analyse en cours…</span>
+          <div ref="streamEl" class="cp-stream-text">
+            {{ ai.draft }}<span class="cp-cursor">▍</span>
+          </div>
+          <div class="cp-stream-actions">
+            <button type="button" @click="ai.cancel()">Annuler</button>
+          </div>
+        </div>
+
+        <ChronoReport v-if="ai.task === 'chrono' && ai.phase === 'done'" />
       </template>
 
       <button type="button" class="cp-snapshots-link" @click="ai.openSnapshotManager()">
