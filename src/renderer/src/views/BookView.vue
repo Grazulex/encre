@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
 import { useShortcuts } from '../composables/useShortcuts'
@@ -56,6 +56,16 @@ useShortcuts([
   // futur plan (palette ⌘K, modales) ajoute un usage concurrent d'Échap.
   { combo: 'escape', handler: () => focusMode.value && (focusMode.value = false) }
 ])
+
+// Bascule du mode focus depuis la palette de commandes (⌘K). Même garde que
+// le raccourci ⌘⇧F ci-dessus : le mode focus n'a de sens qu'en section
+// chapitres, donc l'événement est un no-op ailleurs.
+function onPaletteFocusToggle(): void {
+  if (store.section !== 'chapitres') return
+  focusMode.value = !focusMode.value
+}
+onMounted(() => window.addEventListener('palette:focus-toggle', onPaletteFocusToggle))
+onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPaletteFocusToggle))
 </script>
 
 <template>
