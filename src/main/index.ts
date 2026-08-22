@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -22,6 +22,24 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  // Poignée de main de fermeture : on laisse le renderer flusher (sauvegardes en
+  // attente) avant de fermer réellement la fenêtre, avec un filet de 1,5 s pour
+  // ne jamais bloquer la fermeture si le renderer ne répond pas (ou pas encore,
+  // cf. Task 7).
+  let quitFlushDone = false
+  mainWindow.on('close', (event) => {
+    if (quitFlushDone) return
+    event.preventDefault()
+    const finish = (): void => {
+      if (quitFlushDone) return
+      quitFlushDone = true
+      mainWindow.close()
+    }
+    ipcMain.once('app:flush-done', finish)
+    mainWindow.webContents.send('app:request-flush')
+    setTimeout(finish, 1500)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

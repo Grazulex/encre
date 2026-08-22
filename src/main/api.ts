@@ -1,9 +1,17 @@
+import { copyFileSync, mkdirSync } from 'fs'
+import { join, extname } from 'path'
 import type { Db } from './db/connection'
 import type { EncreApi } from '../shared/ipc-contract'
 import * as books from './db/books'
 import * as chapters from './db/chapters'
+import * as entities from './db/entities'
+import * as outline from './db/outline'
+import * as timeline from './db/timeline'
 
-export function createApi(db: Db): EncreApi {
+// `app` (onFlushRequest/flushDone) est un domaine événementiel côté renderer
+// (ipcRenderer.on/send) : il n'a pas de contrepartie invoke côté main, donc
+// createApi n'implémente pas EncreApi['app'] — registerIpc ignore ce domaine.
+export function createApi(db: Db): Omit<EncreApi, 'app'> {
   return {
     books: {
       list: async () => books.listBooks(db),
@@ -20,7 +28,48 @@ export function createApi(db: Db): EncreApi {
       rename: async (id, title) => chapters.renameChapter(db, id, title),
       setStatus: async (id, status) => chapters.setChapterStatus(db, id, status),
       reorder: async (bookId, ids) => chapters.reorderChapters(db, bookId, ids),
-      remove: async (id) => chapters.deleteChapter(db, id)
+      remove: async (id) => chapters.deleteChapter(db, id),
+      saveSummary: async (id, summary) => chapters.saveChapterSummary(db, id, summary)
+    },
+    entities: {
+      listByBook: async (bookId, kind) => entities.listEntities(db, bookId, kind),
+      get: async (id) => entities.getEntity(db, id),
+      create: async (input) => entities.createEntity(db, input),
+      update: async (id, patch) => entities.updateEntity(db, id, patch),
+      remove: async (id) => entities.deleteEntity(db, id),
+      occurrences: async (id) => chapters.entityOccurrences(db, id),
+      inChapter: async (chapterId) => chapters.entitiesInChapter(db, chapterId),
+      pickImage: async (id) => {
+        const { app, dialog } = await import('electron')
+        const res = await dialog.showOpenDialog({
+          title: 'Choisir une image',
+          filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+          properties: ['openFile']
+        })
+        if (res.canceled || res.filePaths.length === 0) return entities.getEntity(db, id)
+        const mediaDir = join(app.getPath('userData'), 'media')
+        mkdirSync(mediaDir, { recursive: true })
+        const dest = join(mediaDir, `entity-${id}${extname(res.filePaths[0])}`)
+        copyFileSync(res.filePaths[0], dest)
+        return entities.updateEntity(db, id, { imagePath: dest })
+      }
+    },
+    outline: {
+      listByBook: async (bookId) => outline.listOutline(db, bookId),
+      create: async (bookId, chapterId) => outline.createOutlineNote(db, bookId, chapterId),
+      update: async (id, content) => outline.updateOutlineNote(db, id, content),
+      reorder: async (bookId, chapterId, orderedIds) =>
+        outline.reorderOutline(db, bookId, chapterId, orderedIds),
+      remove: async (id) => outline.deleteOutlineNote(db, id)
+    },
+    timeline: {
+      listByBook: async (bookId) => timeline.listTimeline(db, bookId),
+      create: async (bookId, title) => timeline.createTimelineEvent(db, bookId, title),
+      update: async (id, patch) => timeline.updateTimelineEvent(db, id, patch),
+      setLinks: async (id, chapterIds, entityIds) =>
+        timeline.setTimelineLinks(db, id, chapterIds, entityIds),
+      reorder: async (bookId, orderedIds) => timeline.reorderTimeline(db, bookId, orderedIds),
+      remove: async (id) => timeline.deleteTimelineEvent(db, id)
     }
   }
 }
