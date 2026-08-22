@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
 import { useEntitiesStore } from '../stores/entities'
+import { useAiStore } from '../stores/ai'
 import { useShortcuts } from '../composables/useShortcuts'
 import SectionNav from '../components/SectionNav.vue'
 import ChapterList from '../components/ChapterList.vue'
@@ -15,10 +16,12 @@ import TimelineSection from '../components/TimelineSection.vue'
 import EntityDrawer from '../components/EntityDrawer.vue'
 import BookSettingsPanel from '../components/BookSettingsPanel.vue'
 import ExportDialog from '../components/ExportDialog.vue'
+import ClaudePanel from '../components/ClaudePanel.vue'
 
 const props = defineProps<{ bookId: number }>()
 const store = useBookStore()
 const entitiesStore = useEntitiesStore()
+const ai = useAiStore()
 const router = useRouter()
 
 // Chargé ici (pas paresseusement à l'entrée de la section Personnages/Lieux) :
@@ -47,6 +50,23 @@ const settingsOpen = ref(false)
 // automatiquement après un export réussi (ExportDialog).
 const exportOpen = ref(false)
 
+// Panneau Claude (Task 6) : colonne droite ~360px, section chapitres
+// uniquement, avec un chapitre ouvert (sinon rien à préparer/écrire).
+const showAiPanel = computed(
+  () => store.section === 'chapitres' && ai.open && !!store.currentChapter
+)
+
+// Piloté en JS plutôt que par une classe .focus figeant deux valeurs : la
+// grille doit absorber une troisième piste (le panneau Claude) sans casser le
+// centrage de l'éditeur (max-width: 44rem dans EditorPane, indépendant de
+// cette grille). Le mode focus reste prioritaire (0 1fr) quel que soit l'état
+// du panneau — s'il était ouvert avant d'entrer en focus, il réapparaît à la
+// sortie du focus sans avoir eu besoin d'être refermé.
+const gridColumns = computed(() => {
+  if (focusMode.value) return '0 1fr'
+  return showAiPanel.value ? '260px 1fr 360px' : '260px 1fr'
+})
+
 function navigateChapter(direction: -1 | 1): void {
   if (store.section !== 'chapitres') return
   if (!store.currentChapter) return
@@ -69,6 +89,17 @@ useShortcuts([
   },
   { combo: 'meta+alt+arrowdown', handler: () => navigateChapter(1) },
   { combo: 'meta+alt+arrowup', handler: () => navigateChapter(-1) },
+  // Panneau Claude : même garde de section que le mode focus ci-dessus (n'a
+  // de sens qu'en section chapitres — seule section avec un éditeur/un
+  // chapitre à écrire). ⌘⇧K ne collisionne avec aucun autre raccourci de
+  // l'app (⌘K = palette de commandes, App.vue ; ⌘⇧F = focus, ci-dessus).
+  {
+    combo: 'meta+shift+k',
+    handler: () => {
+      if (store.section !== 'chapitres') return
+      ai.toggle()
+    }
+  },
   // No-op quand le mode focus est déjà inactif : Échap n'a alors aucun effet
   // sur l'état de l'app (rien n'est modifié). L'interface de useShortcuts
   // appelle toujours preventDefault() sur une combinaison reconnue, y compris
@@ -90,7 +121,7 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
 </script>
 
 <template>
-  <div class="book-space" :class="{ focus: focusMode }">
+  <div class="book-space" :class="{ focus: focusMode }" :style="{ gridTemplateColumns: gridColumns }">
     <aside :aria-hidden="focusMode" :inert="focusMode">
       <button class="back" type="button" @click="router.push('/')">
         <span class="chevron">←</span> Bibliothèque
@@ -140,6 +171,7 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
       <OutlineSection v-if="store.section === 'plan'" />
       <TimelineSection v-if="store.section === 'chronologie'" />
     </main>
+    <ClaudePanel v-if="showAiPanel" />
     <EntityDrawer />
     <BookSettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
     <ExportDialog v-if="exportOpen" @close="exportOpen = false" />
@@ -148,13 +180,15 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
 
 <style scoped>
 .book-space {
+  /* grid-template-columns est piloté par le style inline `gridColumns`
+     (script) : 260px 1fr en temps normal, +360px quand le panneau Claude est
+     ouvert (section chapitres uniquement), 0 1fr en mode focus — trois cas
+     qu'une simple classe .focus ne suffisait plus à exprimer. La transition
+     reste déclarée ici : elle s'applique aussi bien à un changement de valeur
+     posé via l'attribut style qu'à un changement de classe. */
   display: grid;
-  grid-template-columns: 260px 1fr;
   height: 100vh;
   transition: grid-template-columns 0.2s ease;
-}
-.book-space.focus {
-  grid-template-columns: 0 1fr;
 }
 .book-space.focus aside {
   opacity: 0;

@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
 import { useEntitiesStore } from '../stores/entities'
+import { useAiStore } from '../stores/ai'
 import { EntityMention } from '../editor/mention'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
@@ -15,6 +16,7 @@ import type { ChapterStatus, Entity, OutlineNote } from '../../../shared/types'
 const store = useBookStore()
 const ui = useUiStore()
 const entitiesStore = useEntitiesStore()
+const ai = useAiStore()
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingChapterId: number | null = null
@@ -502,6 +504,16 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       >
         Lier les entités
       </button>
+      <button
+        type="button"
+        class="claude-btn"
+        :class="{ active: ai.open }"
+        title="Assistant Claude (⌘⇧K)"
+        :aria-pressed="ai.open"
+        @click="ai.toggle()"
+      >
+        Assistant Claude
+      </button>
     </header>
 
     <div class="summary-zone">
@@ -691,6 +703,22 @@ header {
 .autolink-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.claude-btn {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  padding: 5px 12px;
+  color: var(--fg-muted);
+}
+.claude-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.claude-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .summary-zone {
