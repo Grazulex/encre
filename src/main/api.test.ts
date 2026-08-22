@@ -306,6 +306,59 @@ describe('createApi', () => {
     expect(messages[1].content).toBe(reviewJson)
   })
 
+  it('ai.startExtract rejette clairement un chapitre vide', async () => {
+    const db = openDb(':memory:')
+    const { emit } = makeEmitRecorder()
+    const api = createApi(db, { runner: makeFakeRunner('{"creations":[],"enrichissements":[]}'), emitAiEvent: emit })
+    const book = await api.books.create({ title: 'Chapitre vide' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+    await expect(
+      api.ai.startExtract(chapter.id)
+    ).rejects.toThrow('Ce chapitre est vide : rien à extraire.')
+  })
+
+  it("ai.startExtract sur un chapitre non vide génère un requestId, émet chunk/done et enregistre une session task='extract'", async () => {
+    const db = openDb(':memory:')
+    let resolveDone: (() => void) | undefined
+    const donePromise = new Promise<void>((resolve) => { resolveDone = resolve })
+    const events: { channel: string; payload: unknown }[] = []
+    const emit = (channel: string, payload: unknown): void => {
+      events.push({ channel, payload })
+      if (channel === 'ai:done' || channel === 'ai:error') resolveDone?.()
+    }
+    const extractJson = '{"creations":[{"kind":"character","name":"Solane","aliases":[],"description":"Amie de Mara."}],"enrichissements":[]}'
+    const api = createApi(db, { runner: makeFakeRunner(extractJson), emitAiEvent: emit })
+    const book = await api.books.create({ title: 'Avec contenu' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+    await api.chapters.saveContent(
+      chapter.id,
+      JSON.stringify({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Mara avança dans la rue.' }] }] }),
+      'Mara avança dans la rue.'
+    )
+
+    const requestId = await api.ai.startExtract(chapter.id)
+    expect(requestId).toBeTypeOf('string')
+
+    await donePromise
+
+    const chunkEvent = events.find((e) => e.channel === 'ai:chunk')
+    const doneEvent = events.find((e) => e.channel === 'ai:done')
+    expect(chunkEvent?.payload).toEqual({ requestId, text: extractJson })
+    expect(doneEvent?.payload).toEqual({ requestId, text: extractJson })
+
+    const session = db.prepare('SELECT * FROM ai_sessions WHERE chapter_id = ?').get(chapter.id) as any
+    expect(session).toBeTruthy()
+    expect(session.book_id).toBe(book.id)
+    expect(session.task).toBe('extract')
+    expect(session.model).toBe('sonnet')
+
+    const messages = db.prepare('SELECT role, content FROM ai_messages WHERE session_id = ? ORDER BY id').all(session.id) as any[]
+    expect(messages).toHaveLength(2)
+    expect(messages[0].role).toBe('user')
+    expect(messages[1].role).toBe('assistant')
+    expect(messages[1].content).toBe(extractJson)
+  })
+
   it('ai.formatToJson convertit du Markdown en JSON TipTap (aucune écriture en base)', async () => {
     const api = createApi(openDb(':memory:'))
     const { contentJson, contentText } = await api.ai.formatToJson('« Bonjour », dit-elle.')

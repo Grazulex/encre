@@ -14,6 +14,7 @@ import { createAiSession, addAiMessage } from './db/aiSessions'
 import { buildWritePrompt } from './ai/context'
 import { buildFormatPrompt } from './ai/formatContext'
 import { buildReviewPrompt } from './ai/reviewContext'
+import { buildExtractPrompt } from './ai/extractContext'
 import type { FormatConventions } from '../shared/types'
 import { AiService, type AiRunner } from './ai/service'
 import { createSdkRunner } from './ai/runner'
@@ -61,6 +62,12 @@ function defaultEmit(channel: string, payload: unknown): void {
 // startWrite. 'sonnet' suffit et reste le plus rapide des trois alias déjà
 // utilisés côté écriture (voir stores/ai.ts, AiModel).
 const FORMAT_MODEL = 'sonnet'
+
+// Modèle fixe pour ai.startExtract (Task 4, plan 3c) : même raisonnement que
+// FORMAT_MODEL ci-dessus — l'extraction de fiches est une tâche d'analyse
+// structurée (pas de créativité requise), pas de sélecteur de modèle exposé
+// au renderer pour cette action.
+const EXTRACT_MODEL = 'sonnet'
 
 export interface CreateApiOptions {
   runner?: AiRunner
@@ -421,6 +428,39 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
                 addAiMessage(db, sessionId, 'assistant', full)
               } catch (err) {
                 console.error('[ai.startReview] échec addAiMessage (assistant) :', err)
+              }
+            },
+            onError: (message) => emit('ai:error', { requestId, message })
+          }
+        )
+        return requestId
+      },
+      // Extraction de fiches (Task 4, plan 3c) : même mécanique que
+      // startWrite/startFormat/startReview ci-dessus (AiService.start, mêmes
+      // canaux ai:chunk/ai:done/ai:error, même contrat d'ordonnancement
+      // documenté plus haut), session enregistrée avec task='extract'. Comme
+      // startFormat, modèle fixe (EXTRACT_MODEL) : pas de choix de modèle
+      // exposé au renderer pour cette tâche d'analyse structurée.
+      startExtract: async (chapterId) => {
+        const chapter = chapters.getChapter(db, chapterId)
+        if (!chapter.contentText.trim()) {
+          throw new Error('Ce chapitre est vide : rien à extraire.')
+        }
+        const bundle = buildExtractPrompt(db, chapterId)
+        const sessionId = createAiSession(db, chapter.bookId, chapterId, 'extract', EXTRACT_MODEL)
+        addAiMessage(db, sessionId, 'user', bundle.prompt)
+
+        let requestId = ''
+        requestId = service.start(
+          { system: bundle.system, prompt: bundle.prompt, model: EXTRACT_MODEL },
+          {
+            onChunk: (text) => emit('ai:chunk', { requestId, text }),
+            onDone: (full) => {
+              emit('ai:done', { requestId, text: full })
+              try {
+                addAiMessage(db, sessionId, 'assistant', full)
+              } catch (err) {
+                console.error('[ai.startExtract] échec addAiMessage (assistant) :', err)
               }
             },
             onError: (message) => emit('ai:error', { requestId, message })

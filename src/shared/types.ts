@@ -76,6 +76,21 @@ export interface ReviewSuggestion {
   reason: string // explication courte en français
 }
 
+// Proposition d'extraction de fiches (Task 4, plan 3c) — LA forme de sortie
+// attendue de l'IA pour ai.startExtract (voir le system prompt dans
+// main/ai/extractContext.ts) : un objet unique, jamais un tableau.
+// `creations` : nouveaux personnages/lieux détectés dans le chapitre, absents
+// du catalogue existant (ni le nom ni un alias ne correspond, insensible à la
+// casse, à une entité déjà connue). `enrichissements` : compléments à des
+// fiches EXISTANTES — `entityId` doit être un id réellement fourni au modèle,
+// un id inventé ou inconnu est à écarter côté consommateur (Task 5, renderer).
+// `aliases`/`description`/`notes` y sont des AJOUTS, jamais une réécriture du
+// contenu déjà présent sur la fiche.
+export interface ExtractProposal {
+  creations: { kind: EntityKind; name: string; aliases: string[]; description: string }[]
+  enrichissements: { entityId: number; aliases?: string[]; description?: string; notes?: string }[]
+}
+
 export interface AiSessionRecord {
   id: number
   bookId: number
