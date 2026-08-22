@@ -86,6 +86,21 @@ describe('mdToTiptapJson', () => {
     expect(contentJson).not.toContain('ENCRE-PAGE-BREAK')
     expect(contentText).not.toContain('ENCRE-PAGE-BREAK')
   })
+
+  // Fix 4 (correctif review) : sans ligne vide autour du commentaire, le
+  // jeton placeholder finissait au milieu d'un unique paragraphe fusionné
+  // (espaces de collapse DOM compris) et fuyait tel quel dans le contenu.
+  it('convertit <!-- page-break --> collé au texte (sans ligne vide) en pageBreak, sans fuite du jeton', () => {
+    const { contentJson, contentText } = mdToTiptapJson('Avant.\n<!-- page-break -->\nAprès.')
+    const doc = JSON.parse(contentJson)
+    expect(doc.content).toEqual([
+      { type: 'paragraph', content: [{ type: 'text', text: 'Avant.' }] },
+      { type: 'pageBreak' },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Après.' }] }
+    ])
+    expect(contentJson).not.toContain('ENCRE-PAGE-BREAK')
+    expect(contentText).not.toContain('ENCRE-PAGE-BREAK')
+  })
 })
 
 // Fix 2 (correctif review) : le round-trip d'harmonisation (tiptapToMarkdown

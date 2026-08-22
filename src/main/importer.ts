@@ -25,25 +25,54 @@ const EXTENSIONS = [StarterKit.configure({ codeBlock: false, code: false })]
 // Collision acceptée : un auteur qui écrirait littéralement ce jeton en
 // pleine ligne verrait sa ligne convertie en saut de page — improbable, et
 // documenté ici plutôt que contourné par un jeton imprononçable.
+//
+// Fix 4 (correctif review) : quand le commentaire n'est PAS entouré de lignes
+// vides (ex. `Avant.\n<!-- page-break -->\nAprès.`), le remplacement par le
+// jeton ci-dessus a lieu AVANT marked — qui ne sait alors plus reconnaître un
+// bloc HTML capable d'interrompre un paragraphe (ce qu'un vrai `<!-- … -->`
+// aurait fait nativement) : les trois lignes fusionnent en un seul paragraphe
+// où le DOM (linkedom, via generateJSON) collapse en plus les retours à la
+// ligne en simples espaces. Le jeton se retrouve donc au milieu d'un texte,
+// jamais seul dans un paragraphe — le test d'égalité exacte ci-dessus ne le
+// détecte pas et le jeton fuit tel quel dans le contenu. La détection est
+// donc étendue : tout nœud `text` contenant le jeton, même entouré d'autre
+// texte, déclenche l'éclatement du paragraphe parent en (paragraphe avant?,
+// pageBreak, paragraphe après?).
 const PAGE_BREAK_TOKEN = '%%ENCRE-PAGE-BREAK%%'
 const PAGE_BREAK_COMMENT_LINE = /^[ \t]*<!--\s*page-break\s*-->[ \t]*$/gm
 
+// Éclate un paragraphe contenant le jeton (au milieu ou seul) en jusqu'à trois
+// nœuds : paragraphe(avant) si non vide, pageBreak, paragraphe(après) si non
+// vide. Ne fait rien si le paragraphe ne contient pas le jeton — renvoie alors
+// le nœud seul (inchangé) sous forme de tableau à un élément.
+function splitParagraphOnPageBreakToken(node: any): any[] {
+  if (node?.type !== 'paragraph' || !Array.isArray(node.content)) return [node]
+  const idx = node.content.findIndex(
+    (c: any) => c?.type === 'text' && typeof c.text === 'string' && c.text.includes(PAGE_BREAK_TOKEN)
+  )
+  if (idx === -1) return [node]
+  const target = node.content[idx]
+  const tokenPos = target.text.indexOf(PAGE_BREAK_TOKEN)
+  const beforeText = target.text.slice(0, tokenPos).replace(/\s+$/, '')
+  const afterText = target.text.slice(tokenPos + PAGE_BREAK_TOKEN.length).replace(/^\s+/, '')
+
+  const beforeContent = [...node.content.slice(0, idx), ...(beforeText ? [{ ...target, text: beforeText }] : [])]
+  const afterContent = [...(afterText ? [{ ...target, text: afterText }] : []), ...node.content.slice(idx + 1)]
+
+  const result: any[] = []
+  if (beforeContent.length) result.push({ type: 'paragraph', content: beforeContent })
+  result.push({ type: 'pageBreak' })
+  if (afterContent.length) result.push({ type: 'paragraph', content: afterContent })
+  return result
+}
+
 function convertPageBreakPlaceholders(node: any): any {
   if (!node || typeof node !== 'object') return node
-  let out = node
-  if (
-    out.type === 'paragraph' &&
-    Array.isArray(out.content) &&
-    out.content.length === 1 &&
-    out.content[0]?.type === 'text' &&
-    out.content[0]?.text === PAGE_BREAK_TOKEN
-  ) {
-    return { type: 'pageBreak' }
+  if (Array.isArray(node.content)) {
+    const content = node.content.map(convertPageBreakPlaceholders).flatMap(splitParagraphOnPageBreakToken)
+    return { ...node, content }
   }
-  if (Array.isArray(out.content)) {
-    out = { ...out, content: out.content.map(convertPageBreakPlaceholders) }
-  }
-  return out
+  return node
 }
 
 function titleFromFilename(file: string): string {
