@@ -87,7 +87,19 @@ export function buildFormatPrompt(db: Db, chapterId: number, conventions: Format
     lines.push('', PROPOSAL_BLOCK)
   }
 
-  lines.push('', '## CHAPITRE (Markdown)', '', markdown)
+  lines.push(
+    '',
+    'Format de sortie : réponds UNIQUEMENT par le texte du chapitre, en commençant ' +
+      "directement à sa toute première ligne. N'écris aucune phrase d'introduction " +
+      "ou d'annonce (par ex. « Voici le texte harmonisé : »), ne recopie pas le " +
+      'titre « ## CHAPITRE (Markdown) » ci-dessous (il ne sert qu\'à délimiter ce ' +
+      "prompt, il ne fait pas partie du chapitre), et n'ajoute aucun commentaire " +
+      'après le texte.',
+    '',
+    '## CHAPITRE (Markdown)',
+    '',
+    markdown
+  )
 
   return { system: SYSTEM_PROMPT, prompt: lines.join('\n') }
 }

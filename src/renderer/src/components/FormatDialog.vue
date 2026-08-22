@@ -13,12 +13,12 @@
 // Entièrement pilotée par le store ai (pas de props/emit) : « Abandonner »
 // appelle ai.reset() (aucune écriture, phase revient à 'idle' — le bouton
 // « Harmoniser ce chapitre » redevient disponible) ; « Appliquer » délègue à
-// ai.applyFormat() (fence-stripping, conversion IPC, snapshot 'avant
+// ai.applyFormat() (sanitisation défensive, conversion IPC, snapshot 'avant
 // harmonisation' + setContent + saveContentFor via EditorPane — voir
 // stores/ai.ts et EditorPane.applyFormatIntoEditor), qui reset() lui-même la
 // session en cas de succès (referme donc ce dialogue).
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { useAiStore, stripMarkdownFences } from '../stores/ai'
+import { useAiStore, sanitizeFormatOutput } from '../stores/ai'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
 
@@ -33,10 +33,13 @@ const applying = ref(false)
 // JSON TipTap — une comparaison texte contre texte est plus lisible que texte
 // contre Markdown pour vérifier qu'aucun mot n'a changé).
 const current = computed(() => store.currentChapter?.contentText ?? '')
-// « Après » : le Markdown renvoyé par le modèle, même défense fence-stripping
-// qu'à l'application réelle (ai.applyFormat) — l'auteur doit relire EXACTEMENT
-// ce qui sera converti et appliqué, jamais un texte encore enveloppé de ```.
-const proposed = computed(() => stripMarkdownFences(ai.draft))
+// « Après » : le Markdown renvoyé par le modèle, MÊME sanitisation
+// (sanitizeFormatOutput : fences + préambule/écho de titre) qu'à l'application
+// réelle (ai.applyFormat, sur le même ai.draft) — l'auteur doit relire
+// EXACTEMENT ce qui sera converti et appliqué, jamais un texte encore
+// enveloppé de ``` ou précédé d'une phrase d'annonce que l'application, elle,
+// aurait retirée (preview et résultat ne doivent jamais diverger).
+const proposed = computed(() => sanitizeFormatOutput(ai.draft))
 
 async function apply(): Promise<void> {
   if (applying.value) return

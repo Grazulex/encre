@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { useEntitiesStore } from './entities'
 import type { Entity, FormatConventions } from '../../../shared/types'
+import { sanitizeFormatOutput } from '../../../shared/sanitizeFormatOutput'
 
 export type AiPhase = 'idle' | 'preparing' | 'streaming' | 'done' | 'error'
 export type AiModel = 'sonnet' | 'opus' | 'fable'
@@ -13,20 +14,14 @@ export type AiModel = 'sonnet' | 'opus' | 'fable'
 // et comment router "Appliquer" une fois 'done'.
 export type AiTask = 'write' | 'format'
 
-// Défense (BINDING, controller precisions Task 6) : si le modèle enveloppe sa
-// sortie dans un bloc de code Markdown (```` ```markdown ... ``` ```` ou
-// ```` ``` ... ``` ````) malgré la consigne système, on l'ôte avant de
-// réimporter le texte via mdToTiptapJson — sinon les ``` seraient traités
-// comme un bloc de code littéral du récit (ou, pire, deviendraient un noeud
-// de type inconnu pour le schéma courant). Ne traite que le cas où
-// l'INTÉGRALITÉ du texte est enveloppée d'une seule paire de fences (le seul
-// cas réaliste ici : buildFormatPrompt demande "le Markdown complet du
-// chapitre, rien d'autre").
-export function stripMarkdownFences(markdown: string): string {
-  const trimmed = markdown.trim()
-  const match = trimmed.match(/^```[^\n]*\n([\s\S]*?)\n?```$/)
-  return match ? match[1] : trimmed
-}
+// Task 6b : la sanitisation défensive de la sortie d'harmonisation (fences +
+// préambule/écho de titre) vit désormais dans shared/sanitizeFormatOutput.ts
+// pour être testable sous vitest (config limitée à src/main + src/shared) et
+// pour garantir que FormatDialog (aperçu « Après ») et applyFormat
+// (application réelle) sanitisent IDENTIQUEMENT le même texte — voir
+// FormatDialog.vue. Réexporté ici pour ne pas casser d'éventuels
+// consommateurs déjà branchés sur ce module.
+export { stripMarkdownFences, sanitizeFormatOutput } from '../../../shared/sanitizeFormatOutput'
 
 export interface EntityChoice {
   entity: Entity
@@ -269,17 +264,20 @@ export const useAiStore = defineStore('ai', {
       }
     },
     // Applique le Markdown harmonisé (this.draft, phase 'done', task
-    // 'format') : fence-stripping défensif (voir stripMarkdownFences),
-    // conversion en JSON TipTap via IPC (mdToTiptapJson vit en main, seul
-    // process où @tiptap/html/server est utilisable), puis délégation à
-    // EditorPane (snapshot 'avant harmonisation' + setContent + saveContentFor,
-    // gardes post-await) via le pont — même découpage store/EditorPane que
-    // restoreSnapshot ci-dessus. `false` en retour laisse la session 'done'
-    // intacte pour réessayer ; reset() n'a lieu qu'après succès confirmé.
+    // 'format') : sanitisation défensive (voir sanitizeFormatOutput — mêmes
+    // fences + préambule/écho de titre que l'aperçu « Après » de
+    // FormatDialog, sur le MÊME texte this.draft, pour ne jamais diverger
+    // entre preview et résultat appliqué), conversion en JSON TipTap via IPC
+    // (mdToTiptapJson vit en main, seul process où @tiptap/html/server est
+    // utilisable), puis délégation à EditorPane (snapshot 'avant
+    // harmonisation' + setContent + saveContentFor, gardes post-await) via le
+    // pont — même découpage store/EditorPane que restoreSnapshot ci-dessus.
+    // `false` en retour laisse la session 'done' intacte pour réessayer ;
+    // reset() n'a lieu qu'après succès confirmé.
     async applyFormat(): Promise<boolean> {
       if (!editorBridge || this.chapterId == null) return false
       const chapterId = this.chapterId
-      const markdown = stripMarkdownFences(this.draft)
+      const markdown = sanitizeFormatOutput(this.draft)
       const { contentJson } = await window.encre.ai.formatToJson(markdown)
       const ok = await editorBridge.applyFormat(chapterId, contentJson)
       if (ok) this.reset()

@@ -53,6 +53,14 @@ describe('buildFormatPrompt', () => {
     expect(system).toMatch(/Markdown/)
   })
 
+  it("demande une sortie sans préambule ni recopie du titre CHAPITRE", () => {
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
+    const { prompt } = buildFormatPrompt(db, chapterId, conventions)
+
+    expect(prompt).toMatch(/directement à sa toute première ligne/i)
+    expect(prompt).toMatch(/ne recopie pas le titre/i)
+  })
+
   it('inclut le chapitre rendu en Markdown (avec *** et le commentaire page-break préservés)', () => {
     const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
