@@ -285,6 +285,13 @@ watch(
       </button>
     </header>
 
+    <!-- Fix round 1 (revue) : libellés VISIBLES volontairement courts (un mot,
+         sur une seule ligne chacun) pour que les 5 onglets tiennent dans les
+         360px du panneau sans être coupés ni passer sur plusieurs lignes —
+         Forme/Fiches/Chrono abrègent Mise en forme/Extraction/Chronologie.
+         Le nom complet reste disponible via aria-label/title (accessibilité,
+         infobulle) et TASK_LABELS ci-dessus garde les noms longs pour les
+         bandeaux « <tâche> en cours… », qui ont la place de rester clairs. -->
     <div class="cp-tabs" role="tablist" aria-label="Section de l'assistant">
       <button
         type="button"
@@ -292,6 +299,8 @@ watch(
         class="cp-tab"
         :class="{ active: activeTab === 'ecriture' }"
         :aria-selected="activeTab === 'ecriture'"
+        aria-label="Écriture"
+        title="Écriture"
         @click="activeTab = 'ecriture'"
       >
         Écriture
@@ -302,9 +311,11 @@ watch(
         class="cp-tab"
         :class="{ active: activeTab === 'mise-en-forme' }"
         :aria-selected="activeTab === 'mise-en-forme'"
+        aria-label="Mise en forme"
+        title="Mise en forme"
         @click="activeTab = 'mise-en-forme'"
       >
-        Mise en forme
+        Forme
       </button>
       <button
         type="button"
@@ -312,6 +323,8 @@ watch(
         class="cp-tab"
         :class="{ active: activeTab === 'relecture' }"
         :aria-selected="activeTab === 'relecture'"
+        aria-label="Relecture"
+        title="Relecture"
         @click="activeTab = 'relecture'"
       >
         Relecture
@@ -322,9 +335,11 @@ watch(
         class="cp-tab"
         :class="{ active: activeTab === 'extraction' }"
         :aria-selected="activeTab === 'extraction'"
+        aria-label="Extraction"
+        title="Extraction (fiches)"
         @click="activeTab = 'extraction'"
       >
-        Extraction
+        Fiches
       </button>
       <button
         type="button"
@@ -332,9 +347,11 @@ watch(
         class="cp-tab"
         :class="{ active: activeTab === 'chronologie' }"
         :aria-selected="activeTab === 'chronologie'"
+        aria-label="Chronologie"
+        title="Chronologie"
         @click="activeTab = 'chronologie'"
       >
-        Chronologie
+        Chrono
       </button>
     </div>
 
@@ -646,17 +663,31 @@ watch(
 
 .cp-tabs {
   display: flex;
-  gap: 4px;
-  padding: 8px 14px 0;
+  gap: 2px;
+  padding: 8px 10px 0;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  /* Fix round 1 (revue) : 5 onglets (Écriture/Forme/Relecture/Fiches/Chrono)
+     tiennent normalement sur une ligne dans les 360px du panneau grâce aux
+     libellés courts + à la typographie resserrée ci-dessous. overflow-x:auto
+     reste un filet de sécurité (jamais de clip ni de retour à la ligne) si
+     une police système plus large que prévu élargissait quand même la
+     rangée — barre de défilement masquée pour ne pas alourdir visuellement
+     une rangée d'onglets. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cp-tabs::-webkit-scrollbar {
+  display: none;
 }
 .cp-tab {
+  flex-shrink: 0;
+  white-space: nowrap;
   border: none;
   border-radius: 6px 6px 0 0;
-  padding: 7px 12px 9px;
+  padding: 6px 9px 8px;
   margin-bottom: -1px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--fg-muted);
   background: none;
