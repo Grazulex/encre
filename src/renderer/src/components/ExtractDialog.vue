@@ -235,6 +235,14 @@ async function applySelection(): Promise<void> {
       }
       try {
         await window.encre.entities.update(choice.entity.id, patch)
+        // Décoche IMMÉDIATEMENT tous les champs de CETTE fiche dès le succès
+        // (même raisonnement que la boucle de création ci-dessus, Task 5
+        // revue round 2) : mergeAliases dédoublonne, donc un alias déjà
+        // fusionné rejoué au réessai ne casse rien — mais appendText, lui,
+        // AJOUTE sans dédoublonner. Sans ce marquage, un réessai après
+        // l'échec d'UNE AUTRE fiche rejouerait cette fiche-ci (déjà
+        // enrichie avec succès) et dupliquerait sa description/ses notes.
+        for (const field of choice.fields) field.checked = false
         enrichedCount++
       } catch (err) {
         console.error('Échec de l’enrichissement de fiche depuis l’extraction', err)
