@@ -1,5 +1,5 @@
-import { copyFileSync, mkdirSync } from 'fs'
-import { join, extname } from 'path'
+import { copyFileSync, mkdirSync, unlinkSync } from 'fs'
+import { join, extname, dirname } from 'path'
 import type { Db } from './db/connection'
 import type { EncreApi } from '../shared/ipc-contract'
 import * as books from './db/books'
@@ -21,8 +21,13 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
       remove: async (id) => books.deleteBook(db, id),
       // Même mécanique que entities.pickImage ci-dessous : dialog, copie dans
       // media/, mise à jour de la colonne (ici cover_path), retour de l'objet
-      // complet. Fichier nommé par id (book-<id>.<ext>) pour rester stable
-      // d'un choix de couverture à l'autre (écrase l'ancien fichier).
+      // complet. Fichier nommé par id + horodatage
+      // (book-<id>-<timestamp>.<ext>) : remplacer une couverture par une autre
+      // image de même extension doit produire un chemin différent, sinon le
+      // <img src> du renderer ne change pas et l'ancienne image reste affichée
+      // (le navigateur ne revalide pas une URL identique). L'ancien fichier
+      // (s'il vit bien dans media/, pas un chemin arbitraire) est supprimé
+      // après la copie pour ne pas accumuler les couvertures remplacées.
       pickCover: async (id) => {
         const { app, dialog } = await import('electron')
         const res = await dialog.showOpenDialog({
@@ -33,9 +38,19 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
         if (res.canceled || res.filePaths.length === 0) return books.getBook(db, id)
         const mediaDir = join(app.getPath('userData'), 'media')
         mkdirSync(mediaDir, { recursive: true })
-        const dest = join(mediaDir, `book-${id}${extname(res.filePaths[0])}`)
+        const previous = books.getBook(db, id)
+        const dest = join(mediaDir, `book-${id}-${Date.now()}${extname(res.filePaths[0])}`)
         copyFileSync(res.filePaths[0], dest)
-        return books.updateBook(db, id, { coverPath: dest })
+        const updated = books.updateBook(db, id, { coverPath: dest })
+        if (previous.coverPath && dirname(previous.coverPath) === mediaDir) {
+          try {
+            unlinkSync(previous.coverPath)
+          } catch {
+            // Fichier déjà absent (déplacé/supprimé hors de l'app) : sans
+            // conséquence, la nouvelle couverture est déjà en place.
+          }
+        }
+        return updated
       }
     },
     chapters: {
@@ -57,6 +72,9 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
       remove: async (id) => entities.deleteEntity(db, id),
       occurrences: async (id) => chapters.entityOccurrences(db, id),
       inChapter: async (chapterId) => chapters.entitiesInChapter(db, chapterId),
+      // Fichier nommé par id + horodatage (voir books.pickCover ci-dessus pour
+      // le pourquoi : remplacer par une image de même extension doit changer
+      // le chemin, sinon le <img src> du renderer ne se rafraîchit pas).
       pickImage: async (id) => {
         const { app, dialog } = await import('electron')
         const res = await dialog.showOpenDialog({
@@ -67,9 +85,19 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
         if (res.canceled || res.filePaths.length === 0) return entities.getEntity(db, id)
         const mediaDir = join(app.getPath('userData'), 'media')
         mkdirSync(mediaDir, { recursive: true })
-        const dest = join(mediaDir, `entity-${id}${extname(res.filePaths[0])}`)
+        const previous = entities.getEntity(db, id)
+        const dest = join(mediaDir, `entity-${id}-${Date.now()}${extname(res.filePaths[0])}`)
         copyFileSync(res.filePaths[0], dest)
-        return entities.updateEntity(db, id, { imagePath: dest })
+        const updated = entities.updateEntity(db, id, { imagePath: dest })
+        if (previous.imagePath && dirname(previous.imagePath) === mediaDir) {
+          try {
+            unlinkSync(previous.imagePath)
+          } catch {
+            // Fichier déjà absent (déplacé/supprimé hors de l'app) : sans
+            // conséquence, la nouvelle image est déjà en place.
+          }
+        }
+        return updated
       }
     },
     outline: {

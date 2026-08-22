@@ -70,7 +70,17 @@ function onDrop(): void {
   store.reorder(store.events.map((e) => e.id))
   draggingId.value = null
 }
+// dragend se déclenche toujours après drop (draggingId déjà remis à null par
+// onDrop dans ce cas). S'il est encore non-null ici, c'est qu'aucun drop
+// n'a eu lieu (relâché hors des cartes, ou glisser annulé via Échap) :
+// l'ordre affiché (déjà réordonné en direct par onDragOver) diverge alors de
+// l'ordre persisté. On le rattrape en persistant l'ordre visible — résolution
+// la plus simple et cohérente pour l'utilisateur, qui a déjà vu ce nouvel
+// ordre pendant le survol.
 function onDragEnd(): void {
+  if (draggingId.value !== null) {
+    store.reorder(store.events.map((e) => e.id))
+  }
   draggingId.value = null
 }
 </script>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useBookStore } from '../stores/book'
+import { useUiStore } from '../stores/ui'
 import type { OutlineNote } from '../../../shared/types'
 
 const store = useBookStore()
+const ui = useUiStore()
 
 // Notes globales du livre uniquement (chapterId === null) : les notes de
 // plan par chapitre vivent dans la zone repliable de l'éditeur (EditorPane),
@@ -70,10 +72,15 @@ function onNoteInput(note: OutlineNote, event: Event): void {
 
 async function addNote(): Promise<void> {
   if (!store.book) return
-  const note = await window.encre.outline.create(store.book.id, null)
-  notes.value.push(note)
-  await nextTick()
-  textareaRefs.get(note.id)?.focus()
+  try {
+    const note = await window.encre.outline.create(store.book.id, null)
+    notes.value.push(note)
+    await nextTick()
+    textareaRefs.get(note.id)?.focus()
+  } catch (err) {
+    console.error('Échec de la création de la note', err)
+    ui.toast('Impossible de créer la note.')
+  }
 }
 
 async function moveNote(index: number, direction: -1 | 1): Promise<void> {

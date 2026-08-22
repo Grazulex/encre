@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import { useBookStore } from '../stores/book'
 import { mediaUrl } from '../utils/media'
@@ -47,25 +47,52 @@ function goToOccurrence(chapterId: number): void {
 // store.update() sous-jacent ne réconcilie que les clés du patch envoyé,
 // donc deux champs sauvegardés à des instants différents ne s'écrasent
 // jamais l'un l'autre (voir stores/entities.ts).
+//
+// Ce composant est RÉUTILISÉ d'une fiche à l'autre dans le motif
+// maître-détail (T15, pas de :key sur <EntityCard> dans EntitiesSection) :
+// taper dans un champ puis changer de sélection avant les 600 ms ne doit pas
+// faire persister le commit contre la NOUVELLE fiche. Chaque commit capture
+// donc l'id de la fiche (et la valeur à écrire) au moment de l'ARMEMENT du
+// minuteur, jamais relus à l'échéance — et pendingCommits garde une
+// référence à ce commit pour pouvoir le flusher immédiatement (changement de
+// fiche, démontage) plutôt que de le perdre en l'annulant.
 const timers: Partial<Record<string, ReturnType<typeof setTimeout>>> = {}
+const pendingCommits: Partial<Record<string, () => void>> = {}
 function debounced(field: string, run: () => void): void {
   clearTimeout(timers[field])
-  timers[field] = setTimeout(run, 600)
+  pendingCommits[field] = run
+  timers[field] = setTimeout(() => {
+    delete pendingCommits[field]
+    run()
+  }, 600)
+}
+function flushAll(): void {
+  for (const field of Object.keys(pendingCommits)) {
+    clearTimeout(timers[field])
+    pendingCommits[field]?.()
+    delete pendingCommits[field]
+  }
 }
 
 function onNameInput(): void {
+  const id = props.entityId
+  const value = entity.value?.name
   debounced('name', () => {
-    if (entity.value) store.update(props.entityId, { name: entity.value.name })
+    if (value !== undefined) store.update(id, { name: value })
   })
 }
 function onDescriptionInput(): void {
+  const id = props.entityId
+  const value = entity.value?.description
   debounced('description', () => {
-    if (entity.value) store.update(props.entityId, { description: entity.value.description })
+    if (value !== undefined) store.update(id, { description: value })
   })
 }
 function onNotesInput(): void {
+  const id = props.entityId
+  const value = entity.value?.notes
   debounced('notes', () => {
-    if (entity.value) store.update(props.entityId, { notes: entity.value.notes })
+    if (value !== undefined) store.update(id, { notes: value })
   })
 }
 
@@ -115,7 +142,22 @@ function seedAttrPairs(): void {
     : []
 }
 onMounted(seedAttrPairs)
-watch(() => props.entityId, seedAttrPairs)
+// flushAll() AVANT le reseed : un commit de champ texte encore en attente
+// (capturé contre l'ancien id, voir plus haut) doit partir, et un debounce
+// "attributes" encore en attente doit lire attrPairs.value tel qu'il est
+// ENCORE pour l'ancienne fiche — sans quoi il se déclencherait plus tard
+// contre les paires déjà reseedées de la nouvelle fiche.
+watch(
+  () => props.entityId,
+  () => {
+    flushAll()
+    seedAttrPairs()
+  }
+)
+// Démontage (grille personnages/lieux, ou fermeture du tiroir) : même
+// raisonnement que le watch ci-dessus, pour la dernière fiche affichée par
+// cette instance de carte.
+onBeforeUnmount(flushAll)
 
 // Deux lignes avec la même clé (une fois espaces de bord retirés) : côté
 // serveur, la dernière valeur écrase silencieusement l'autre — et sans
@@ -138,17 +180,25 @@ function isDuplicateKey(pair: AttrPair): boolean {
   return key.length > 0 && duplicateKeys.value.has(key)
 }
 
-function commitAttributesNow(): void {
-  clearTimeout(timers.attributes)
+function buildAttributesRecord(): Record<string, string> {
   const record: Record<string, string> = {}
   for (const pair of attrPairs.value) {
     const key = pair.key.trim()
     if (key) record[key] = pair.value
   }
-  store.update(props.entityId, { attributes: record })
+  return record
+}
+// Appelé directement (pas via le debounce) pour une action discrète
+// (suppression d'une ligne) : agit sur la fiche courante, donc props.entityId
+// lu ici est fiable.
+function commitAttributesNow(): void {
+  clearTimeout(timers.attributes)
+  delete pendingCommits.attributes
+  store.update(props.entityId, { attributes: buildAttributesRecord() })
 }
 function commitAttributesDebounced(): void {
-  debounced('attributes', commitAttributesNow)
+  const id = props.entityId
+  debounced('attributes', () => store.update(id, { attributes: buildAttributesRecord() }))
 }
 function addAttrPair(): void {
   attrPairs.value.push({ id: nextPairId++, key: '', value: '' })

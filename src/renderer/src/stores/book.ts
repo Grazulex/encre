@@ -149,7 +149,11 @@ export const useBookStore = defineStore('book', {
       }
       const meta = this.chapters.find((c) => c.id === id)
       if (meta) meta.wordCount = wordCount
-      if (this.currentChapter?.id === id) this.currentChapter.wordCount = wordCount
+      if (this.currentChapter?.id === id) {
+        this.currentChapter.wordCount = wordCount
+        this.currentChapter.contentJson = contentJson
+        this.currentChapter.contentText = contentText
+      }
       this.saveState = 'saved'
       this.saveError = null
     },

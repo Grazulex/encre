@@ -51,7 +51,7 @@ async function createEntity(): Promise<void> {
   const entity = await store.create(bookStore.book.id, props.kind, name)
   creating.value = false
   newName.value = ''
-  store.select(entity.id)
+  if (entity) store.select(entity.id)
 }
 
 function initials(name: string): string {

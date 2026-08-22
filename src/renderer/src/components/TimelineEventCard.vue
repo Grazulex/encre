@@ -64,10 +64,20 @@ function openEntityBadge(id: number): void {
 }
 
 // --- Sauvegarde debouncée par champ (600 ms, comme EntityCard) ----------
+// L'id de l'événement (props.eventId) est stable pour toute la durée de vie
+// de cette carte (:key="event.id" côté TimelineSection, pas de réutilisation
+// entre événements comme EntityCard/T15) : les commits ci-dessous peuvent
+// donc relire props.eventId/event.value directement à l'échéance, sans
+// capture — seul le FLUSH-vs-CANCEL au démontage change ici.
 const timers: Partial<Record<string, ReturnType<typeof setTimeout>>> = {}
+const pendingCommits: Partial<Record<string, () => void>> = {}
 function debounced(field: string, run: () => void): void {
   clearTimeout(timers[field])
-  timers[field] = setTimeout(run, 600)
+  pendingCommits[field] = run
+  timers[field] = setTimeout(() => {
+    delete pendingCommits[field]
+    run()
+  }, 600)
 }
 function onDateInput(): void {
   debounced('dateLabel', () => {
@@ -85,12 +95,20 @@ function onDescriptionInput(e: Event): void {
     if (event.value) store.update(props.eventId, { description: event.value.description })
   })
 }
-// Sans ce nettoyage, un debounce encore en attente (champ édité juste avant
-// suppression de l'événement) se déclencherait après le démontage de cette
-// carte avec l'id d'un événement qui n'existe plus côté renderer (leçon de
-// OutlineSection.removeNote / Task 13).
+// FLUSH (pas annulation) au démontage : un debounce encore en attente (champ
+// édité juste avant de changer de sélection/suppression de l'événement) doit
+// quand même persister, sous peine de perdre silencieusement la dernière
+// frappe (même bug que EntityCard/T15 avant son propre correctif). Les
+// closures ci-dessus gardent leur garde `if (event.value)` : si la carte est
+// démontée parce que l'événement a été SUPPRIMÉ entre-temps, event.value est
+// déjà null et le commit devient un no-op plutôt que d'écrire sur un id qui
+// n'existe plus côté serveur (leçon de OutlineSection.removeNote / Task 13).
 onBeforeUnmount(() => {
-  for (const t of Object.values(timers)) clearTimeout(t)
+  for (const field of Object.keys(pendingCommits)) {
+    clearTimeout(timers[field])
+    pendingCommits[field]?.()
+    delete pendingCommits[field]
+  }
 })
 
 // --- Auto-grow de la description ----------------------------------------

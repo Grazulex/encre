@@ -117,10 +117,11 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
     </aside>
     <main>
       <!-- v-show plutôt que v-if : l'éditeur ne doit pas être démonté quand on
-           quitte la section chapitres (ni le chapitre en cours ni le contenu
-           en mémoire du store ne sont resynchronisés à l'ouverture d'une
-           autre section — voir EditorPane), sous peine de perdre l'état de
-           frappe/scroll au retour. -->
+           quitte la section chapitres. store.currentChapter.contentJson est
+           tenu à jour par saveContentFor (book.ts) donc un v-if ne
+           réafficherait pas un contenu périmé — mais démonter l'éditeur
+           perdrait quand même l'état de frappe/scroll/focus en cours au
+           retour sur la section, d'où le choix de v-show. -->
       <div v-show="store.section === 'chapitres'" class="chapitres-view">
         <p v-if="!store.currentChapter" class="empty">Créez un chapitre pour commencer à écrire.</p>
         <template v-else>

@@ -238,6 +238,18 @@ function toggleSummary(): void {
   summaryOpen.value = !summaryOpen.value
   if (id != null) summaryOpenByChapter.set(id, summaryOpen.value)
 }
+// Recalcule la hauteur des notes dès que la zone s'ouvre : si les notes sont
+// arrivées pendant qu'elle était repliée (cas le plus courant — repliée par
+// défaut à chaque changement de chapitre), le filet de sécurité de
+// loadChapterNotes n'a rien pu corriger (voir regrowAllNotes). nextTick est
+// nécessaire même ici : v-if="summaryOpen" ne monte .summary-body qu'au
+// prochain rendu, les textareas n'existent pas encore dans noteRefs au
+// moment où ce watcher se déclenche.
+watch(summaryOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  regrowAllNotes()
+})
 
 // Notes de plan portant sur ce chapitre précis (outline.chapterId === id),
 // distinctes des notes globales du livre affichées par OutlineSection.
@@ -253,6 +265,22 @@ function setNoteRef(note: OutlineNote, el: Element | null): void {
   if (!(el instanceof HTMLTextAreaElement)) return
   noteRefs.set(note.id, el)
   autoGrowNote(el)
+}
+// Recalcule la hauteur de toutes les notes déjà montées : appelé après le
+// chargement des notes ET à l'ouverture de la zone repliable (voir les deux
+// call sites ci-dessous). Nécessaire dans les deux cas séparément — les notes
+// peuvent arriver alors que la zone « Résumé & notes » est encore repliée
+// (par défaut à chaque changement de chapitre), auquel cas .summary-body
+// n'existe pas dans le DOM : setNoteRef ne s'exécute jamais pour ces
+// textareas (aucune ref posée), et le filet de sécurité de loadChapterNotes
+// ne trouve donc rien à corriger dans noteRefs. La hauteur ne peut être
+// calculée correctement qu'une fois la zone dépliée et les textareas
+// réellement montées avec leur contenu.
+function regrowAllNotes(): void {
+  for (const note of chapterNotes.value) {
+    const el = noteRefs.get(note.id)
+    if (el) autoGrowNote(el)
+  }
 }
 
 async function loadChapterNotes(): Promise<void> {
@@ -277,10 +305,7 @@ async function loadChapterNotes(): Promise<void> {
     // de création — sans quoi une textarea peut rester coupée à 1 ligne au
     // retour sur ce chapitre si la zone résumé/notes était déjà dépliée.
     await nextTick()
-    for (const note of chapterNotes.value) {
-      const el = noteRefs.get(note.id)
-      if (el) autoGrowNote(el)
-    }
+    regrowAllNotes()
   } catch (err) {
     console.error('Échec du chargement des notes du chapitre', err)
   }
@@ -303,10 +328,15 @@ function onChapterNoteInput(note: OutlineNote, event: Event): void {
 async function addChapterNote(): Promise<void> {
   const chapter = store.currentChapter
   if (!chapter) return
-  const note = await window.encre.outline.create(chapter.bookId, chapter.id)
-  chapterNotes.value.push(note)
-  await nextTick()
-  noteRefs.get(note.id)?.focus()
+  try {
+    const note = await window.encre.outline.create(chapter.bookId, chapter.id)
+    chapterNotes.value.push(note)
+    await nextTick()
+    noteRefs.get(note.id)?.focus()
+  } catch (err) {
+    console.error('Échec de la création de la note', err)
+    ui.toast('Impossible de créer la note.')
+  }
 }
 
 async function moveChapterNote(index: number, direction: -1 | 1): Promise<void> {
@@ -723,6 +753,11 @@ header {
   min-width: 0;
   resize: none;
   overflow: hidden;
+  /* Filet de sécurité (Task 15 bis) : si autoGrowNote se déclenche jamais
+     (scrollHeight mesuré sur un élément pas encore connecté au DOM, cas
+     historique du bug « notes illisibles ») ou renvoie 0, min-height garantit
+     quand même ~2 lignes lisibles plutôt qu'une bande de quelques pixels. */
+  min-height: 54px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--fg) 4%, var(--bg));
   border-radius: 5px;
@@ -798,8 +833,17 @@ header {
      minimale des deux côtés même quand la fenêtre est plus étroite que
      max-width (voir header, même raisonnement). */
   padding: 0 24px;
+  /* Réserve la place de la scrollbar verticale AVANT qu'elle n'apparaisse :
+     sans ça, la scrollbar (quand le contenu dépasse la hauteur visible)
+     grignote la moitié droite de ce padding, ce qui décale visuellement
+     :deep(.tiptap) de quelques pixels vers la gauche par rapport à
+     header/.summary-zone/.chapter-chips (eux jamais rétrécis par une
+     scrollbar). stable garde une marge symétrique que la scrollbar soit
+     visible ou non, cohérent avec les autres gouttières de la colonne. */
+  scrollbar-gutter: stable;
 }
 .page :deep(.tiptap) {
+  width: 100%;
   max-width: 44rem;
   margin: 0 auto;
   padding: 12px 0 45vh;

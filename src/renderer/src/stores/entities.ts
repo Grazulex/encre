@@ -49,10 +49,16 @@ export const useEntitiesStore = defineStore('entities', {
     select(id: number | null) {
       this.selectedId = id
     },
-    async create(bookId: number, kind: EntityKind, name: string): Promise<Entity> {
-      const entity = await window.encre.entities.create({ bookId, kind, name })
-      this.entities.push(entity)
-      return entity
+    async create(bookId: number, kind: EntityKind, name: string): Promise<Entity | null> {
+      try {
+        const entity = await window.encre.entities.create({ bookId, kind, name })
+        this.entities.push(entity)
+        return entity
+      } catch (err) {
+        console.error('Échec de la création de la fiche', err)
+        useUiStore().toast('Impossible de créer la fiche.')
+        return null
+      }
     },
     // Optimiste : le champ édité est déjà visible à l'écran avant même l'appel
     // (EntityCard lit/écrit directement l'objet réactif du store). On ne

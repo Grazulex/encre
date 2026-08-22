@@ -303,10 +303,37 @@ header h2 {
   font-size: 13px;
   line-height: 1.5;
 }
+/* Même recette que .status-select (EditorPane, statut de chapitre) :
+   appearance: none retire le rendu natif (flèche + cadre blanc du système),
+   remplacé par un chevron CSS en dégradés — mais avec le gabarit bordure/fond
+   des autres champs de ce panneau (input/textarea, theme.css) plutôt que le
+   style pilule compacte de l'en-tête d'éditeur, pour rester cohérent avec
+   Titre/Auteur/Genre/Synopsis juste au-dessus. */
 .field select {
   -webkit-appearance: none;
   appearance: none;
+  font: inherit;
+  color: var(--fg);
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 30px 6px 10px;
   cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
+    linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) center,
+    calc(100% - 11px) center;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+  transition: border-color 0.15s ease;
+}
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 footer {
