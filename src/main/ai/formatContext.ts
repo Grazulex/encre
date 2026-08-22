@@ -64,9 +64,20 @@ const DIALOGUE_EXAMPLES: Record<FormatConventions['dialogue'], string> = {
   tirets: '— Bonjour, dit-il.'
 }
 
+// Fix 2 (correctif review, décision arbitrage) : au niveau Markdown, une VRAIE
+// liste (bulletList/orderedList — désormais sérialisée en syntaxe `- `/`1. `
+// standard, cf. tiptapToMarkdown dans src/shared/export.ts) doit TOUJOURS
+// rester en syntaxe Markdown standard, dans les deux conventions — c'est ce
+// qui préserve sa structure au round-trip d'harmonisation. Une ligne
+// « • élément » n'est PAS une liste Markdown : à la réimportation
+// (mdToTiptapJson), elle redevient un simple paragraphe de texte, structure
+// perdue. La convention tirets/puces porte donc sur le style d'une
+// ÉNUMÉRATION EN PROSE (pas une liste structurée) — ex. une numérotation
+// informelle glissée dans une phrase — jamais sur la syntaxe d'une vraie
+// liste Markdown, rappelée explicitement dans le prompt ci-dessous.
 const LISTE_EXAMPLES: Record<FormatConventions['listes'], string> = {
-  tirets: '- élément',
-  puces: '• élément'
+  tirets: '- élément (énumération en prose)',
+  puces: '• élément (énumération en prose)'
 }
 
 /** Construit le prompt d'harmonisation typographique pour un chapitre donné. */
@@ -112,7 +123,12 @@ export function buildFormatPrompt(db: Db, chapterId: number, conventions: Format
     'Conventions de mise en forme cibles pour ce chapitre :',
     '',
     `- Dialogue : ${conventions.dialogue} — exemple : ${DIALOGUE_EXAMPLES[conventions.dialogue]}`,
-    `- Listes : ${conventions.listes} — exemple : ${LISTE_EXAMPLES[conventions.listes]}`,
+    `- Listes (énumérations en prose, hors listes Markdown structurées) : ${conventions.listes} — ` +
+      `exemple : ${LISTE_EXAMPLES[conventions.listes]}`,
+    "- Important : une vraie liste Markdown déjà présente (lignes commençant par `- `, `* `, `+ ` ou " +
+      "`1. `, `2. `, …) reste TOUJOURS en syntaxe Markdown standard `- élément` / `1. élément`, dans les " +
+      'DEUX conventions ci-dessus — ne la convertis JAMAIS en paragraphes préfixés par un caractère de ' +
+      'puce ou de tiret, sous peine d\'en perdre la structure.',
     '- Séparateur de scène : une ligne contenant uniquement `***`.',
     '',
     'Marqueurs hétérogènes existants à convertir vers les conventions ci-dessus ' +

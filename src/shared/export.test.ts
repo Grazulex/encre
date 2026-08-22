@@ -41,7 +41,7 @@ describe('tiptapToXhtml', () => {
 })
 
 describe('bulletList (conteneur de blocs)', () => {
-  it('ne colle pas les listItem entre eux', () => {
+  it('sérialise en Markdown avec la syntaxe de liste réelle (Fix 2 : ex-défaut, aplatissait en paragraphes)', () => {
     const docWithList = JSON.stringify({
       type: 'doc',
       content: [
@@ -54,8 +54,96 @@ describe('bulletList (conteneur de blocs)', () => {
         }
       ]
     })
-    expect(tiptapToMarkdown(docWithList)).toBe('Item 1\n\nItem 2\n')
+    expect(tiptapToMarkdown(docWithList)).toBe('- Item 1\n- Item 2\n')
+    // XHTML inchangé (non régressé) : un <p> par item, sans balisage <ul>/<li> dédié.
     expect(tiptapToXhtml(docWithList)).toBe('<p>Item 1</p>\n<p>Item 2</p>\n')
+  })
+
+  it('item multi-paragraphes : continuation indentée de deux espaces', () => {
+    const docWithList = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'Premier paragraphe' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Second paragraphe' }] }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+    expect(tiptapToMarkdown(docWithList)).toBe('- Premier paragraphe\n  Second paragraphe\n')
+  })
+})
+
+describe('orderedList (conteneur de blocs)', () => {
+  it('sérialise en Markdown numéroté 1. 2. …', () => {
+    const docWithList = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'orderedList',
+          content: [
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Un' }] }] },
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Deux' }] }] }
+          ]
+        }
+      ]
+    })
+    expect(tiptapToMarkdown(docWithList)).toBe('1. Un\n2. Deux\n')
+  })
+
+  it('respecte l\'attribut start', () => {
+    const docWithList = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'orderedList',
+          attrs: { start: 5 },
+          content: [
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cinq' }] }] },
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Six' }] }] }
+          ]
+        }
+      ]
+    })
+    expect(tiptapToMarkdown(docWithList)).toBe('5. Cinq\n6. Six\n')
+  })
+})
+
+describe('blockquote (conteneur de blocs)', () => {
+  it('sérialise en Markdown avec la syntaxe de citation "> "', () => {
+    const docWithQuote = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Une citation.' }] }]
+        }
+      ]
+    })
+    expect(tiptapToMarkdown(docWithQuote)).toBe('> Une citation.\n')
+  })
+
+  it('citation multi-paragraphes : chaque ligne préfixée, ligne vide entre blocs = ">"', () => {
+    const docWithQuote = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Premier.' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'Second.' }] }
+          ]
+        }
+      ]
+    })
+    expect(tiptapToMarkdown(docWithQuote)).toBe('> Premier.\n>\n> Second.\n')
   })
 })
 
@@ -131,7 +219,9 @@ describe('hardBreak et nœuds inconnus', () => {
         }
       ]
     })
-    expect(tiptapToMarkdown(docWithBreak)).toBe('ligne un\nligne deux\n')
+    // Saut de ligne dur Markdown standard (Fix 2) : deux espaces avant le \n,
+    // sans quoi ProseMirror le réimporte comme un simple espace.
+    expect(tiptapToMarkdown(docWithBreak)).toBe('ligne un  \nligne deux\n')
     expect(tiptapToXhtml(docWithBreak)).toBe('<p>ligne un<br/>ligne deux</p>\n')
   })
 })

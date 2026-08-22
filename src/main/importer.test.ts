@@ -88,6 +88,102 @@ describe('mdToTiptapJson', () => {
   })
 })
 
+// Fix 2 (correctif review) : le round-trip d'harmonisation (tiptapToMarkdown
+// → Claude → mdToTiptapJson) ne doit plus aplatir listes/blockquote/hardBreak
+// en paragraphes/espaces bruts — sans quoi la structure disparaît
+// silencieusement à l'application.
+describe('round-trip export → import : listes, citation, hardBreak (Fix 2)', () => {
+  it('bulletList survit au round-trip (les deux items retrouvés)', () => {
+    const original = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 1' }] }] },
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 2' }] }] }
+          ]
+        }
+      ]
+    })
+    const md = tiptapToMarkdown(original)
+    const { contentJson } = mdToTiptapJson(md)
+    expect(contentJson).toContain('"bulletList"')
+    expect(contentJson).toContain('Item 1')
+    expect(contentJson).toContain('Item 2')
+  })
+
+  it('orderedList survit au round-trip (les deux items retrouvés)', () => {
+    const original = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'orderedList',
+          content: [
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Un' }] }] },
+            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Deux' }] }] }
+          ]
+        }
+      ]
+    })
+    const md = tiptapToMarkdown(original)
+    const { contentJson } = mdToTiptapJson(md)
+    expect(contentJson).toContain('"orderedList"')
+    expect(contentJson).toContain('Un')
+    expect(contentJson).toContain('Deux')
+  })
+
+  it('blockquote survit au round-trip', () => {
+    const original = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'blockquote',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Une citation.' }] }]
+        }
+      ]
+    })
+    const md = tiptapToMarkdown(original)
+    const { contentJson } = mdToTiptapJson(md)
+    expect(contentJson).toContain('"blockquote"')
+    expect(contentJson).toContain('Une citation.')
+  })
+
+  // Le pipeline (marked → HTML → generateJSON/linkedom) collapse les espaces
+  // du DOM : deux runs de texte distincts autour du hardBreak sont préservés
+  // au minimum (aucune fusion en un seul mot), même si la ré-obtention d'un
+  // nœud hardBreak strict dépend de marked — documenté ici plutôt que supposé.
+  it('hardBreak : au moins deux segments de texte distincts survivent au round-trip', () => {
+    const original = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'ligne un' },
+            { type: 'hardBreak' },
+            { type: 'text', text: 'ligne deux' }
+          ]
+        }
+      ]
+    })
+    const md = tiptapToMarkdown(original)
+    expect(md).toBe('ligne un  \nligne deux\n')
+    const { contentJson, contentText } = mdToTiptapJson(md)
+    const doc = JSON.parse(contentJson)
+    expect(doc.content).toContainEqual({
+      type: 'paragraph',
+      content: [
+        { type: 'text', text: 'ligne un' },
+        { type: 'hardBreak' },
+        { type: 'text', text: 'ligne deux' }
+      ]
+    })
+    expect(contentText).toContain('ligne un')
+    expect(contentText).toContain('ligne deux')
+  })
+})
+
 describe('round-trip export → import', () => {
   it('sceneBreak + pageBreak survivent à tiptapToMarkdown puis mdToTiptapJson', () => {
     const original = JSON.stringify({

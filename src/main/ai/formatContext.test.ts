@@ -134,11 +134,28 @@ describe('buildFormatPrompt', () => {
     expect(prompt).toContain('- élément')
   })
 
-  it('convention listes = puces : exemple avec puce (pas de "- élément")', () => {
+  it('convention listes = puces : exemple de puce présent, mais la syntaxe des vraies listes Markdown reste `- `', () => {
+    // Fix 2 (correctif review) : la convention puces/tirets ne concerne que le
+    // style d'une énumération en prose — une vraie liste Markdown doit
+    // toujours rester en syntaxe standard `- `, dans les deux conventions,
+    // pour ne pas perdre sa structure au round-trip d'harmonisation.
     const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'puces', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(prompt).toMatch(/•\s*élément/)
+    expect(prompt).toMatch(/liste Markdown/i)
+    expect(prompt).toContain('- élément')
+  })
+
+  it('conventions listes = tirets vs puces : prompts distincts (les deux conventions restent identifiables)', () => {
+    const base: Omit<FormatConventions, 'listes'> = {
+      dialogue: 'guillemets',
+      proposerSeparations: false
+    }
+    const tirets = buildFormatPrompt(db, chapterId, { ...base, listes: 'tirets' }).prompt
+    const puces = buildFormatPrompt(db, chapterId, { ...base, listes: 'puces' }).prompt
+
+    expect(tirets).not.toBe(puces)
   })
 
   it('liste les marqueurs de séparateur hétérogènes à convertir', () => {

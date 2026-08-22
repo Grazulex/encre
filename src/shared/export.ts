@@ -18,7 +18,11 @@ function renderInline(node: any): Inline {
     return { md, xhtml }
   }
   if (node.type === 'hardBreak') {
-    return { md: '\n', xhtml: '<br/>' }
+    // Saut de ligne dur Markdown standard : deux espaces en fin de ligne puis
+    // un retour à la ligne. Un simple '\n' (ex-comportement) est un saut
+    // « mou » que ProseMirror réimporte comme un simple espace, perdant le
+    // hardBreak au round-trip d'harmonisation (Fix 2, correctif review).
+    return { md: '  \n', xhtml: '<br/>' }
   }
   if (typeof node.text === 'string') {
     return { md: node.text, xhtml: escapeXml(node.text) }
@@ -41,6 +45,55 @@ const INLINE_TYPES = new Set(['text', 'mention', 'hardBreak'])
 // quoi bulletList/orderedList/listItem/blockquote collent leurs items
 // (ex. "Item 1Item 2").
 const BLOCK_CONTAINER_TYPES = new Set(['bulletList', 'orderedList', 'listItem', 'blockquote'])
+
+// Rendu Markdown d'un listItem : son premier bloc (généralement un paragraphe)
+// suit le marqueur (`- ` ou `1. `) sur la même ligne ; les blocs suivants du
+// même item (paragraphes additionnels, sous-liste) sont indentés de deux
+// espaces (Fix 2, correctif review — un seul niveau d'imbrication géré
+// simplement, comme demandé par la revue).
+function renderListItemMarkdown(item: any, marker: string): string {
+  const children = item.content ?? []
+  const blocks: { md: string; isNestedList: boolean }[] = []
+  for (const child of children) {
+    if (child?.type === 'bulletList' || child?.type === 'orderedList') {
+      blocks.push({ md: renderListMarkdown(child), isNestedList: true })
+    } else {
+      const rendered = renderBlockNode(child)
+      if (rendered.md !== '') blocks.push({ md: rendered.md, isNestedList: false })
+    }
+  }
+  if (blocks.length === 0) return marker.trimEnd()
+  const [first, ...rest] = blocks
+  const firstLine = first.isNestedList
+    ? [marker.trimEnd(), ...first.md.split('\n').map((l) => `  ${l}`)].join('\n')
+    : `${marker}${first.md}`
+  const restLines = rest.flatMap((b) =>
+    b.isNestedList ? b.md.split('\n').map((l) => `  ${l}`) : [`  ${b.md}`]
+  )
+  return [firstLine, ...restLines].join('\n')
+}
+
+function renderListMarkdown(node: any): string {
+  const ordered = node.type === 'orderedList'
+  const start = ordered ? Number(node.attrs?.start ?? node.attrs?.order ?? 1) : 1
+  const items = node.content ?? []
+  return items
+    .map((item: any, idx: number) => renderListItemMarkdown(item, ordered ? `${start + idx}. ` : '- '))
+    .join('\n')
+}
+
+// Rendu Markdown d'un blockquote : chaque ligne (y compris les lignes vides
+// entre blocs internes) préfixée par `> ` (`>` seul si vide) — syntaxe
+// Markdown standard de citation multi-paragraphes.
+function renderBlockquoteMarkdown(node: any): string {
+  const children = node.content ?? []
+  const rendered = children.map((c: any) => renderBlockNode(c).md).filter((md: string) => md !== '')
+  return rendered
+    .join('\n\n')
+    .split('\n')
+    .map((line) => (line === '' ? '>' : `> ${line}`))
+    .join('\n')
+}
 
 function renderBlockNode(node: any): { md: string; xhtml: string } {
   const children = node.content ?? []
@@ -67,12 +120,22 @@ function renderBlockNode(node: any): { md: string; xhtml: string } {
   const isInline = children.every((c: any) => INLINE_TYPES.has(c?.type))
   if (BLOCK_CONTAINER_TYPES.has(node.type) && !isInline) {
     const nested = children.map(renderBlockNode)
-    // Un <li>/<blockquote> n'a pas besoin d'un balisage sémantique dédié ici :
-    // ses paragraphes internes en <p> séparés suffisent à ne pas les coller.
-    return {
-      md: nested.map((b: { md: string }) => b.md).join('\n\n'),
-      xhtml: nested.map((b: { xhtml: string }) => b.xhtml).join('\n')
+    // XHTML : un <li>/<blockquote> n'a pas besoin d'un balisage sémantique
+    // dédié ici : ses paragraphes internes en <p> séparés suffisent à ne pas
+    // les coller (rendu XHTML inchangé par le Fix 2, cf. revue).
+    const xhtml = nested.map((b: { xhtml: string }) => b.xhtml).join('\n')
+    // Markdown : bulletList/orderedList/blockquote ont une syntaxe dédiée
+    // (Fix 2, correctif review) — listItem (rencontré seul, cas de repli)
+    // garde l'ancien aplatissement générique par paragraphes séparés.
+    let md: string
+    if (node.type === 'bulletList' || node.type === 'orderedList') {
+      md = renderListMarkdown(node)
+    } else if (node.type === 'blockquote') {
+      md = renderBlockquoteMarkdown(node)
+    } else {
+      md = nested.map((b: { md: string }) => b.md).join('\n\n')
     }
+    return { md, xhtml }
   }
   const inline = joinInline(children)
   return { md: inline.md, xhtml: `<p>${inline.xhtml}</p>` }
