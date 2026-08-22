@@ -90,10 +90,32 @@ function docText(node: any): string {
   return children.map(docText).join(allInline ? '' : '\n')
 }
 
-export function mdToTiptapJson(md: string): { contentJson: string; contentText: string } {
+export interface MdToTiptapJsonOptions {
+  // Retire le premier `# Titre` de tête (il devient le titre du CHAPITRE, pas
+  // son corps) — sémantique propre à l'IMPORT de fichier (scanChapterFiles/
+  // importChapterFromFile), où le fichier entier représente un chapitre requis
+  // fournir avec cet en-tête. Par défaut `true` pour ne rien changer aux
+  // appelants existants. Task 6 (harmonisation, correctif review) : le
+  // round-trip tiptapToMarkdown → Claude → mdToTiptapJson envoie le Markdown
+  // du CORPS d'un chapitre déjà existant, où un `# …` en tête n'est pas un
+  // titre de fichier mais un vrai titre H1 écrit par l'auteur DANS le texte
+  // (tiptapToMarkdown rend un nœud heading niveau 1 comme une ligne `# …`,
+  // src/shared/export.ts) : le stripping par défaut l'aurait silencieusement
+  // effacé à l'application (« Appliquer » aurait fait disparaître ce
+  // paragraphe), alors que FormatDialog l'affichait encore intact côté
+  // « Après » — divergence aperçu/persisté. `ai.formatToJson` passe donc
+  // `stripLeadingH1: false`.
+  stripLeadingH1?: boolean
+}
+
+export function mdToTiptapJson(
+  md: string,
+  options: MdToTiptapJsonOptions = {}
+): { contentJson: string; contentText: string } {
+  const stripLeadingH1 = options.stripLeadingH1 ?? true
   // retirer le premier # Titre (il devient le titre du chapitre, pas son corps)
   // — tolérant aux lignes vides/espaces qui précéderaient ce titre de tête.
-  const body = md.replace(/^\s*#\s+.+\n+/, '')
+  const body = stripLeadingH1 ? md.replace(/^\s*#\s+.+\n+/, '') : md
   // Placeholder pageBreak (voir commentaire plus haut) avant marked : le
   // commentaire HTML `<!-- page-break -->` ne survivrait pas au parseur.
   const withPlaceholder = body.replace(PAGE_BREAK_COMMENT_LINE, PAGE_BREAK_TOKEN)

@@ -43,6 +43,29 @@ describe('mdToTiptapJson', () => {
     expect(contentText.startsWith('Corps.')).toBe(true)
   })
 
+  // Correctif review (Task 6) : ai.formatToJson (round-trip harmonisation)
+  // appelle mdToTiptapJson avec stripLeadingH1: false — un `# …` en tête du
+  // Markdown envoyé par tiptapToMarkdown pour CE chemin est un vrai titre H1
+  // écrit par l'auteur dans le corps du chapitre, jamais un titre de fichier
+  // à retirer (contrairement à l'import, testé juste au-dessus). Sans ce
+  // garde, ce paragraphe disparaissait silencieusement à l'application, alors
+  // que FormatDialog l'affichait encore intact côté « Après ».
+  it('stripLeadingH1: false conserve le heading de tête (round-trip harmonisation)', () => {
+    const { contentJson, contentText } = mdToTiptapJson('# Un titre\n\nParagraphe…', {
+      stripLeadingH1: false
+    })
+    const doc = JSON.parse(contentJson)
+    expect(JSON.stringify(doc)).toContain('"heading"')
+    expect(contentText).toContain('Un titre')
+    expect(contentText).toContain('Paragraphe…')
+  })
+
+  it('stripLeadingH1 par défaut (import) retire toujours le titre de tête', () => {
+    const { contentJson, contentText } = mdToTiptapJson('# Un titre\n\nParagraphe…')
+    expect(JSON.stringify(JSON.parse(contentJson))).not.toContain('"heading"')
+    expect(contentText).not.toContain('Un titre')
+  })
+
   it('convertit *** (hr) en sceneBreak (via stripCodeBlocks, Task 3)', () => {
     const { contentJson } = mdToTiptapJson('Avant.\n\n***\n\nAprès.')
     const doc = JSON.parse(contentJson)

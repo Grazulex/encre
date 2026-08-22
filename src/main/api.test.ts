@@ -260,6 +260,21 @@ describe('createApi', () => {
     expect(JSON.parse(contentJson).type).toBe('doc')
   })
 
+  // Correctif review (Task 6, régression critique) : ai.formatToJson ne doit
+  // PAS retirer un `# …` de tête — contrairement à l'import de fichier, ce
+  // Markdown est le corps d'un chapitre déjà existant (round-trip
+  // tiptapToMarkdown → Claude), où un H1 de tête est un vrai titre écrit par
+  // l'auteur dans le texte. Voir importer.ts (MdToTiptapJsonOptions) et
+  // importer.test.ts pour la couverture de la fonction sous-jacente ; ce test
+  // vérifie le câblage réel de l'appel IPC (stripLeadingH1: false).
+  it("ai.formatToJson conserve un titre H1 de tête (round-trip harmonisation, pas de sémantique d'import)", async () => {
+    const api = createApi(openDb(':memory:'))
+    const { contentJson, contentText } = await api.ai.formatToJson('# Un titre\n\nParagraphe…')
+    expect(JSON.stringify(JSON.parse(contentJson))).toContain('"heading"')
+    expect(contentText).toContain('Un titre')
+    expect(contentText).toContain('Paragraphe…')
+  })
+
   it('snapshots.create/listByChapter/content passent par l\'API', async () => {
     const db = openDb(':memory:')
     const api = createApi(db)

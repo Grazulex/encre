@@ -397,7 +397,14 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
       // Conversion pure (aucune écriture en base) : réutilise mdToTiptapJson,
       // déjà éprouvé par l'import de fichier — jamais de logique de conversion
       // dupliquée entre import et application d'une harmonisation.
-      formatToJson: async (markdown) => mdToTiptapJson(markdown),
+      // `stripLeadingH1: false` (correctif review) : ce Markdown est le CORPS
+      // d'un chapitre déjà existant (round-trip tiptapToMarkdown → Claude),
+      // pas un fichier importé — un `# …` en tête est un vrai titre H1 écrit
+      // par l'auteur dans le texte, jamais un titre de fichier à retirer. Voir
+      // MdToTiptapJsonOptions dans importer.ts pour le détail de la régression
+      // évitée (l'H1 aurait disparu à l'application sans jamais apparaître
+      // manquant dans l'aperçu avant/après de FormatDialog).
+      formatToJson: async (markdown) => mdToTiptapJson(markdown, { stripLeadingH1: false }),
       cancel: async (requestId) => {
         service.cancel(requestId)
       }
