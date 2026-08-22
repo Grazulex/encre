@@ -34,6 +34,37 @@ const LISTE_EXAMPLES: Record<FormatConventions['listes'], string> = {
 }
 
 /** Construit le prompt d'harmonisation typographique pour un chapitre donné. */
+// Task 6b : sentence de préservation des marqueurs. En mode « proposition »,
+// l'interdiction de suppression/déplacement reste intacte, mais l'ajout de
+// marqueurs devient explicitement autorisé (voir bloc PRESERVE_BLOCK ci-dessous
+// pour le détail des règles) — d'où le renvoi "voir consignes ci-dessous" pour
+// ne pas dupliquer les règles à deux endroits du prompt.
+const PRESERVE_STRICT =
+  'Important : les lignes `***` (séparateur de scène) et `<!-- page-break -->' +
+  '` (saut de page) présentes dans le texte ci-dessous sont des marqueurs déjà ' +
+  'canoniques. Elles ne font pas partie du texte du récit : préserve-les ' +
+  'exactement telles quelles, sans les modifier, déplacer ni supprimer.'
+
+const PRESERVE_WITH_PROPOSALS =
+  'Important : les lignes `***` (séparateur de scène) et `<!-- page-break -->' +
+  '` (saut de page) présentes dans le texte ci-dessous sont des marqueurs déjà ' +
+  'canoniques. Elles ne font pas partie du texte du récit : préserve-les ' +
+  'exactement telles quelles — tu peux en AJOUTER (voir consignes ci-dessous), ' +
+  'jamais en retirer ni déplacer celles qui existent déjà.'
+
+const PROPOSAL_BLOCK = [
+  'Proposition de séparations manquantes (option activée) : en plus de la ' +
+    'préservation ci-dessus, tu PEUX ajouter de nouvelles lignes `***` aux ' +
+    'endroits du texte où une transition de scène manifeste se produit sans ' +
+    'séparateur (saut de temps, changement de lieu, changement de point de ' +
+    'vue). Plus rare et plus conservateur : tu peux aussi ajouter une ligne ' +
+    '`<!-- page-break -->` là où une rupture structurelle majeure est ' +
+    'évidente (début d\'une nouvelle partie). Règles strictes : ce ne sont que ' +
+    'des INSERTIONS de lignes de marqueur ; tu ne modifies, ne réécris ni ne ' +
+    'déplaces jamais une phrase du récit pour cela, et tu ne retires ni ne ' +
+    'déplaces jamais un marqueur déjà présent. Dans le doute, abstiens-toi.'
+].join('\n')
+
 export function buildFormatPrompt(db: Db, chapterId: number, conventions: FormatConventions): FormatPromptBundle {
   const chapter = getChapter(db, chapterId)
   const markdown = tiptapToMarkdown(chapter.contentJson)
@@ -49,15 +80,14 @@ export function buildFormatPrompt(db: Db, chapterId: number, conventions: Format
       '(dialogues, listes ou séparateurs selon leur usage) : `* * *`, `•`, `●`, `~~~`, ' +
       'lignes de tirets (`---`, `———`), et toute variante équivalente.',
     '',
-    'Important : les lignes `***` (séparateur de scène) et `<!-- page-break -->` ' +
-      '(saut de page) présentes dans le texte ci-dessous sont des marqueurs déjà ' +
-      'canoniques. Elles ne font pas partie du texte du récit : préserve-les ' +
-      'exactement telles quelles, sans les modifier, déplacer ni supprimer.',
-    '',
-    '## CHAPITRE (Markdown)',
-    '',
-    markdown
+    conventions.proposerSeparations ? PRESERVE_WITH_PROPOSALS : PRESERVE_STRICT
   ]
+
+  if (conventions.proposerSeparations) {
+    lines.push('', PROPOSAL_BLOCK)
+  }
+
+  lines.push('', '## CHAPITRE (Markdown)', '', markdown)
 
   return { system: SYSTEM_PROMPT, prompt: lines.join('\n') }
 }

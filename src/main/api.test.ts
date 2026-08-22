@@ -209,7 +209,7 @@ describe('createApi', () => {
     const book = await api.books.create({ title: 'Chapitre vide' })
     const chapter = await api.chapters.create(book.id, 'Ch. 1')
     await expect(
-      api.ai.startFormat(chapter.id, { dialogue: 'guillemets', listes: 'tirets' })
+      api.ai.startFormat(chapter.id, { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false })
     ).rejects.toThrow()
   })
 
@@ -231,7 +231,7 @@ describe('createApi', () => {
       '* Bonjour *, dit-elle.'
     )
 
-    const requestId = await api.ai.startFormat(chapter.id, { dialogue: 'guillemets', listes: 'tirets' })
+    const requestId = await api.ai.startFormat(chapter.id, { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false })
     expect(requestId).toBeTypeOf('string')
 
     await donePromise

@@ -44,7 +44,7 @@ beforeEach(() => {
 
 describe('buildFormatPrompt', () => {
   it('renvoie un system prompt de typographe qui interdit la réécriture', () => {
-    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets' }
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     const { system } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(system).toContain('typographe littéraire')
@@ -54,7 +54,7 @@ describe('buildFormatPrompt', () => {
   })
 
   it('inclut le chapitre rendu en Markdown (avec *** et le commentaire page-break préservés)', () => {
-    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets' }
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(prompt).toContain('***')
@@ -63,7 +63,7 @@ describe('buildFormatPrompt', () => {
   })
 
   it('demande explicitement de préserver *** et <!-- page-break --> tels quels', () => {
-    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets' }
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(prompt).toMatch(/préserv/i)
@@ -71,7 +71,7 @@ describe('buildFormatPrompt', () => {
   })
 
   it('convention dialogue = guillemets : exemple avec « … »', () => {
-    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets' }
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(prompt).toContain('« Bonjour »')
@@ -79,7 +79,7 @@ describe('buildFormatPrompt', () => {
   })
 
   it('convention dialogue = tirets : exemple avec — cadratin', () => {
-    const conventions: FormatConventions = { dialogue: 'tirets', listes: 'tirets' }
+    const conventions: FormatConventions = { dialogue: 'tirets', listes: 'tirets', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(prompt).toContain('— Bonjour, dit-il.')
@@ -87,21 +87,21 @@ describe('buildFormatPrompt', () => {
   })
 
   it('convention listes = tirets : exemple avec "- élément"', () => {
-    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets' }
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(prompt).toContain('- élément')
   })
 
   it('convention listes = puces : exemple avec puce (pas de "- élément")', () => {
-    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'puces' }
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'puces', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(prompt).toMatch(/•\s*élément/)
   })
 
   it('liste les marqueurs de séparateur hétérogènes à convertir', () => {
-    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets' }
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     const { prompt } = buildFormatPrompt(db, chapterId, conventions)
 
     expect(prompt).toContain('* * *')
@@ -111,7 +111,27 @@ describe('buildFormatPrompt', () => {
   })
 
   it('rejette une entrée sur un chapitre inexistant', () => {
-    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets' }
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
     expect(() => buildFormatPrompt(db, 9999, conventions)).toThrow()
+  })
+
+  it('proposerSeparations = false : pas d\'instruction de proposition, préservation stricte conservée', () => {
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: false }
+    const { prompt } = buildFormatPrompt(db, chapterId, conventions)
+
+    expect(prompt).not.toMatch(/propos/i)
+    expect(prompt).toMatch(/préserve-les\s+exactement/i)
+    expect(prompt).toMatch(/sans les modifier, déplacer ni supprimer/i)
+  })
+
+  it('proposerSeparations = true : instruction de proposition présente (transitions, jamais retirer)', () => {
+    const conventions: FormatConventions = { dialogue: 'guillemets', listes: 'tirets', proposerSeparations: true }
+    const { prompt } = buildFormatPrompt(db, chapterId, conventions)
+
+    expect(prompt).toMatch(/propos/i)
+    expect(prompt).toMatch(/transition/i)
+    expect(prompt).toMatch(/jamais\s+(en\s+)?retirer/i)
+    expect(prompt).toContain('***')
+    expect(prompt).toContain('<!-- page-break -->')
   })
 })

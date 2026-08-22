@@ -33,11 +33,24 @@ const activeTab = ref<'ecriture' | 'mise-en-forme'>('ecriture')
 // l'absence de valeur déjà enregistrée.
 const FORMAT_DIALOGUE_KEY = 'encre.format.dialogue'
 const FORMAT_LISTES_KEY = 'encre.format.listes'
+const FORMAT_SEPARATIONS_KEY = 'encre.format.separations'
 
 function readFormatPref<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
   try {
     const value = sessionStorage.getItem(key)
     return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+// Task 6b : « proposer des séparations manquantes » est un booléen, pas une
+// énumération — même idiome try/catch que readFormatPref ci-dessus, mais pas
+// de liste de valeurs autorisées à vérifier. Défaut décoché (brief).
+function readFormatBoolPref(key: string, fallback: boolean): boolean {
+  try {
+    const value = sessionStorage.getItem(key)
+    return value === null ? fallback : value === 'true'
   } catch {
     return fallback
   }
@@ -49,6 +62,7 @@ const dialogueConvention = ref<FormatConventions['dialogue']>(
 const listesConvention = ref<FormatConventions['listes']>(
   readFormatPref(FORMAT_LISTES_KEY, 'tirets', ['tirets', 'puces'] as const)
 )
+const proposerSeparations = ref<boolean>(readFormatBoolPref(FORMAT_SEPARATIONS_KEY, false))
 watch(dialogueConvention, (value) => {
   try {
     sessionStorage.setItem(FORMAT_DIALOGUE_KEY, value)
@@ -64,13 +78,21 @@ watch(listesConvention, (value) => {
     // idem
   }
 })
+watch(proposerSeparations, (value) => {
+  try {
+    sessionStorage.setItem(FORMAT_SEPARATIONS_KEY, String(value))
+  } catch {
+    // idem
+  }
+})
 
 function launchFormat(): void {
   const chapter = store.currentChapter
   if (!chapter || !hasContent.value || busy.value) return
   ai.startFormat(chapter.id, {
     dialogue: dialogueConvention.value,
-    listes: listesConvention.value
+    listes: listesConvention.value,
+    proposerSeparations: proposerSeparations.value
   })
 }
 
@@ -344,6 +366,13 @@ watch(
                 Puces •
               </label>
             </fieldset>
+            <label class="cp-checkbox">
+              <input v-model="proposerSeparations" type="checkbox" :disabled="busy" />
+              Proposer des séparations manquantes
+            </label>
+            <p class="cp-hint">
+              Suggère des *** aux transitions de scène — à valider dans l'aperçu.
+            </p>
           </div>
         </section>
 
@@ -536,6 +565,22 @@ watch(
 .cp-radio input {
   padding: 0;
   accent-color: var(--accent);
+}
+.cp-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px;
+  font-size: 12.5px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.cp-checkbox input {
+  padding: 0;
+  accent-color: var(--accent);
+}
+.cp-checkbox input:disabled {
+  cursor: default;
 }
 
 .cp-entities {

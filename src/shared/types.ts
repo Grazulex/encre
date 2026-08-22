@@ -59,6 +59,9 @@ export type AiRole = 'user' | 'assistant'
 export interface FormatConventions {
   dialogue: 'guillemets' | 'tirets' // « … » vs — cadratins
   listes: 'tirets' | 'puces'
+  // Task 6b : si vrai, le prompt d'harmonisation peut en plus PROPOSER des
+  // séparateurs de scène/page manquants (jamais en retirer ni déplacer).
+  proposerSeparations: boolean
 }
 
 export interface AiSessionRecord {
