@@ -150,9 +150,11 @@ h2 {
   margin-right: 2px;
 }
 
+/* .hint : classe globale (theme.css, font-size 12px) pour la taille — seuls
+   line-height/max-width/margin varient réellement ici (correctif M4, vague
+   finale 3c ; l'ancien font-size local 12.5px n'était qu'une ombre du
+   global, jamais une vraie variance). */
 .hint {
-  color: var(--fg-muted);
-  font-size: 12.5px;
   line-height: 1.5;
   max-width: 46rem;
   margin: 10px 0 20px;

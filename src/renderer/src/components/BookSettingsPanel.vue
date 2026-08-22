@@ -336,15 +336,6 @@ header h2 {
   font-size: 14px;
   font-weight: 600;
 }
-.kbd {
-  display: inline-block;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 10.5px;
-  color: var(--fg-muted);
-  background: var(--bg);
-}
 
 .body {
   overflow-y: auto;
@@ -409,13 +400,6 @@ header h2 {
 .field-pair .field {
   flex: 1;
   min-width: 0;
-}
-.field-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--fg-muted);
 }
 .field textarea {
   resize: vertical;

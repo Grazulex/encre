@@ -395,14 +395,13 @@ header h2 {
   font-style: italic;
   color: var(--fg-muted);
 }
+/* .kbd : classe globale (theme.css) pour tout le reste — seul flex-shrink
+   diffère ici (correctif M4, vague finale 3c) : le header de ce composant a
+   un <div> sibling (titre + .reassurance) qui peut grandir sur deux lignes,
+   et sans flex-shrink: 0 la puce « Échap » se ferait compresser par ce
+   voisin dans la rangée flex du header — les autres header/kbd de l'app
+   (BookSettingsPanel, ExtractDialog…) n'ont qu'un <h2> à côté, jamais ce cas. */
 .kbd {
-  display: inline-block;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 10.5px;
-  color: var(--fg-muted);
-  background: var(--bg);
   flex-shrink: 0;
 }
 
@@ -454,11 +453,6 @@ header h2 {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.hint {
-  font-size: 12.5px;
-  color: var(--fg-muted);
 }
 
 .folder-row {
@@ -519,13 +513,6 @@ header h2 {
   display: flex;
   flex-direction: column;
   gap: 5px;
-}
-.field-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--fg-muted);
 }
 
 .order-list li {
