@@ -19,25 +19,39 @@
 //
 // Le texte de repérage est la concaténation BRUTE (sans séparateur ajouté)
 // des nœuds texte du document, dans l'ordre de parcours : un nœud atomique
-// n'apporte aucun caractère, donc une citation qui engloberait un tel nœud
-// (ex. traverse une mention @Personnage) ne pourra JAMAIS être retrouvée —
-// comportement documenté et accepté par le brief de la Task 3, pas un bug.
+// n'apporte aucun caractère. Ça n'empêche PAS forcément une citation de le
+// « traverser » dans le texte concaténé (les runs de part et d'autre restent
+// simplement collés bord à bord) — seul un nœud explicitement traité comme
+// une FRONTIÈRE DE BLOC (voir GARDE STRUCTURELLE ci-dessous : les blocs de
+// premier niveau, et hardBreak — correctif M3, vague finale 3c) fait rejeter
+// une telle occurrence. Les autres nœuds atomiques inline (mention, image…)
+// ne sont PAS traités comme des frontières : une citation qui les
+// traverserait resterait en pratique introuvable la plupart du temps (leurs
+// attributs, ex. le nom d'une mention, n'apparaissent jamais dans le texte
+// concaténé), mais ce n'est qu'une conséquence indirecte de l'absence de
+// texte, pas une garantie structurelle comme pour hardBreak/blocs.
 //
-// GARDE STRUCTURELLE (correctif review) : cette concaténation SANS séparateur
-// signifie que la fin du texte d'un bloc de premier niveau (paragraphe...)
-// est immédiatement suivie, dans le texte de repérage, par le début du texte
-// du bloc SUIVANT — un `indexOf` naïf peut donc « trouver » une citation dont
-// la moitié vient de la fin d'un paragraphe et l'autre moitié du début du
-// suivant (ex. paragraphe A finissant par « …hi », paragraphe B commençant
-// par « ok… », citation "hiok"). Une suggestion de relecture porte TOUJOURS
-// sur un extrait d'un seul passage continu (jamais une réécriture à cheval
-// sur deux paragraphes) : chaque run de texte est donc étiqueté avec l'index
-// de son bloc de premier niveau (`block`, l'index de l'enfant direct de
-// `doc`), et `locateQuote` rejette explicitement toute occurrence dont le
-// premier et le dernier caractère matché ne partagent pas le même `block`
-// (en cherchant l'occurrence suivante à la place) — rendu « not-found »
-// plutôt qu'une correspondance fautive, jamais une fusion silencieuse de
-// deux paragraphes par la transaction de remplacement.
+// GARDE STRUCTURELLE (correctif review, étendu par le correctif M3) : cette
+// concaténation SANS séparateur signifie que la fin du texte d'un passage
+// (bloc de premier niveau, ou ligne séparée par un hardBreak À L'INTÉRIEUR
+// d'un même bloc) est immédiatement suivie, dans le texte de repérage, par le
+// début du texte du passage SUIVANT — un `indexOf` naïf peut donc « trouver »
+// une citation dont la moitié vient de la fin d'un passage et l'autre moitié
+// du début du suivant (ex. paragraphe A finissant par « …hi », paragraphe B
+// commençant par « ok… », citation "hiok" ; ou une ligne finissant par
+// « ligne1 » suivie d'un hardBreak puis « ligne2 », citation "ligne1ligne2"
+// qui omet le \n implicite du hardBreak — l'appliquer supprimerait
+// silencieusement le saut de ligne). Une suggestion de relecture porte
+// TOUJOURS sur un extrait d'un seul passage continu (jamais une réécriture à
+// cheval sur deux paragraphes NI sur un saut de ligne dur) : chaque run de
+// texte est donc étiqueté avec un index de `block` qui avance aussi bien à
+// chaque bloc de premier niveau qu'à chaque hardBreak rencontré pendant le
+// parcours (voir walkNode/collectTextRuns), et `locateQuote` rejette
+// explicitement toute occurrence dont le premier et le dernier caractère
+// matché ne partagent pas le même `block` (en cherchant l'occurrence
+// suivante à la place) — rendu « not-found » plutôt qu'une correspondance
+// fautive, jamais une fusion silencieuse de deux passages par la transaction
+// de remplacement.
 
 export interface DocNode {
   type?: string
@@ -64,40 +78,63 @@ function nodeSize(node: DocNode): number {
   return 1
 }
 
+// Compteur de bloc MUTABLE et PARTAGÉ sur tout le parcours d'un document
+// (correctif M3, vague finale 3c) : contrairement à un simple `block: number`
+// figé par l'appelant, `blockRef.value` peut être incrémenté PENDANT le
+// parcours (voir walkNode ci-dessous, cas hardBreak) — une même référence est
+// donc transmise à tous les appels récursifs pour qu'une frontière franchie
+// au milieu d'un bloc de premier niveau soit visible par le reste du parcours
+// de ce bloc, sans avoir à faire remonter une valeur par retour de fonction.
+interface BlockRef {
+  value: number
+}
+
 // Parcourt un nœud et ses descendants (profondeur quelconque — listes,
 // citations imbriquées…), collectant chaque nœud texte rencontré avec sa
-// position PM de départ et le `block` de premier niveau transmis depuis
-// l'appelant (collectTextRuns ci-dessous) — inchangé quelle que soit la
-// profondeur, un nœud imbriqué appartient toujours au même bloc de premier
-// niveau que son ancêtre direct de `doc`.
-function walkNode(node: DocNode, pos: number, block: number, runs: TextRun[]): void {
+// position PM de départ et le `block` COURANT (blockRef.value au moment du
+// passage, pas figé pour tout le sous-arbre — voir hardBreak ci-dessous).
+function walkNode(node: DocNode, pos: number, blockRef: BlockRef, runs: TextRun[]): void {
   if (typeof node.text === 'string') {
-    if (node.text.length > 0) runs.push({ text: node.text, pos, block })
+    if (node.text.length > 0) runs.push({ text: node.text, pos, block: blockRef.value })
     return
   }
   if (Array.isArray(node.content)) {
     let childPos = pos + 1 // franchit le jeton d'ouverture de ce nœud
     for (const child of node.content) {
-      walkNode(child, childPos, block, runs)
+      walkNode(child, childPos, blockRef, runs)
       childPos += nodeSize(child)
     }
+    return
   }
   // Nœud atomique (ni texte ni content) : aucune contribution au texte de
   // repérage, seule sa taille (1, via nodeSize côté appelant) fait avancer
-  // la position du frère suivant.
+  // la position du frère suivant. hardBreak fait EN PLUS avancer blockRef —
+  // traité comme une frontière à part entière (au même titre qu'un bloc de
+  // premier niveau, voir commentaire d'en-tête) : les runs de texte avant et
+  // après ce hardBreak ne partagent alors plus le même `block`, donc
+  // locateQuote rejette toute occurrence qui les engloberait tous les deux
+  // (elle omettrait le \n implicite du hardBreak). Les autres nœuds
+  // atomiques (mention, sceneBreak, pageBreak, image…) ne sont PAS des
+  // frontières : seul hardBreak a une contrepartie textuelle implicite (un
+  // saut de ligne) dont l'omission changerait silencieusement le sens du
+  // texte si elle passait inaperçue.
+  if (node.type === 'hardBreak') blockRef.value += 1
 }
 
 // Point d'entrée du parcours : itère les enfants DIRECTS de `doc` (pas de
 // jeton propre pour la racine — ses enfants démarrent à la position 0, pas
-// 1, voir commentaire d'en-tête), en attribuant à chacun son propre index de
-// `block`.
+// 1, voir commentaire d'en-tête), en avançant blockRef à CHAQUE bloc de
+// premier niveau (comme avant le correctif M3) — walkNode se charge en plus
+// de l'avancer pour chaque hardBreak rencontré à l'intérieur d'un bloc.
 function collectTextRuns(doc: DocNode): TextRun[] {
   const runs: TextRun[] = []
   const topLevel = doc.content ?? []
   let pos = 0
-  topLevel.forEach((node, block) => {
-    walkNode(node, pos, block, runs)
+  const blockRef: BlockRef = { value: 0 }
+  topLevel.forEach((node) => {
+    walkNode(node, pos, blockRef, runs)
     pos += nodeSize(node)
+    blockRef.value += 1
   })
   return runs
 }

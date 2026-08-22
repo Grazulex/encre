@@ -142,4 +142,48 @@ describe('locateQuote', () => {
     // paragraphe (13) + jeton d'ouverture du 2e (14)).
     expect(locateQuote(doc, 'ok, bien')).toEqual({ found: true, from: 14, to: 22 })
   })
+
+  // Correctif M3 (vague finale 3c) : un hardBreak à l'intérieur d'un même
+  // bloc de premier niveau est désormais lui aussi une frontière — une
+  // citation qui omettrait le \n implicite du hardBreak mais engloberait
+  // quand même les deux lignes ne doit jamais matcher (l'appliquer
+  // supprimerait silencieusement le saut de ligne).
+  it('ne trouve pas une citation qui traverse un hardBreak (correctif M3)', () => {
+    const doc: DocNode = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'ligne1' },
+            { type: 'hardBreak' },
+            { type: 'text', text: 'ligne2' }
+          ]
+        }
+      ]
+    }
+    // fullText = "ligne1ligne2" (hardBreak n'apporte aucun caractère) : la
+    // citation existe bien dans le texte concaténé mais à cheval sur le
+    // hardBreak, donc rejetée.
+    expect(locateQuote(doc, 'ligne1ligne2')).toEqual({ found: false })
+  })
+
+  it('trouve toujours une citation entièrement à l’intérieur d’une seule ligne malgré un hardBreak voisin (correctif M3)', () => {
+    const doc: DocNode = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'ligne1' },
+            { type: 'hardBreak' },
+            { type: 'text', text: 'ligne2' }
+          ]
+        }
+      ]
+    }
+    // <p> 0, 'ligne1' pos 1..7, hardBreak pos 7 (1 position), 'ligne2' pos 8..14.
+    expect(locateQuote(doc, 'ligne1')).toEqual({ found: true, from: 1, to: 7 })
+    expect(locateQuote(doc, 'ligne2')).toEqual({ found: true, from: 8, to: 14 })
+  })
 })
