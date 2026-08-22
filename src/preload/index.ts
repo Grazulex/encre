@@ -67,6 +67,26 @@ const api: EncreApi = {
     flushDone: () => {
       ipcRenderer.send('app:flush-done')
     }
+  },
+  ai: {
+    prepareWrite: (chapterId, entityIds) => ipcRenderer.invoke('ai:prepareWrite', chapterId, entityIds),
+    startWrite: (chapterId, options) => ipcRenderer.invoke('ai:startWrite', chapterId, options),
+    cancel: (requestId) => ipcRenderer.invoke('ai:cancel', requestId),
+    onChunk: (cb) => {
+      ipcRenderer.on('ai:chunk', (_event, payload) => cb(payload))
+    },
+    onDone: (cb) => {
+      ipcRenderer.on('ai:done', (_event, payload) => cb(payload))
+    },
+    onError: (cb) => {
+      ipcRenderer.on('ai:error', (_event, payload) => cb(payload))
+    }
+  },
+  snapshots: {
+    listByChapter: (chapterId) => ipcRenderer.invoke('snapshots:listByChapter', chapterId),
+    create: (chapterId, contentJson, reason) =>
+      ipcRenderer.invoke('snapshots:create', chapterId, contentJson, reason),
+    content: (id) => ipcRenderer.invoke('snapshots:content', id)
   }
 }
 

@@ -1,6 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import { openDb } from './db/connection'
 import { createApi } from './api'
+import type { AiRunner } from './ai/service'
+
+function makeFakeRunner(text: string): AiRunner {
+  return {
+    run: async (_params, onChunk) => {
+      onChunk(text)
+      return text
+    }
+  }
+}
+
+function makeEmitRecorder(): { emit: (channel: string, payload: unknown) => void; events: { channel: string; payload: unknown }[] } {
+  const events: { channel: string; payload: unknown }[] = []
+  return { emit: (channel, payload) => events.push({ channel, payload }), events }
+}
 
 describe('createApi', () => {
   it('expose le cycle complet livre → chapitre → contenu', async () => {
@@ -81,5 +96,79 @@ describe('createApi', () => {
     const files = readdirSync(dir)
     expect(files).toEqual(['01-chapitre-un.md'])
     expect(readFileSync(join(dir, files[0]), 'utf8')).toBe('# Chapitre un\n\nBonjour.\n')
+  })
+
+  it('ai.prepareWrite signale hasSummary=false quand le chapitre n\'a pas de résumé', async () => {
+    const db = openDb(':memory:')
+    const api = createApi(db)
+    const book = await api.books.create({ title: 'Sans résumé' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+    const result = await api.ai.prepareWrite(chapter.id)
+    expect(result.hasSummary).toBe(false)
+    expect(result.defaultEntityIds).toEqual([])
+  })
+
+  it('ai.startWrite rejette clairement quand le chapitre n\'a pas de résumé', async () => {
+    const db = openDb(':memory:')
+    const { emit } = makeEmitRecorder()
+    const api = createApi(db, { runner: makeFakeRunner('texte'), emitAiEvent: emit })
+    const book = await api.books.create({ title: 'Sans résumé' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+    await expect(
+      api.ai.startWrite(chapter.id, { model: 'claude-x', continueFromText: false })
+    ).rejects.toThrow()
+  })
+
+  it('ai.startWrite avec résumé génère un requestId, émet chunk/done et enregistre la session', async () => {
+    const db = openDb(':memory:')
+    let resolveDone: (() => void) | undefined
+    const donePromise = new Promise<void>((resolve) => { resolveDone = resolve })
+    const events: { channel: string; payload: unknown }[] = []
+    const emit = (channel: string, payload: unknown): void => {
+      events.push({ channel, payload })
+      if (channel === 'ai:done' || channel === 'ai:error') resolveDone?.()
+    }
+    const api = createApi(db, { runner: makeFakeRunner('Il était une fois.'), emitAiEvent: emit })
+    const book = await api.books.create({ title: 'Avec résumé' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+    await api.chapters.saveSummary(chapter.id, 'Un résumé.')
+
+    const requestId = await api.ai.startWrite(chapter.id, { model: 'claude-x', continueFromText: false })
+    expect(requestId).toBeTypeOf('string')
+
+    await donePromise
+
+    const chunkEvent = events.find((e) => e.channel === 'ai:chunk')
+    const doneEvent = events.find((e) => e.channel === 'ai:done')
+    expect(chunkEvent?.payload).toEqual({ requestId, text: 'Il était une fois.' })
+    expect(doneEvent?.payload).toEqual({ requestId, text: 'Il était une fois.' })
+
+    const session = db.prepare('SELECT * FROM ai_sessions WHERE chapter_id = ?').get(chapter.id) as any
+    expect(session).toBeTruthy()
+    expect(session.book_id).toBe(book.id)
+    expect(session.task).toBe('write')
+    expect(session.model).toBe('claude-x')
+
+    const messages = db.prepare('SELECT role, content FROM ai_messages WHERE session_id = ? ORDER BY id').all(session.id) as any[]
+    expect(messages).toHaveLength(2)
+    expect(messages[0].role).toBe('user')
+    expect(messages[1].role).toBe('assistant')
+    expect(messages[1].content).toBe('Il était une fois.')
+  })
+
+  it('snapshots.create/listByChapter/content passent par l\'API', async () => {
+    const db = openDb(':memory:')
+    const api = createApi(db)
+    const book = await api.books.create({ title: 'Snapshots' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+    const snap = await api.snapshots.create(chapter.id, '{"type":"doc"}', 'manuel')
+    expect(snap.chapterId).toBe(chapter.id)
+    expect(snap.reason).toBe('manuel')
+
+    const list = await api.snapshots.listByChapter(chapter.id)
+    expect(list.map((s) => s.id)).toContain(snap.id)
+
+    const content = await api.snapshots.content(snap.id)
+    expect(content).toBe('{"type":"doc"}')
   })
 })

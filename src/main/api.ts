@@ -8,10 +8,39 @@ import * as chapters from './db/chapters'
 import * as entities from './db/entities'
 import * as outline from './db/outline'
 import * as timeline from './db/timeline'
+import * as snapshots from './db/snapshots'
+import { createAiSession, addAiMessage } from './db/aiSessions'
+import { buildWritePrompt } from './ai/context'
+import { AiService, type AiRunner } from './ai/service'
+import { createSdkRunner } from './ai/runner'
 import { scanChapterFiles, mdToTiptapJson, titleForFile } from './importer'
 import { exportMarkdownToFolder, slugify } from './exporter'
 import { buildEpub } from './epub'
 import { buildPdf } from './pdf'
+
+/**
+ * Émetteur d'événements par défaut : diffuse vers toutes les fenêtres ouvertes.
+ * Import d'electron paresseux (à l'intérieur de la fonction) pour que ce module
+ * reste importable par vitest sans jamais charger electron au niveau module —
+ * les tests injectent toujours leur propre `emit`.
+ */
+function defaultEmit(channel: string, payload: unknown): void {
+  void import('electron').then(({ BrowserWindow }) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(channel, payload)
+    }
+  })
+}
+
+export interface CreateApiOptions {
+  runner?: AiRunner
+  emitAiEvent?: (channel: string, payload: unknown) => void
+}
+
+// `ai` mélange invoke (prepareWrite/startWrite/cancel) et événementiel préload-only
+// (onChunk/onDone/onError, ajoutés par le preload via ipcRenderer.on — voir `app`
+// ci-dessous pour le même principe). createApi ne peut fournir que la partie invoke.
+type MainAi = Omit<EncreApi['ai'], 'onChunk' | 'onDone' | 'onError'>
 
 // Import d'un fichier .md isolé comme nouveau chapitre d'un livre existant
 // (Task 8b) : lecture disque + conversion markdown→tiptap + createChapter +
@@ -35,7 +64,25 @@ export function importChapterFromFile(db: Db, bookId: number, filePath: string):
 // `app` (onFlushRequest/flushDone) est un domaine événementiel côté renderer
 // (ipcRenderer.on/send) : il n'a pas de contrepartie invoke côté main, donc
 // createApi n'implémente pas EncreApi['app'] — registerIpc ignore ce domaine.
-export function createApi(db: Db): Omit<EncreApi, 'app'> {
+// `ai` : createApi ne fournit que la part invoke (MainAi, voir plus haut) ; les
+// on* restent préload-only, comme pour `app`.
+export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi, 'app' | 'ai'> & { ai: MainAi } {
+  const baseRunner = options.runner ?? createSdkRunner()
+  const emit = options.emitAiEvent ?? defaultEmit
+  // AiService.start() appelle runner.run(...) de façon synchrone (avant de retourner
+  // le requestId) : si le runner invoque `onChunk` de façon synchrone lui aussi (cas
+  // d'un runner factice sans `await`, mais aussi tout runner exotique en pratique),
+  // `onChunk` peut s'exécuter AVANT que `requestId = service.start(...)` (plus bas)
+  // n'ait affecté la variable que les callbacks capturent par fermeture. On reporte
+  // donc l'appel réel au runner d'un micro-tick pour garantir que `service.start()`
+  // a toujours rendu la main (et donc que requestId est déjà connu) avant la première
+  // invocation d'un callback — `createSdkRunner` a de toute façon un `await` avant
+  // tout `onChunk`, donc ce report est sans effet perceptible en production.
+  const runner: AiRunner = {
+    run: (params, onChunk, signal) => Promise.resolve().then(() => baseRunner.run(params, onChunk, signal))
+  }
+  const service = new AiService(runner)
+
   return {
     books: {
       list: async () => books.listBooks(db),
@@ -224,6 +271,58 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
         writeFileSync(res.filePath, buffer)
         return res.filePath
       }
+    },
+    ai: {
+      // Chemin volontairement léger : réutilise buildWritePrompt (déjà bon
+      // marché — pas d'appel réseau, uniquement des lectures SQLite) plutôt
+      // qu'une fonction dédiée, pour ne pas dupliquer le calcul de
+      // hasSummary/defaultEntityIds entre prepareWrite et startWrite.
+      prepareWrite: async (chapterId, entityIds) => {
+        const bundle = buildWritePrompt(db, chapterId, { entityIds })
+        return { hasSummary: bundle.hasSummary, defaultEntityIds: bundle.defaultEntityIds }
+      },
+      startWrite: async (chapterId, opts) => {
+        const bundle = buildWritePrompt(db, chapterId, {
+          instructions: opts.instructions,
+          entityIds: opts.entityIds,
+          continueFromText: opts.continueFromText
+        })
+        if (!bundle.hasSummary) {
+          throw new Error(
+            "Ce chapitre n'a pas de résumé : ajoutez-en un avant de générer du texte."
+          )
+        }
+        const chapter = chapters.getChapter(db, chapterId)
+        const sessionId = createAiSession(db, chapter.bookId, chapterId, 'write', opts.model)
+        addAiMessage(db, sessionId, 'user', bundle.prompt)
+
+        // Les callbacks ci-dessous ferment sur `requestId`, affecté seulement après le
+        // retour (synchrone) de service.start() : c'est sans danger car `runner` (voir
+        // plus haut) reporte l'appel réel au runner factice/SDK d'un micro-tick, donc
+        // aucun callback ne peut s'exécuter avant que cette affectation n'ait eu lieu.
+        let requestId = ''
+        requestId = service.start(
+          { system: bundle.system, prompt: bundle.prompt, model: opts.model },
+          {
+            onChunk: (text) => emit('ai:chunk', { requestId, text }),
+            onDone: (full) => {
+              addAiMessage(db, sessionId, 'assistant', full)
+              emit('ai:done', { requestId, text: full })
+            },
+            onError: (message) => emit('ai:error', { requestId, message })
+          }
+        )
+        return requestId
+      },
+      cancel: async (requestId) => {
+        service.cancel(requestId)
+      }
+    },
+    snapshots: {
+      listByChapter: async (chapterId) => snapshots.listSnapshots(db, chapterId),
+      create: async (chapterId, contentJson, reason) =>
+        snapshots.createSnapshot(db, chapterId, contentJson, reason),
+      content: async (id) => snapshots.getSnapshotContent(db, id)
     }
   }
 }

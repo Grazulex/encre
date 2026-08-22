@@ -1,7 +1,7 @@
 import type {
   Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
   Entity, EntityCreate, EntityKind, EntityOccurrence, EntityPatch,
-  OutlineNote, TimelineEvent, TimelineEventPatch
+  OutlineNote, Snapshot, TimelineEvent, TimelineEventPatch
 } from './types'
 
 export interface EncreApi {
@@ -63,8 +63,25 @@ export interface EncreApi {
     onFlushRequest(cb: () => void): void   // ipcRenderer.on('app:request-flush', cb) — hors invoke
     flushDone(): void                       // ipcRenderer.send('app:flush-done')
   }
+  ai: {
+    prepareWrite(chapterId: number, entityIds?: number[]): Promise<{ hasSummary: boolean; defaultEntityIds: number[] }>
+    startWrite(chapterId: number, options: { instructions?: string; entityIds?: number[]; model: string; continueFromText: boolean }): Promise<string>  // requestId ; enregistre ai_session + messages
+    cancel(requestId: string): Promise<void>
+    onChunk(cb: (p: { requestId: string; text: string }) => void): void   // ipcRenderer.on('ai:chunk') — hors invoke
+    onDone(cb: (p: { requestId: string; text: string }) => void): void    // 'ai:done' (texte complet) — hors invoke
+    onError(cb: (p: { requestId: string; message: string }) => void): void // 'ai:error' — hors invoke
+  }
+  snapshots: {
+    listByChapter(chapterId: number): Promise<Snapshot[]>
+    create(chapterId: number, contentJson: string, reason: string): Promise<Snapshot>
+    content(id: number): Promise<string>
+  }
 }
 
 // Canaux IPC : `${domaine}:${méthode}` — ex. 'books:list', 'chapters:saveContent'
 // `app` n'est pas un domaine invoke (événementiel pur) — non enregistré par registerIpc.
-export const API_DOMAINS = ['books', 'chapters', 'entities', 'outline', 'timeline', 'importer', 'exporter'] as const
+// `ai` mêle les deux : prepareWrite/startWrite/cancel sont des invoke normaux,
+// mais onChunk/onDone/onError sont préload-only (ipcRenderer.on), comme `app`.
+export const API_DOMAINS = [
+  'books', 'chapters', 'entities', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots'
+] as const
