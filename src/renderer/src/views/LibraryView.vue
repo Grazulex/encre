@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useLibraryStore } from '../stores/library'
 import BookCard from '../components/BookCard.vue'
 import ImportWizard from '../components/ImportWizard.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const store = useLibraryStore()
 const router = useRouter()
@@ -42,8 +43,23 @@ async function createBook(): Promise<void> {
   router.push(`/book/${book.id}`)
 }
 
-async function removeBook(id: number, title: string): Promise<void> {
-  if (confirm(`Supprimer « ${title} » et tous ses chapitres ?`)) await store.remove(id)
+// Suppression thémée (audit UI/UX, proposition #13) : window.confirm() natif
+// remplacé par ConfirmDialog — même sémantique (confirmer supprime, annuler/
+// Échap ne fait rien).
+const pendingRemoval = ref<{ id: number; title: string } | null>(null)
+
+function removeBook(id: number, title: string): void {
+  pendingRemoval.value = { id, title }
+}
+
+async function confirmRemoval(): Promise<void> {
+  const target = pendingRemoval.value
+  pendingRemoval.value = null
+  if (target) await store.remove(target.id)
+}
+
+function cancelRemoval(): void {
+  pendingRemoval.value = null
 }
 </script>
 
@@ -99,6 +115,13 @@ async function removeBook(id: number, title: string): Promise<void> {
         @remove="removeBook(book.id, book.title)"
       />
     </TransitionGroup>
+
+    <ConfirmDialog
+      v-if="pendingRemoval"
+      :message="`Supprimer « ${pendingRemoval.title} » et tous ses chapitres ?`"
+      @confirm="confirmRemoval"
+      @cancel="cancelRemoval"
+    />
   </main>
 </template>
 
