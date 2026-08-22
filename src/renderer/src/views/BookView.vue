@@ -143,7 +143,22 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
             aria-label="Modifier le livre"
             @click="settingsOpen = true"
           >
-            ⚙
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              />
+            </svg>
           </button>
         </div>
         <button class="export-book" type="button" @click="exportOpen = true">Exporter…</button>
@@ -162,6 +177,17 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
       <EntityList v-if="store.section === 'lieux'" kind="place" />
     </aside>
     <main>
+      <!-- Bande de fenêtre du mode focus (ajout ciblé, revue de l'audit
+           UI/UX) : hiddenInset (#5) fond les feux tricolores dans l'aside —
+           mais le mode focus MASQUE l'aside entièrement (opacity: 0 +
+           pointer-events: none, voir .book-space.focus aside ci-dessous),
+           avec lui sa propre bande draggable (.drag-band). Sans région de
+           remplacement, la fenêtre devenait totalement non déplaçable en
+           mode focus. Bande vide (aucun contrôle dedans, donc aucun
+           no-drag nécessaire) au-dessus de l'éditeur plutôt que superposée à
+           l'en-tête du chapitre (EditorPane), pour ne jamais recouvrir ses
+           boutons. -->
+      <div v-if="focusMode" class="focus-drag-band" aria-hidden="true"></div>
       <!-- v-show plutôt que v-if : l'éditeur ne doit pas être démonté quand on
            quitte la section chapitres. store.currentChapter.contentJson est
            tenu à jour par saveContentFor (book.ts) donc un v-if ne
@@ -318,6 +344,11 @@ main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.focus-drag-band {
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  height: 28px;
 }
 .chapitres-view {
   display: flex;
