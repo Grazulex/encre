@@ -27,6 +27,20 @@ function isAbortError(error: unknown): boolean {
 }
 
 /**
+ * Isole l'appel d'un callback fourni par l'appelant : si `onChunk`/`onDone`/`onError`
+ * lève, l'exception ne doit jamais se propager dans la chaîne de promesses interne
+ * (elle ferait alors basculer un `.then` réussi vers le `.catch` d'erreur, ou produire
+ * un rejet non intercepté depuis le `.catch` lui-même). On journalise et on continue.
+ */
+function safeInvoke(name: string, fn: () => void): void {
+  try {
+    fn()
+  } catch (error) {
+    console.error(`AiService: le callback "${name}" a levé une exception`, error)
+  }
+}
+
+/**
  * Registre requestId → AbortController + traduction des erreurs du runner en messages
  * français lisibles par l'utilisateur.
  */
@@ -40,15 +54,18 @@ export class AiService {
     const controller = new AbortController()
     this.controllers.set(requestId, controller)
 
+    const onChunk = (text: string): void => safeInvoke('onChunk', () => callbacks.onChunk(text))
+
     this.runner
-      .run(params, callbacks.onChunk, controller.signal)
+      .run(params, onChunk, controller.signal)
       .then((full) => {
         this.controllers.delete(requestId)
-        callbacks.onDone(full)
+        safeInvoke('onDone', () => callbacks.onDone(full))
       })
       .catch((error: unknown) => {
         this.controllers.delete(requestId)
-        callbacks.onError(isAbortError(error) ? ABORT_ERROR_MESSAGE : GENERIC_ERROR_MESSAGE)
+        const message = isAbortError(error) ? ABORT_ERROR_MESSAGE : GENERIC_ERROR_MESSAGE
+        safeInvoke('onError', () => callbacks.onError(message))
       })
 
     return requestId

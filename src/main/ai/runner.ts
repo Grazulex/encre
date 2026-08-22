@@ -1,6 +1,35 @@
 import type { AiRunner } from './service'
 
 /**
+ * Forme structurelle du message `type: 'result'` du SDK (sans en dépendre au niveau
+ * type import — les deux membres réels de l'union `SDKResultMessage` sont assignables
+ * à ce sous-ensemble de champs). Exportée + `resultFromMessage` testable en isolation,
+ * sans jamais importer le SDK réel.
+ */
+export interface SdkResultMessage {
+  subtype: string
+  is_error: boolean
+  result?: string
+  errors?: string[]
+}
+
+/**
+ * Extrait le texte final d'un message `type: 'result'`, ou lève si le tour a échoué.
+ *
+ * `subtype === 'success'` ne suffit PAS à lui seul : le SDK peut renvoyer un succès de
+ * tour (`subtype: 'success'`) avec `is_error: true`, auquel cas `result` contient le
+ * texte de l'ERREUR et non du texte généré (cf. sdk.d.ts, `SDKResultSuccess.is_error`).
+ * Sans ce garde, ce texte d'erreur serait renvoyé comme si c'était de la prose générée.
+ */
+export function resultFromMessage(message: SdkResultMessage): string {
+  if (message.subtype === 'success' && !message.is_error) {
+    return message.result ?? ''
+  }
+  const detail = message.subtype === 'success' ? message.result : message.errors?.join('; ')
+  throw new Error(detail || 'Erreur de génération Claude.')
+}
+
+/**
  * Runner IA basé sur `@anthropic-ai/claude-agent-sdk`. L'import du SDK est fait à
  * l'intérieur de `run()` (jamais au niveau module) pour que ce fichier reste
  * importable par vitest sans jamais charger le SDK réel — les tests de `AiService`
@@ -50,14 +79,10 @@ export function createSdkRunner(): AiRunner {
             continue
           }
 
-          // Un seul message 'result' par tour : porte le texte final (succès) ou
-          // signale l'échec du tour (erreur API, max_turns, etc.).
+          // Un seul message 'result' par tour : porte le texte final (succès réel) ou
+          // signale l'échec du tour (erreur API, max_turns, succès marqué is_error, etc.).
           if (message.type === 'result') {
-            if (message.subtype === 'success') {
-              full = message.result
-            } else {
-              throw new Error(message.errors.join('; ') || 'Erreur de génération Claude.')
-            }
+            full = resultFromMessage(message)
           }
         }
       } catch (error) {

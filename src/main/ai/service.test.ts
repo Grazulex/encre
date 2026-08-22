@@ -138,4 +138,67 @@ describe('AiService', () => {
     expect(() => service.cancel(requestId)).not.toThrow()
     expect(abortSpy).not.toHaveBeenCalled()
   })
+
+  it("une exception dans onDone est isolée : onError n'est pas appelé et rien ne fuit en rejet non intercepté", async () => {
+    const runner = makeStreamingRunner(['a'])
+    const service = new AiService(runner)
+    const onError = vi.fn()
+    const unhandled: unknown[] = []
+    const onUnhandledRejection = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    process.on('unhandledRejection', onUnhandledRejection)
+
+    try {
+      service.start(params, {
+        onChunk: () => {},
+        onDone: () => {
+          throw new Error('onDone boom')
+        },
+        onError
+      })
+      // start() est fire-and-forget : laisser la chaîne de promesses internes se
+      // dérouler complètement (y compris le tour d'event-loop où Node signalerait un
+      // rejet non intercepté) avant d'observer les assertions.
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      expect(onError).not.toHaveBeenCalled()
+      expect(unhandled).toEqual([])
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('onDone'), expect.any(Error))
+    } finally {
+      // Les assertions doivent s'exécuter AVANT mockRestore() : restaurer un spy efface
+      // son historique d'appels (mock.calls), donc l'inverse ferait passer le test à tort.
+      process.off('unhandledRejection', onUnhandledRejection)
+      consoleErrorSpy.mockRestore()
+    }
+  })
+
+  it("une exception dans onError (après une erreur du runner) est isolée : rien ne fuit en rejet non intercepté", async () => {
+    const runner = makeRejectingRunner(new Error('network boom'))
+    const service = new AiService(runner)
+    const unhandled: unknown[] = []
+    const onUnhandledRejection = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    process.on('unhandledRejection', onUnhandledRejection)
+
+    try {
+      service.start(params, {
+        onChunk: () => {},
+        onDone: () => {},
+        onError: () => {
+          throw new Error('onError boom')
+        }
+      })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      expect(unhandled).toEqual([])
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('onError'), expect.any(Error))
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection)
+      consoleErrorSpy.mockRestore()
+    }
+  })
 })
