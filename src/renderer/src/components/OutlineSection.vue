@@ -4,6 +4,7 @@ import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
 import type { OutlineNote } from '../../../shared/types'
 import { autoGrowClamped } from '../utils/autoGrow'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const store = useBookStore()
 const ui = useUiStore()
@@ -99,8 +100,19 @@ async function moveNote(index: number, direction: -1 | 1): Promise<void> {
   )
 }
 
-async function removeNote(note: OutlineNote): Promise<void> {
-  if (!confirm('Supprimer cette note ?')) return
+// Suppression thémée (audit UI/UX, proposition #13) : window.confirm() natif
+// remplacé par ConfirmDialog — même sémantique (confirmer supprime, annuler/
+// Échap ne fait rien).
+const pendingRemoval = ref<OutlineNote | null>(null)
+
+function removeNote(note: OutlineNote): void {
+  pendingRemoval.value = note
+}
+
+async function confirmRemoval(): Promise<void> {
+  const note = pendingRemoval.value
+  pendingRemoval.value = null
+  if (!note) return
   // Sans ce clearTimeout, un debounce encore en attente (note éditée puis
   // supprimée dans les 600 ms) se déclencherait après coup avec l'id d'une
   // note qui n'existe plus côté renderer — d'où le .catch ci-dessus en
@@ -109,6 +121,10 @@ async function removeNote(note: OutlineNote): Promise<void> {
   timers.delete(note.id)
   await window.encre.outline.remove(note.id)
   notes.value = notes.value.filter((n) => n.id !== note.id)
+}
+
+function cancelRemoval(): void {
+  pendingRemoval.value = null
 }
 </script>
 
@@ -142,6 +158,7 @@ async function removeNote(note: OutlineNote): Promise<void> {
             :disabled="index === 0"
             type="button"
             title="Monter"
+            aria-label="Monter cette note"
             @click="moveNote(index, -1)"
           >
             ↑
@@ -150,14 +167,29 @@ async function removeNote(note: OutlineNote): Promise<void> {
             :disabled="index === notes.length - 1"
             type="button"
             title="Descendre"
+            aria-label="Descendre cette note"
             @click="moveNote(index, 1)"
           >
             ↓
           </button>
-          <button type="button" title="Supprimer" @click="removeNote(note)">×</button>
+          <button
+            type="button"
+            title="Supprimer"
+            aria-label="Supprimer cette note"
+            @click="removeNote(note)"
+          >
+            ×
+          </button>
         </span>
       </li>
     </TransitionGroup>
+
+    <ConfirmDialog
+      v-if="pendingRemoval"
+      message="Supprimer cette note ?"
+      @confirm="confirmRemoval"
+      @cancel="cancelRemoval"
+    />
   </div>
 </template>
 
@@ -273,10 +305,6 @@ h2 {
 .note-controls button:hover:not(:disabled) {
   color: var(--fg);
   background: color-mix(in srgb, var(--fg) 8%, transparent);
-}
-.note-controls button:disabled {
-  opacity: 0.25;
-  cursor: default;
 }
 
 .row-enter-active,
