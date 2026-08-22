@@ -64,6 +64,18 @@ export interface FormatConventions {
   proposerSeparations: boolean
 }
 
+// Suggestion de relecture (Task 2, plan 3c) — un tableau de ces objets est la
+// SEULE forme de sortie attendue de l'IA pour ai.startReview (voir le system
+// prompt dans main/ai/reviewContext.ts). `quote` est la clé de repérage côté
+// renderer (Task 3) : un extrait qui ne correspond pas mot pour mot au texte
+// du chapitre est inexploitable et doit être écarté à l'affichage.
+export interface ReviewSuggestion {
+  type: 'repetition' | 'incoherence' | 'style' | 'orthographe'
+  quote: string // extrait EXACT du chapitre (repérage)
+  replacement: string // texte de remplacement proposé ('' = suppression)
+  reason: string // explication courte en français
+}
+
 export interface AiSessionRecord {
   id: number
   bookId: number

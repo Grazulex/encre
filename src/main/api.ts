@@ -13,6 +13,7 @@ import * as series from './db/series'
 import { createAiSession, addAiMessage } from './db/aiSessions'
 import { buildWritePrompt } from './ai/context'
 import { buildFormatPrompt } from './ai/formatContext'
+import { buildReviewPrompt } from './ai/reviewContext'
 import type { FormatConventions } from '../shared/types'
 import { AiService, type AiRunner } from './ai/service'
 import { createSdkRunner } from './ai/runner'
@@ -387,6 +388,39 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
                 addAiMessage(db, sessionId, 'assistant', full)
               } catch (err) {
                 console.error('[ai.startFormat] échec addAiMessage (assistant) :', err)
+              }
+            },
+            onError: (message) => emit('ai:error', { requestId, message })
+          }
+        )
+        return requestId
+      },
+      // Relecture (Task 2, plan 3c) : même mécanique que startWrite/startFormat
+      // ci-dessus (AiService.start, mêmes canaux ai:chunk/ai:done/ai:error, même
+      // contrat d'ordonnancement documenté plus haut), session enregistrée avec
+      // task='review'. Modèle choisi par l'appelant (contrairement à startFormat) :
+      // contrairement à la typographie, une relecture bénéficie du choix de modèle
+      // comme l'écriture.
+      startReview: async (chapterId, options) => {
+        const chapter = chapters.getChapter(db, chapterId)
+        if (!chapter.contentText.trim()) {
+          throw new Error('Ce chapitre est vide : rien à relire.')
+        }
+        const bundle = buildReviewPrompt(db, chapterId)
+        const sessionId = createAiSession(db, chapter.bookId, chapterId, 'review', options.model)
+        addAiMessage(db, sessionId, 'user', bundle.prompt)
+
+        let requestId = ''
+        requestId = service.start(
+          { system: bundle.system, prompt: bundle.prompt, model: options.model },
+          {
+            onChunk: (text) => emit('ai:chunk', { requestId, text }),
+            onDone: (full) => {
+              emit('ai:done', { requestId, text: full })
+              try {
+                addAiMessage(db, sessionId, 'assistant', full)
+              } catch (err) {
+                console.error('[ai.startReview] échec addAiMessage (assistant) :', err)
               }
             },
             onError: (message) => emit('ai:error', { requestId, message })

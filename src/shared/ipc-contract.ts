@@ -79,6 +79,14 @@ export interface EncreApi {
     // rien à harmoniser. Pas de choix de modèle exposé ici (contrairement à
     // startWrite) : le modèle utilisé pour cette tâche ciblée est fixé côté main.
     startFormat(chapterId: number, conventions: FormatConventions): Promise<string>  // requestId ; enregistre ai_session (task='format') + messages
+    // Relecture (Task 2, plan 3c) : même contrat d'ordonnancement et mêmes canaux
+    // ai:chunk/ai:done/ai:error que startWrite/startFormat ci-dessus ; session
+    // enregistrée avec task='review'. La sortie attendue côté renderer (Task 3) est
+    // un tableau JSON de ReviewSuggestion (voir src/shared/types.ts) — le parsing se
+    // fait après ai:done, pas ici. Refuse (rejette) un chapitre dont le contenu
+    // texte est vide — rien à relire. Modèle choisi par l'appelant (contrairement à
+    // startFormat) : la relecture bénéficie du même choix de modèle que l'écriture.
+    startReview(chapterId: number, options: { model: string }): Promise<string>  // requestId ; enregistre ai_session (task='review') + messages
     // Conversion pure Markdown → JSON TipTap (Task 6), réutilisant mdToTiptapJson
     // (déjà utilisé par l'import de fichier) : ne touche à aucun chapitre en base,
     // sert uniquement à préparer le contenu proposé par startFormat avant de
