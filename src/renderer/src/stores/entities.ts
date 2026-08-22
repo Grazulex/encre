@@ -17,7 +17,14 @@ export const useEntitiesStore = defineStore('entities', {
     // Fiche affichée dans le tiroir droit (Task 11 : ouverte depuis une
     // mention dans l'éditeur ; aussi ouverte depuis une carte de la grille).
     drawerEntityId: null as number | null,
-    occurrences: [] as EntityOccurrence[]
+    occurrences: [] as EntityOccurrence[],
+    // Fiche affichée dans le corps de la section personnages/lieux (Task 15,
+    // motif maître-détail : la liste vit dans l'aside — EntityList —, la
+    // fiche sélectionnée dans le corps — EntitiesSection). Indépendant de
+    // drawerEntityId : le tiroir reste réservé aux ouvertures contextuelles
+    // depuis l'éditeur (mentions/chips), jamais synchronisé avec cette
+    // sélection.
+    selectedId: null as number | null
   }),
   getters: {
     drawerEntity: (state): Entity | null =>
@@ -28,12 +35,19 @@ export const useEntitiesStore = defineStore('entities', {
     // seule fois par BookView.open, pas paresseusement à l'entrée de section
     // (Task 11/12 en ont besoin dès que l'éditeur est visible).
     async load(bookId: number) {
+      // Réinitialisé par livre : une fiche sélectionnée dans le livre
+      // précédent n'a aucun sens une fois basculé sur un autre livre (load()
+      // n'est appelé qu'une fois par ouverture de livre, voir BookView).
+      this.selectedId = null
       try {
         this.entities = await window.encre.entities.listByBook(bookId)
       } catch (err) {
         console.error('Échec du chargement des fiches', err)
         useUiStore().toast('Impossible de charger les fiches.')
       }
+    },
+    select(id: number | null) {
+      this.selectedId = id
     },
     async create(bookId: number, kind: EntityKind, name: string): Promise<Entity> {
       const entity = await window.encre.entities.create({ bookId, kind, name })
@@ -73,6 +87,7 @@ export const useEntitiesStore = defineStore('entities', {
       await window.encre.entities.remove(id)
       this.entities = this.entities.filter((e) => e.id !== id)
       if (this.drawerEntityId === id) this.closeDrawer()
+      if (this.selectedId === id) this.selectedId = null
     },
     async openDrawer(id: number) {
       this.drawerEntityId = id
