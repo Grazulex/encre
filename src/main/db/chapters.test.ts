@@ -4,7 +4,7 @@ import { createBook } from './books'
 import { getBook } from './books'
 import { createEntity } from './entities'
 import {
-  countWords, listChapters, getChapter, createChapter,
+  countWords, listChapters, listChapterSummaries, getChapter, createChapter,
   saveChapterContent, renameChapter, setChapterStatus,
   reorderChapters, deleteChapter, entityOccurrences, entitiesInChapter, saveChapterSummary
 } from './chapters'
@@ -67,6 +67,21 @@ describe('repository chapters', () => {
     const c = createChapter(db, bookId, 'Ch. 1')
     saveChapterSummary(db, c.id, 'Mara découvre la lettre.')
     expect(getChapter(db, c.id).summary).toBe('Mara découvre la lettre.')
+  })
+
+  it('listChapterSummaries : id, position, titre, résumé, dans l’ordre, sans le contenu', () => {
+    const c1 = createChapter(db, bookId, 'Ch. 1')
+    saveChapterSummary(db, c1.id, 'Résumé du premier.')
+    const c2 = createChapter(db, bookId, 'Ch. 2')
+    saveChapterContent(db, c2.id, '{"type":"doc","content":[]}', 'Un contenu quelconque')
+
+    const summaries = listChapterSummaries(db, bookId)
+    expect(summaries).toEqual([
+      { id: c1.id, position: 1, title: 'Ch. 1', summary: 'Résumé du premier.' },
+      { id: c2.id, position: 2, title: 'Ch. 2', summary: '' }
+    ])
+    expect(summaries[1]).not.toHaveProperty('contentJson')
+    expect(summaries[1]).not.toHaveProperty('contentText')
   })
 })
 

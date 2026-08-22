@@ -1,6 +1,6 @@
 import type { Db } from '../db/connection'
 import { getBook } from '../db/books'
-import { listChapters, getChapter } from '../db/chapters'
+import { listChapterSummaries } from '../db/chapters'
 import { listTimeline } from '../db/timeline'
 import { listOutline } from '../db/outline'
 import { listEntities } from '../db/entities'
@@ -61,14 +61,15 @@ const SYSTEM_PROMPT_CHRONO =
  */
 export function buildChronoPrompt(db: Db, bookId: number): FormatPromptBundle {
   const book = getBook(db, bookId)
-  const chapterMetas = listChapters(db, bookId)
-  if (chapterMetas.length === 0) {
+  // listChapterSummaries (fix round 1, pas listChapters+getChapter en boucle) :
+  // seul moyen léger d'accéder au résumé manuel de chaque chapitre, la donnée
+  // centrale de ce prompt (brief : « sans texte intégral, maîtrise du
+  // contexte ») — sans charger content_json/content_text pour rien, chapitre
+  // par chapitre, comme le ferait un getChapter (SELECT *) répété.
+  const chapters = listChapterSummaries(db, bookId)
+  if (chapters.length === 0) {
     throw new Error("Ce livre n'a aucun chapitre.")
   }
-  // getChapter (pas listChapters, qui ne renvoie que ChapterMeta) : seul moyen
-  // d'accéder au résumé manuel de chaque chapitre, la donnée centrale de ce
-  // prompt (brief : « sans texte intégral, maîtrise du contexte »).
-  const chapters = chapterMetas.map((meta) => getChapter(db, meta.id))
 
   const chapterBlocks = chapters.map((chapter) => {
     const summary = chapter.summary.trim()

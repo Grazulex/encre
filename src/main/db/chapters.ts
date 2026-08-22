@@ -30,6 +30,29 @@ export function listChapters(db: Db, bookId: number): ChapterMeta[] {
     .map(rowToMeta)
 }
 
+export interface ChapterSummary {
+  id: number
+  position: number
+  title: string
+  summary: string
+}
+
+// Vue légère (Task 6, plan 3c — fix round 1) : buildChronoPrompt (main/ai/
+// chronoContext.ts) a besoin du résumé manuel de CHAQUE chapitre d'un livre,
+// mais ni du contenu (content_json/content_text, potentiellement volumineux)
+// ni des autres métadonnées de ChapterMeta. Appeler getChapter en boucle
+// (SELECT * par chapitre) aurait chargé ce contenu inutilement pour chaque
+// chapitre du livre — cette requête dédiée ne sélectionne que les 4 colonnes
+// réellement utiles, en un seul aller-retour SQLite pour tout le livre.
+export function listChapterSummaries(db: Db, bookId: number): ChapterSummary[] {
+  return db
+    .prepare(
+      `SELECT id, position, title, summary
+       FROM chapters WHERE book_id = ? ORDER BY position`
+    )
+    .all(bookId) as ChapterSummary[]
+}
+
 export function getChapter(db: Db, id: number): Chapter {
   const row = db.prepare('SELECT * FROM chapters WHERE id = ?').get(id) as any
   if (!row) throw new Error(`Chapitre introuvable: ${id}`)

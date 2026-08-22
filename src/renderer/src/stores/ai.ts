@@ -377,17 +377,41 @@ export const useAiStore = defineStore('ai', {
     async prepare(chapterId: number): Promise<void> {
       const isNewChapter = this.chapterId !== chapterId
       this.chapterId = chapterId
-      if (isNewChapter) {
+      // Fix round 1 (review Task 6, plan 3c) : chronologie est NIVEAU LIVRE,
+      // contrairement aux trois autres tâches (chapter-scoped) que ce reset
+      // vise. Un changement de CHAPITRE ne doit donc JAMAIS interrompre un
+      // rapport de chronologie déjà affiché (phase 'done') ni un stream de
+      // chronologie en cours (phase 'streaming' — le requestId continue de
+      // réconcilier normalement via receive()/reconcile(), rien ici ne le
+      // perturbe). Sans cette garde, cliquer sur une puce « Chap. N » DU
+      // RAPPORT LUI-MÊME (ChronoReport → bookStore.openChapter, qui déclenche
+      // ce prepare() via le watcher de ClaudePanel) ferait immédiatement
+      // disparaître le rapport qu'on vient de consulter et reverserait le
+      // bouton sur « Vérifier le livre ». Seul un changement de LIVRE purge
+      // la chronologie (voir setBook ci-dessus). `preserveChrono` est capturé
+      // UNE SEULE FOIS ici (pas relu après l'await) : si l'auteur bascule
+      // vers write/review/format/extract PENDANT l'await ci-dessous, ce
+      // nouveau lancement a déjà réinitialisé phase/draft/requestId/
+      // errorMessage lui-même (voir start()/startFormat()/startReview()/
+      // startExtract(), qui posent leur task AVANT tout await) — relire
+      // this.task après coup risquerait au contraire d'écraser CE nouveau
+      // flux en cours avec `phase = 'idle'/'error'` ci-dessous.
+      const preserveChrono = this.task === 'chrono'
+      if (isNewChapter && !preserveChrono) {
         this.draft = ''
         this.requestId = null
         this.errorMessage = null
         this.phase = 'preparing'
+      }
+      if (isNewChapter) {
         // Correctif review : une relecture affichée pour le chapitre QUITTÉ
         // n'a plus sa place une fois qu'on est passé à un autre chapitre —
         // même raisonnement que draft/requestId/errorMessage ci-dessus, pour
         // les mêmes raisons (ReviewPanel se démonte de toute façon avec le
         // panneau, mais l'état ne doit pas survivre à un retour ultérieur
-        // sur ce même onglet pour un chapitre différent).
+        // sur ce même onglet pour un chapitre différent). Inconditionnel
+        // (pas de garde preserveChrono) : ces champs ne sont affichés que
+        // pour task==='review'/'extract', jamais pendant task==='chrono'.
         this.reviewSuggestions = []
         this.reviewParseError = null
         this.reviewMalformedCount = 0
@@ -411,12 +435,12 @@ export const useAiStore = defineStore('ai', {
           entity,
           checked: defaults.has(entity.id)
         }))
-        if (isNewChapter) this.phase = 'idle'
+        if (isNewChapter && !preserveChrono) this.phase = 'idle'
       } catch (err) {
         console.error('Échec de la préparation de l’écriture IA', err)
         if (this.chapterId !== chapterId) return
         this.hasSummary = false
-        if (isNewChapter) {
+        if (isNewChapter && !preserveChrono) {
           this.errorMessage = "Impossible de préparer l'écriture."
           this.phase = 'error'
         }
