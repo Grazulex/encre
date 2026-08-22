@@ -144,6 +144,57 @@ textarea:focus {
   text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
+/* Séparateur de scène et saut de page (Task 3) : deux nœuds bloc rendus par
+   un <hr data-kind="…"> vide (voir formatNodes.ts, renderHTML) — pas de
+   NodeView, tout le rendu visuel (glyphe/texte) vient de ::after en CSS pur,
+   jamais persisté dans le HTML/JSON du document. `.tiptap` est la classe
+   posée par TipTap sur la zone éditable (voir EditorPane.vue). */
+.tiptap hr[data-kind='scene'] {
+  border: none;
+  height: 1.5em;
+  margin: 0.5em 0;
+  cursor: default;
+}
+.tiptap hr[data-kind='scene']::after {
+  content: '⁂';
+  display: block;
+  text-align: center;
+  line-height: 1.5em;
+  color: var(--fg-muted);
+  font-size: 15px;
+  letter-spacing: 0.15em;
+}
+
+.tiptap hr[data-kind='page'] {
+  border: none;
+  height: 1.5em;
+  margin: 0.5em 0;
+  cursor: default;
+}
+.tiptap hr[data-kind='page']::after {
+  /* Les cadratins encadrant le texte tiennent lieu de filet discret : pas de
+     ligne séparée à faire coïncider pixel pour pixel avec le centrage du
+     texte (voir la discussion écartée d'un ::after pleine largeur qui
+     masquerait la ligne au lieu de simplement l'interrompre sous le texte). */
+  content: '— saut de page —';
+  display: block;
+  text-align: center;
+  line-height: 1.5em;
+  color: var(--fg-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Retour visuel de sélection (atom + selectable, ⌫ supprime le nœud entier) :
+   les deux nœuds partagent la même teinte d'accent que le reste de l'éditeur
+   (mentions, focus des champs) plutôt qu'une couleur de sélection dédiée. */
+.tiptap hr[data-kind='scene'].ProseMirror-selectednode::after,
+.tiptap hr[data-kind='page'].ProseMirror-selectednode::after {
+  color: var(--accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

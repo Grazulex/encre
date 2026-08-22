@@ -8,6 +8,7 @@ import { useUiStore } from '../stores/ui'
 import { useEntitiesStore } from '../stores/entities'
 import { useAiStore } from '../stores/ai'
 import { EntityMention } from '../editor/mention'
+import { SceneBreak, PageBreak } from '../editor/formatNodes'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import SnapshotManager from './SnapshotManager.vue'
 import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
@@ -32,7 +33,19 @@ let pendingChapterId: number | null = null
 let editorChapterId: number | null = null
 
 const editor = useEditor({
-  extensions: [StarterKit.configure({ codeBlock: false, code: false }), EntityMention],
+  // horizontalRule désactivé (Task 3) : sceneBreak possède sa propre règle de
+  // saisie (***/---/* * * + Entrée) et son propre rendu — les deux extensions
+  // ne doivent jamais cohabiter, sans quoi la règle d'entrée de StarterKit
+  // (déclenchée à la frappe, pas à Entrée) entrerait en concurrence avec la
+  // nôtre sur les mêmes marqueurs. Les documents déjà enregistrés avec un
+  // horizontalRule restent lisibles : stripCodeBlocks() les convertit en
+  // sceneBreak au chargement (voir le watch plus bas).
+  extensions: [
+    StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }),
+    EntityMention,
+    SceneBreak,
+    PageBreak
+  ],
   content: '',
   onUpdate: () => {
     if (editorChapterId === null) return
@@ -673,6 +686,60 @@ watch(snapshotPromptOpen, async (open) => {
 
 onBeforeUnmount(() => window.removeEventListener('mousedown', onWindowMousedownForSnapshot))
 
+// Menu d'insertion « ¶+ » (Task 3) : même popover léger que le snapshot
+// ci-dessus (anchoré au bouton, fermeture au clic extérieur/Échap), pour
+// insérer un séparateur de scène ou un saut de page forcé au curseur. Les
+// deux commandes viennent de formatNodes.ts (setSceneBreak/setPageBreak) ;
+// aucune n'a besoin d'`await` ni de garde de péremption chapterId (opération
+// synchrone sur l'éditeur déjà affiché, contrairement à insertDraftIntoEditor
+// qui traverse un `await` IPC).
+const formatMenuOpen = ref(false)
+const formatWrapEl = ref<HTMLElement | null>(null)
+
+function insertFormatNode(kind: 'sceneBreak' | 'pageBreak'): boolean {
+  const ed = editor.value
+  if (!ed) return false
+  const chain = ed.chain().focus()
+  return kind === 'sceneBreak' ? chain.setSceneBreak().run() : chain.setPageBreak().run()
+}
+
+function chooseFormatNode(kind: 'sceneBreak' | 'pageBreak'): void {
+  insertFormatNode(kind)
+  formatMenuOpen.value = false
+}
+
+function toggleFormatMenu(): void {
+  formatMenuOpen.value = !formatMenuOpen.value
+}
+
+function onWindowMousedownForFormatMenu(event: MouseEvent): void {
+  if (formatWrapEl.value?.contains(event.target as Node)) return
+  formatMenuOpen.value = false
+}
+
+watch(formatMenuOpen, (open) => {
+  if (open) window.addEventListener('mousedown', onWindowMousedownForFormatMenu)
+  else window.removeEventListener('mousedown', onWindowMousedownForFormatMenu)
+})
+
+onBeforeUnmount(() => window.removeEventListener('mousedown', onWindowMousedownForFormatMenu))
+
+// Équivalent palette ⌘K (brief) : CommandPalette ne connaît pas l'éditeur
+// (monté par App.vue, hors de l'arbre de BookView/EditorPane) — même
+// situation que 'palette:focus-toggle' pour le mode focus (voir BookView),
+// un CustomEvent sur window plutôt qu'un pont dédié comme EditorBridge
+// (ai.ts), réservé à l'assistant Claude. EditorPane est le seul auditeur : si
+// aucun chapitre n'est affiché, le composant n'est pas monté et l'événement
+// est un no-op silencieux.
+function onPaletteInsertFormatNode(event: Event): void {
+  const kind = (event as CustomEvent<'sceneBreak' | 'pageBreak'>).detail
+  insertFormatNode(kind)
+}
+onMounted(() => window.addEventListener('palette:insert-format-node', onPaletteInsertFormatNode))
+onBeforeUnmount(() =>
+  window.removeEventListener('palette:insert-format-node', onPaletteInsertFormatNode)
+)
+
 function rename(event: Event): void {
   const title = (event.target as HTMLInputElement).value.trim()
   if (title && store.currentChapter) store.renameChapter(store.currentChapter.id, title)
@@ -722,6 +789,32 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       >
         Assistant Claude
       </button>
+      <div ref="formatWrapEl" class="format-wrap">
+        <button
+          type="button"
+          class="format-btn"
+          title="Insérer un élément"
+          aria-label="Insérer un élément"
+          :aria-expanded="formatMenuOpen"
+          @click="toggleFormatMenu"
+        >
+          ¶+
+        </button>
+        <div
+          v-if="formatMenuOpen"
+          class="format-menu"
+          role="menu"
+          aria-label="Insérer un élément"
+          @keydown.escape.stop.prevent="formatMenuOpen = false"
+        >
+          <button type="button" role="menuitem" @click="chooseFormatNode('sceneBreak')">
+            Séparateur de scène ⁂
+          </button>
+          <button type="button" role="menuitem" @click="chooseFormatNode('pageBreak')">
+            Saut de page forcé
+          </button>
+        </div>
+      </div>
       <div ref="snapshotWrapEl" class="snapshot-wrap">
         <button
           type="button"
@@ -965,6 +1058,58 @@ header {
 .claude-btn.active {
   color: var(--accent);
   border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.format-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.format-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--fg-muted);
+}
+.format-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.format-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px -14px color-mix(in srgb, var(--fg) 40%, transparent);
+}
+.format-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--fg);
+  background: none;
+}
+.format-menu button:hover {
+  color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 

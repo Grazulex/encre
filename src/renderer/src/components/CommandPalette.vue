@@ -109,6 +109,35 @@ const actionItems = computed<CommandItem[]>(() => {
         close()
       }
     })
+    // Équivalents ⌘K du menu « ¶+ » de l'en-tête de l'éditeur (Task 3) :
+    // visibles seulement livre ouvert + section chapitres + un chapitre
+    // réellement affiché (sans quoi EditorPane n'est pas monté et l'action
+    // n'aurait aucun effet). Même mécanisme CustomEvent que 'palette:focus-
+    // toggle' ci-dessus — EditorPane est l'unique auditeur, voir ce composant.
+    if (book.section === 'chapitres' && book.currentChapter) {
+      items.push({
+        id: 'action-insert-scene-break',
+        group: 'Actions',
+        label: 'Séparateur de scène ⁂',
+        action: () => {
+          window.dispatchEvent(
+            new CustomEvent('palette:insert-format-node', { detail: 'sceneBreak' })
+          )
+          close()
+        }
+      })
+      items.push({
+        id: 'action-insert-page-break',
+        group: 'Actions',
+        label: 'Saut de page forcé',
+        action: () => {
+          window.dispatchEvent(
+            new CustomEvent('palette:insert-format-node', { detail: 'pageBreak' })
+          )
+          close()
+        }
+      })
+    }
   }
   items.push({
     id: 'action-library',

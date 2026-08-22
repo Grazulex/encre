@@ -26,4 +26,40 @@ describe('stripCodeBlocks', () => {
     expect(res.changed).toBe(false)
     expect(res.json).toBe(doc)
   })
+
+  it('convertit les horizontalRule hérités en sceneBreak (Task 3)', () => {
+    const doc = JSON.stringify({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Avant' }] },
+        { type: 'horizontalRule' },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Après' }] }
+      ]
+    })
+    const { json, changed } = stripCodeBlocks(doc)
+    expect(changed).toBe(true)
+    const parsed = JSON.parse(json)
+    expect(parsed.content[1]).toEqual({ type: 'sceneBreak' })
+  })
+
+  it('convertit un horizontalRule imbriqué (dans une liste) en sceneBreak', () => {
+    const doc = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'horizontalRule' }]
+            }
+          ]
+        }
+      ]
+    })
+    const { json, changed } = stripCodeBlocks(doc)
+    expect(changed).toBe(true)
+    const parsed = JSON.parse(json)
+    expect(parsed.content[0].content[0].content[0]).toEqual({ type: 'sceneBreak' })
+  })
 })
