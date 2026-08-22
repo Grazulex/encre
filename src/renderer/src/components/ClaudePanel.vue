@@ -32,6 +32,22 @@ watch(
 const busy = computed(() => ai.phase === 'preparing' || ai.phase === 'streaming')
 const hasContent = computed(() => !!store.currentChapter?.contentText.trim())
 
+// ai.hasSummary ne se rafraîchit qu'à prepare() (montage du panneau /
+// changement de chapitre) : si le panneau reste ouvert pendant que l'auteur
+// tape son résumé dans l'éditeur juste à côté, ai.hasSummary reste figé sur
+// sa valeur de départ (souvent `false`) et l'avertissement/le bouton restent
+// bloqués jusqu'à un remontage. On dérive donc en plus une lecture live du
+// résumé du chapitre courant (store.currentChapter?.summary, trim non-vide)
+// et on la combine en OU avec ai.hasSummary : n'importe laquelle des deux
+// sources suffit à lever le blocage, ce qui couvre aussi bien le cas
+// « rouvert avec résumé déjà là » (ai.hasSummary) que « tapé pendant que
+// c'est ouvert » (lecture live). La garde serveur de startWrite reste le
+// filet de sécurité final si les deux se désynchronisaient.
+const summaryReady = computed(() => {
+  const liveSummary = store.currentChapter?.summary.trim() ?? ''
+  return ai.hasSummary || liveSummary.length > 0
+})
+
 const SUMMARY_PREVIEW_MAX = 220
 const summaryPreview = computed(() => {
   const summary = store.currentChapter?.summary.trim() ?? ''
@@ -46,7 +62,7 @@ const lastContinue = ref(false)
 
 function launch(continueFromText: boolean): void {
   const chapter = store.currentChapter
-  if (!chapter || !ai.hasSummary) return
+  if (!chapter || !summaryReady.value) return
   lastContinue.value = continueFromText
   ai.start(chapter.id, continueFromText)
 }
@@ -129,7 +145,7 @@ watch(
       <section class="cp-section">
         <p v-if="ai.phase === 'preparing'" class="cp-loading">Préparation…</p>
         <template v-else>
-          <div v-if="ai.hasSummary" class="cp-summary">
+          <div v-if="summaryReady" class="cp-summary">
             <span class="field-label">Résumé du chapitre</span>
             <p class="cp-summary-text">{{ summaryPreview }}</p>
           </div>
@@ -174,10 +190,10 @@ watch(
 
       <div v-if="ai.phase === 'idle' || ai.phase === 'error'" class="cp-launch">
         <p v-if="ai.errorMessage" class="cp-error">{{ ai.errorMessage }}</p>
-        <button type="button" class="primary" :disabled="!ai.hasSummary" @click="launch(false)">
+        <button type="button" class="primary" :disabled="!summaryReady" @click="launch(false)">
           Rédiger le brouillon
         </button>
-        <button v-if="hasContent" type="button" :disabled="!ai.hasSummary" @click="launch(true)">
+        <button v-if="hasContent" type="button" :disabled="!summaryReady" @click="launch(true)">
           Continuer le texte
         </button>
       </div>

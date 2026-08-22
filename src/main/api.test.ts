@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { openDb } from './db/connection'
 import { createApi } from './api'
 import type { AiRunner } from './ai/service'
@@ -154,6 +154,52 @@ describe('createApi', () => {
     expect(messages[0].role).toBe('user')
     expect(messages[1].role).toBe('assistant')
     expect(messages[1].content).toBe('Il était une fois.')
+  })
+
+  it('ai:done est émis même si l\'archivage du message assistant échoue', async () => {
+    // Régression : onDone doit livrer le brouillon au renderer AVANT de tenter
+    // l'archivage — une panne d'écriture DB ne doit jamais avaler ai:done (voir
+    // finding « onDone: a failed addAiMessage swallows ai:done »). On contrôle
+    // manuellement la résolution du runner pour intercaler la casse de la table
+    // ai_messages exactement entre l'obtention du requestId et l'appel d'onDone.
+    const db = openDb(':memory:')
+    let resolveRun: ((text: string) => void) | undefined
+    const runner: AiRunner = {
+      run: async (_params, onChunk) =>
+        new Promise<string>((resolve) => {
+          resolveRun = (text) => {
+            onChunk(text)
+            resolve(text)
+          }
+        })
+    }
+    let resolveDone: (() => void) | undefined
+    const donePromise = new Promise<void>((resolve) => { resolveDone = resolve })
+    const events: { channel: string; payload: unknown }[] = []
+    const emit = (channel: string, payload: unknown): void => {
+      events.push({ channel, payload })
+      if (channel === 'ai:done' || channel === 'ai:error') resolveDone?.()
+    }
+    const api = createApi(db, { runner, emitAiEvent: emit })
+    const book = await api.books.create({ title: 'Archivage cassé' })
+    const chapter = await api.chapters.create(book.id, 'Ch. 1')
+    await api.chapters.saveSummary(chapter.id, 'Un résumé.')
+
+    const requestId = await api.ai.startWrite(chapter.id, { model: 'claude-x', continueFromText: false })
+
+    // Casse l'archivage assistant (mais pas la livraison) : la table n'existe
+    // plus quand onDone tentera addAiMessage.
+    db.exec('DROP TABLE ai_messages')
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    resolveRun?.('Texte malgré tout livré.')
+    await donePromise
+
+    const doneEvent = events.find((e) => e.channel === 'ai:done')
+    expect(doneEvent?.payload).toEqual({ requestId, text: 'Texte malgré tout livré.' })
+    expect(errorSpy).toHaveBeenCalled()
+
+    errorSpy.mockRestore()
   })
 
   it('snapshots.create/listByChapter/content passent par l\'API', async () => {

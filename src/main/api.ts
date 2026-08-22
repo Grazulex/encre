@@ -337,8 +337,16 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
           {
             onChunk: (text) => emit('ai:chunk', { requestId, text }),
             onDone: (full) => {
-              addAiMessage(db, sessionId, 'assistant', full)
+              // Livraison au renderer inconditionnelle : on émet AVANT d'archiver.
+              // Si addAiMessage échoue (DB), le renderer a déjà reçu ai:done et
+              // quitte 'streaming' — seul l'archivage en base est perdu (loggé),
+              // jamais le texte affiché à l'écran.
               emit('ai:done', { requestId, text: full })
+              try {
+                addAiMessage(db, sessionId, 'assistant', full)
+              } catch (err) {
+                console.error('[ai.startWrite] échec addAiMessage (assistant) :', err)
+              }
             },
             onError: (message) => emit('ai:error', { requestId, message })
           }
