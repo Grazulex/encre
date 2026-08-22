@@ -152,8 +152,15 @@ export const EntityMention = Mention.extend({
 
       applyClasses(node.attrs as EntityMentionAttrs)
 
+      // Source du watch : nom ET alias, pas seulement le nom — `currentLabel`
+      // dépend désormais aussi de `entity.aliases` (règle ci-dessus), donc un
+      // édit des alias seuls (sans toucher au nom) doit lui aussi redéclencher
+      // le recalcul de l'affichage pendant qu'une mention est montée.
       const stopWatch = watch(
-        () => store.entities.find((entity) => entity.id === node.attrs.id)?.name,
+        () => {
+          const entity = store.entities.find((e) => e.id === node.attrs.id)
+          return entity ? `${entity.name} ${entity.aliases.join(' ')}` : undefined
+        },
         () => {
           dom.textContent = `@${currentLabel(node.attrs as EntityMentionAttrs)}`
         },

@@ -95,13 +95,12 @@ watch(
     editorChapterId = store.currentChapter.id
     // Migration douce (Task publication 1) : d'anciens chapitres peuvent
     // encore contenir des blocs de code / marques `code`, retirés de
-    // l'éditeur. `changed` n'est utilisé que pour choisir quel JSON charger —
-    // pas de save déclenché ici (emitUpdate: false), la prochaine frappe
-    // persistera la conversion naturellement.
-    const { json, changed } = stripCodeBlocks(store.currentChapter.contentJson)
-    ed.commands.setContent(JSON.parse(changed ? json : store.currentChapter.contentJson), {
-      emitUpdate: false
-    })
+    // l'éditeur. `changed` ne sert qu'à documenter l'intention ; le contrat
+    // de stripCodeBlocks garantit json === contentJson quand !changed, donc
+    // `json` seul suffit ici. Pas de save déclenché (emitUpdate: false), la
+    // prochaine frappe persistera la conversion naturellement.
+    const { json } = stripCodeBlocks(store.currentChapter.contentJson)
+    ed.commands.setContent(JSON.parse(json), { emitUpdate: false })
     ed.commands.focus('start')
   },
   { immediate: true }
