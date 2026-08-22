@@ -3,9 +3,11 @@ import type { Book, BookCreate, BookPatch } from '../../shared/types'
 
 const SELECT_BOOK = `
   SELECT b.*,
+         s.name AS series_name,
          COALESCE(SUM(c.word_count), 0) AS agg_word_count,
          COUNT(c.id) AS agg_chapter_count
   FROM books b
+  LEFT JOIN series s ON s.id = b.series_id
   LEFT JOIN chapters c ON c.book_id = b.id
 `
 
@@ -22,6 +24,8 @@ function rowToBook(row: any): Book {
     wordGoal: row.word_goal,
     wordCount: row.agg_word_count,
     chapterCount: row.agg_chapter_count,
+    seriesId: row.series_id,
+    seriesName: row.series_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -65,7 +69,8 @@ const PATCH_COLUMNS: Record<string, string> = {
   synopsis: 'synopsis',
   status: 'status',
   coverPath: 'cover_path',
-  wordGoal: 'word_goal'
+  wordGoal: 'word_goal',
+  seriesId: 'series_id'
 }
 
 export function updateBook(db: Db, id: number, patch: BookPatch): Book {

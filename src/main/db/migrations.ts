@@ -87,5 +87,40 @@ export const MIGRATIONS: string[] = [
     entity_id  INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
     PRIMARY KEY (chapter_id, entity_id)
   );
+  `,
+  `
+  CREATE TABLE series (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  ALTER TABLE books ADD COLUMN series_id INTEGER REFERENCES series(id) ON DELETE SET NULL;
+
+  CREATE TABLE snapshots (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    content_json TEXT NOT NULL,
+    reason     TEXT NOT NULL DEFAULT 'ia',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_snapshots_chapter ON snapshots(chapter_id, created_at);
+
+  CREATE TABLE ai_sessions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id    INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
+    task       TEXT NOT NULL,
+    model      TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE ai_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES ai_sessions(id) ON DELETE CASCADE,
+    role       TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   `
 ]

@@ -17,6 +17,8 @@ export interface Book {
   wordGoal: number | null
   wordCount: number      // somme des chapitres (calculée)
   chapterCount: number   // calculé
+  seriesId: number | null
+  seriesName: string | null
   createdAt: string
   updatedAt: string
 }
@@ -39,7 +41,31 @@ export type BookPatch = Partial<{
   status: BookStatus
   coverPath: string | null
   wordGoal: number | null
+  seriesId: number | null
 }>
+
+export interface Series {
+  id: number
+  name: string
+}
+
+export type AiRole = 'user' | 'assistant'
+
+export interface AiSessionRecord {
+  id: number
+  bookId: number
+  chapterId: number | null
+  task: string
+  model: string
+  createdAt: string
+}
+
+export interface Snapshot {
+  id: number
+  chapterId: number
+  reason: string
+  createdAt: string
+}
 
 export interface ChapterMeta {
   id: number
