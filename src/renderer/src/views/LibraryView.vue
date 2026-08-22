@@ -109,13 +109,19 @@ async function removeBook(id: number, title: string): Promise<void> {
   overflow-y: auto;
 }
 
+/* Bande de fenêtre (audit UI/UX, proposition #5) : titleBarStyle
+   'hiddenInset' (src/main/index.ts) fond les feux tricolores dans le
+   contenu — padding-top réservé au-dessus du titre, bande draggable avec
+   no-drag sur les boutons (.header-actions) pour qu'ils restent cliquables. */
 header {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   margin-bottom: 28px;
+  padding-top: 36px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
 }
 h1 {
   font-family: var(--font-manuscript);
@@ -136,6 +142,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 8px;
+  -webkit-app-region: no-drag;
 }
 
 .create-form {

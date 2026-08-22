@@ -35,10 +35,23 @@ function registerMediaProtocol(mediaDir: string): void {
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    // Audit UI/UX, proposition #4 : 900×670 était le défaut du template
+    // electron-vite, jamais ajusté — avec le panneau Claude ouvert
+    // (260px 1fr 360px), il ne restait plus qu'environ 230px de texte
+    // utilisable pour l'éditeur. minWidth/minHeight empêchent de redescendre
+    // sous ce seuil en redimensionnant manuellement.
+    width: 1280,
+    height: 800,
+    minWidth: 980,
+    minHeight: 620,
     show: false,
     autoHideMenuBar: true,
+    // Proposition #5 : barre de titre fondue dans l'aside --bg-panel plutôt
+    // que la barre standard grise ("app web dans un cadre"). Pas de
+    // vibrancy (coût/risque > gain sur des fonds opaques papier/encre) —
+    // seul le style des feux tricolores change, ignoré sans effet sur les
+    // plateformes non macOS.
+    titleBarStyle: 'hiddenInset',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

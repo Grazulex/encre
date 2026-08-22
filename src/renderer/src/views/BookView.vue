@@ -123,9 +123,16 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
 <template>
   <div class="book-space" :class="{ focus: focusMode }" :style="{ gridTemplateColumns: gridColumns }">
     <aside :aria-hidden="focusMode" :inert="focusMode">
-      <button class="back" type="button" @click="router.push('/')">
-        <span class="chevron">←</span> Bibliothèque
-      </button>
+      <!-- Bande de fenêtre (audit UI/UX, proposition #5) : titleBarStyle
+           'hiddenInset' (src/main/index.ts) fond les feux tricolores dans
+           l'aside --bg-panel — cette bande réserve l'espace au-dessus du
+           bouton retour et le rend draggable (no-drag sur le bouton
+           lui-même pour qu'il reste cliquable). -->
+      <div class="drag-band">
+        <button class="back" type="button" @click="router.push('/')">
+          <span class="chevron">←</span> Bibliothèque
+        </button>
+      </div>
       <div v-if="store.book" class="header">
         <div class="title-row">
           <h1>{{ store.book.title }}</h1>
@@ -210,10 +217,17 @@ aside {
     border-color 0.2s ease;
 }
 
+.drag-band {
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  padding-top: 36px;
+}
+
 .back {
+  -webkit-app-region: no-drag;
   align-self: flex-start;
   border: none;
-  padding: 14px 16px 0;
+  padding: 0 16px 14px;
   color: var(--fg-muted);
   font-size: 12px;
 }
