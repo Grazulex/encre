@@ -35,6 +35,7 @@ async function addEvent(): Promise<void> {
   if (!bookStore.book) return
   const title = `Événement ${store.events.length + 1}`
   const event = await store.create(bookStore.book.id, title)
+  if (!event) return
   await nextTick()
   cardRefs.get(event.id)?.focusTitle()
 }

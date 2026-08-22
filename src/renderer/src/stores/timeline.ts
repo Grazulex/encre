@@ -27,10 +27,16 @@ export const useTimelineStore = defineStore('timeline', {
         useUiStore().toast('Impossible de charger la chronologie.')
       }
     },
-    async create(bookId: number, title: string): Promise<TimelineEvent> {
-      const event = await window.encre.timeline.create(bookId, title)
-      this.events.push(event)
-      return event
+    async create(bookId: number, title: string): Promise<TimelineEvent | null> {
+      try {
+        const event = await window.encre.timeline.create(bookId, title)
+        this.events.push(event)
+        return event
+      } catch (err) {
+        console.error("Échec de la création de l'événement", err)
+        useUiStore().toast("Impossible de créer l'événement.")
+        return null
+      }
     },
     // Optimiste : le champ édité est déjà visible à l'écran avant l'appel
     // (TimelineEventCard lit/écrit directement l'objet réactif du store).
@@ -74,7 +80,11 @@ export const useTimelineStore = defineStore('timeline', {
     },
     // L'appelant (TimelineSection : glisser-déposer ou boutons ↑/↓) a déjà
     // réordonné `events` localement avant d'appeler reorder — cette action
-    // ne fait que persister l'ordre côté IPC, elle ne mute pas la liste.
+    // ne fait que persister l'ordre côté IPC, elle ne mute pas la liste en cas
+    // de succès. En cas d'échec, l'ordre local ne reflète plus l'ordre
+    // persisté : on resynchronise depuis le serveur (load) plutôt que de
+    // tenter un rollback manuel (plus simple et plus sûr — le serveur reste
+    // la source de vérité).
     async reorder(orderedIds: number[]) {
       if (this.bookId == null) return
       try {
@@ -82,6 +92,7 @@ export const useTimelineStore = defineStore('timeline', {
       } catch (err) {
         console.error('Échec du réordonnancement de la chronologie', err)
         useUiStore().toast('Échec du réordonnancement.')
+        await this.load(this.bookId)
       }
     },
     async remove(id: number) {
