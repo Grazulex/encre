@@ -6,6 +6,8 @@ import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
 import { useEntitiesStore } from '../stores/entities'
 import { EntityMention } from '../editor/mention'
+import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
+import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
 import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
 import type { ChapterStatus, Entity } from '../../../shared/types'
 
@@ -127,6 +129,72 @@ watch(
   }
 )
 
+// Liaison automatique des entités (Task 12) : entièrement séparée du cycle
+// flush/generation-token — seule l'application de la transaction choisie par
+// le dialogue rejoint le circuit normal (dispatch → onUpdate → save
+// débouncée), sans jamais appeler flush() directement.
+const autolinkOpen = ref(false)
+const autolinkMatches = ref<AutolinkMatch[]>([])
+
+function openAutolink(): void {
+  const ed = editor.value
+  if (!ed) return
+  const targets: AutolinkTarget[] = entitiesStore.entities.map((entity) => ({
+    id: entity.id,
+    kind: entity.kind,
+    names: [entity.name, ...entity.aliases]
+  }))
+  const matches: AutolinkMatch[] = []
+  // Les nœuds mention sont des nœuds inline atomiques (pas de contenu) : un
+  // nœud texte n'est donc jamais un descendant d'une mention, `node.isText`
+  // suffit à exclure les mentions existantes sans filtrage supplémentaire.
+  ed.state.doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) return
+    for (const m of findNameMatches(node.text, targets)) {
+      matches.push({
+        from: pos + m.start,
+        to: pos + m.end,
+        entityId: m.entityId,
+        kind: m.kind,
+        matched: m.matched
+      })
+    }
+  })
+  if (matches.length === 0) {
+    ui.toast('Aucune entité à lier dans ce chapitre.')
+    return
+  }
+  autolinkMatches.value = matches
+  autolinkOpen.value = true
+}
+
+function applyAutolink(selected: AutolinkMatch[]): void {
+  const ed = editor.value
+  if (!ed) return
+  autolinkOpen.value = false
+  if (selected.length === 0) return
+  const mentionType = ed.schema.nodes.mention
+  const tr = ed.state.tr
+  // De la fin vers le début, dans UNE seule transaction : chaque
+  // replaceWith en amont décale les positions de tout ce qui suit dans le
+  // document, jamais celles qui précèdent — appliquer en ordre décroissant
+  // laisse donc les positions `from`/`to` des occurrences restantes valides
+  // sans avoir à les recalculer.
+  for (const m of [...selected].sort((a, b) => b.from - a.from)) {
+    const entity = entitiesStore.entities.find((e) => e.id === m.entityId)
+    tr.replaceWith(
+      m.from,
+      m.to,
+      mentionType.create({ id: m.entityId, label: entity?.name ?? m.matched, kind: m.kind })
+    )
+  }
+  // Dispatch direct (pas de editor.commands) : passe par le même
+  // dispatchTransaction interne de TipTap que n'importe quelle commande, qui
+  // émet 'update' dès que docChanged — onUpdate ci-dessus se déclenche donc
+  // normalement et programme le flush débouncé (800 ms), sans appel manuel.
+  ed.view.dispatch(tr)
+}
+
 onMounted(() => {
   ui.registerQuitFlusher(() => flush())
 })
@@ -174,6 +242,7 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       >
         <option v-for="s in STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
       </select>
+      <button type="button" class="autolink-btn" @click="openAutolink">Lier les entités</button>
     </header>
     <div v-if="chapterEntities.length" class="chapter-chips">
       <button
@@ -189,6 +258,12 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       </button>
     </div>
     <EditorContent :editor="editor" class="page" />
+    <AutolinkDialog
+      v-if="autolinkOpen"
+      :matches="autolinkMatches"
+      @close="autolinkOpen = false"
+      @apply="applyAutolink"
+    />
   </div>
 </template>
 
@@ -256,11 +331,8 @@ header {
   border-radius: 20px;
   padding: 5px 24px 5px 12px;
   cursor: pointer;
-  background-image: linear-gradient(
-      45deg,
-      transparent 50%,
-      var(--fg-muted) 50%
-    ),
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
     linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
   background-position:
     calc(100% - 14px) center,
@@ -278,6 +350,17 @@ header {
   outline: none;
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.autolink-btn {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  padding: 5px 12px;
+  color: var(--fg-muted);
+}
+.autolink-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .chapter-chips {
