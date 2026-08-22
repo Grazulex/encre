@@ -18,6 +18,15 @@
   /* Signal d'erreur/danger (clé en double, etc.), dérivé en teinte plutôt que
      figé en dur dans les composants — voir EntityCard.vue. */
   --danger: #c0392b;
+
+  /* Échelle de rayons (audit UI/UX, proposition #2) : les 7px/5px éparpillés
+     dans plusieurs composants étaient des accidents de copie, pas une échelle
+     voulue — --radius-s les absorbe. 4px et 10px restent des valeurs à part
+     (kbd, quelques popovers), volontairement hors échelle. */
+  --radius-s: 6px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+  --radius-pill: 100px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -69,7 +78,7 @@ button {
   color: inherit;
   background: none;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-s);
   padding: 6px 12px;
   cursor: pointer;
   transition:
@@ -77,19 +86,28 @@ button {
     color 0.15s ease,
     background-color 0.15s ease;
 }
-button:hover {
+button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
 }
-button:active {
+button:active:not(:disabled) {
   transform: translateY(1px);
+}
+/* Audit UI/UX, proposition #8 : jusqu'ici aucun style :disabled — un bouton
+   désactivé ("Rédiger le brouillon" sans résumé, etc.) avait exactement le
+   même rendu qu'actif et réagissait au survol. Chaque composant réinventait
+   son opacité (0.25/0.5/0.6) ; une seule valeur ici, les redéfinitions
+   locales redondantes ont été retirées. */
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--bg);
 }
-button.primary:hover {
+button.primary:hover:not(:disabled) {
   color: var(--bg);
   opacity: 0.9;
 }
@@ -100,7 +118,7 @@ textarea {
   color: var(--fg);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-s);
   padding: 6px 10px;
   transition: border-color 0.15s ease;
 }
@@ -195,8 +213,111 @@ textarea:focus {
   color: var(--accent);
 }
 
+/* Classes partagées (audit UI/UX, proposition #1) : coquille de dialogue,
+   étiquette de champ, raccourci clavier, indicateur de chargement, texte
+   d'aide/d'erreur — copiées à l'identique dans 5 à 6 composants avant cette
+   promotion en classes globales. Les composants ne gardent en local que ce
+   qui varie réellement (largeur/hauteur de carte, etc.). */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: color-mix(in srgb, var(--fg) 25%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.dialog-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: 0 24px 60px -20px color-mix(in srgb, var(--fg) 45%, transparent);
+  overflow: hidden;
+}
+.dialog-card:focus,
+.dialog-card:focus-visible {
+  outline: none;
+}
+
+.field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--fg-muted);
+}
+
+.kbd {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  background: var(--bg);
+}
+
+.spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 2px solid color-mix(in srgb, var(--bg) 40%, transparent);
+  border-top-color: var(--bg);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.error-text {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* Entrée animée des dialogues (audit UI/UX, proposition #10) : jusqu'ici seul
+   endroit de l'app où rien n'est animé — les boîtes de dialogue apparaissaient
+   d'un coup. `> *` cible directement l'enfant carte de l'overlay quel que
+   soit son nom de classe local (.extract-card, .snap-card, etc.), sans
+   dépendre de la promotion de #1 vers `.dialog-card`. */
+.dialog-enter-active,
+.dialog-leave-active {
+  transition: opacity 0.15s ease;
+}
+.dialog-enter-from,
+.dialog-leave-to {
+  opacity: 0;
+}
+.dialog-enter-active > *,
+.dialog-leave-active > * {
+  transition:
+    opacity 0.15s ease-out,
+    transform 0.15s ease-out;
+}
+.dialog-enter-from > *,
+.dialog-leave-to > * {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+  }
+  .spinner {
+    animation-duration: 1.8s;
   }
 }
