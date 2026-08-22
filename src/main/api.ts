@@ -10,6 +10,7 @@ import * as timeline from './db/timeline'
 import { scanChapterFiles, mdToTiptapJson } from './importer'
 import { exportMarkdownToFolder, slugify } from './exporter'
 import { buildEpub } from './epub'
+import { buildPdf } from './pdf'
 
 // `app` (onFlushRequest/flushDone) est un domaine événementiel côté renderer
 // (ipcRenderer.on/send) : il n'a pas de contrepartie invoke côté main, donc
@@ -176,9 +177,18 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
         writeFileSync(res.filePath, buffer)
         return res.filePath
       },
-      // Branché Task 7 : génération PDF réelle.
-      pdf: async () => {
-        throw new Error('PDF: Task 7')
+      pdf: async (bookId, chapterIds) => {
+        const { dialog } = await import('electron')
+        const book = books.getBook(db, bookId)
+        const res = await dialog.showSaveDialog({
+          title: 'Exporter en PDF',
+          defaultPath: `${slugify(book.title)}.pdf`,
+          filters: [{ name: 'PDF', extensions: ['pdf'] }]
+        })
+        if (res.canceled || !res.filePath) return null
+        const buffer = await buildPdf(db, bookId, chapterIds)
+        writeFileSync(res.filePath, buffer)
+        return res.filePath
       }
     }
   }
