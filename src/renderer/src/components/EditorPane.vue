@@ -582,9 +582,19 @@ async function restoreSnapshotIntoEditor(chapterId: number, contentJson: string)
     ui.toast('Impossible de créer un point de restauration — restauration annulée.')
     return false
   }
+  // Normalisation (Task 3, correctif review) : un snapshot peut avoir été pris
+  // avant que horizontalRule ne soit retiré du schéma de l'éditeur — sans ce
+  // passage par stripCodeBlocks(), setContent tomberait sur un type de nœud
+  // inconnu et TipTap y répond par un document VIDE plutôt qu'une erreur
+  // visible, laissant l'éditeur blanc sous un toast « Contenu restauré ». Le
+  // JSON persisté ensuite doit être le NORMALISÉ, pas l'original : sinon le
+  // contenu réellement affiché (et donc ed.getText()) diverge de ce qui est
+  // enregistré en base, un chargement ultérieur du chapitre revalidant depuis
+  // ce JSON obsolète reproduirait le même blanc.
+  const { json: normalizedJson } = stripCodeBlocks(contentJson)
   let parsed: JSONContent
   try {
-    parsed = JSON.parse(contentJson)
+    parsed = JSON.parse(normalizedJson)
   } catch (err) {
     console.error('Contenu de snapshot illisible', err)
     ui.toast('Ce point de restauration est illisible.')
@@ -594,7 +604,7 @@ async function restoreSnapshotIntoEditor(chapterId: number, contentJson: string)
   // ouvert pendant que l'utilisateur changeait de chapitre entre-temps.
   if (editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return false
   ed.commands.setContent(parsed, { emitUpdate: false })
-  await store.saveContentFor(chapterId, contentJson, ed.getText())
+  await store.saveContentFor(chapterId, normalizedJson, ed.getText())
   ui.toast('Contenu restauré — snapshot créé.')
   return true
 }

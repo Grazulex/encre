@@ -8,7 +8,9 @@
 // pour pageBreak) est posé en CSS pur via ::after sur le sélecteur
 // `hr[data-kind="…"]` (voir theme.css). Plus simple qu'une NodeView pour un
 // résultat purement visuel qui ne dépend d'aucun état réactif du nœud.
-import { Node, mergeAttributes, nodeInputRule } from '@tiptap/core'
+import { Node, mergeAttributes, nodeInputRule, canInsertNode, isNodeSelection } from '@tiptap/core'
+import type { Command } from '@tiptap/core'
+import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -44,6 +46,65 @@ export interface SceneBreakOptions {
 // d'écrire ce qu'il veut en pleine ligne de texte.
 const SCENE_BREAK_INPUT_REGEX = /^(?:\*\*\*|---|\* \* \*)\n$/
 
+// Garde fin-de-document (correctif review — piège classique de l'atome en fin
+// de document) : mirroring de HorizontalRule.setHorizontalRule (voir
+// node_modules/@tiptap/extension-horizontal-rule/src/horizontal-rule.ts). Une
+// insertContent() nue laisse ProseMirror poser une NodeSelection sur l'atome
+// fraîchement inséré quand il n'y a rien après lui (Selection.near retombe
+// dessus faute de position textuelle) : la frappe suivante REMPLACE alors le
+// marqueur au lieu de continuer d'écrire après. Après insertion : s'il existe
+// un nœud après ($to.nodeAfter), le curseur y est repositionné (texte ou
+// sélection de nœud selon son type, comme en amont) ; sinon (fin de
+// document) un paragraphe vide est ajouté et le curseur y est placé. Utilisé
+// par sceneBreak ET pageBreak — seul le nom du nœud à insérer change.
+function insertBlockAtomCommand(nodeName: string): () => Command {
+  return () =>
+    ({ chain, state }) => {
+      if (!canInsertNode(state, state.schema.nodes[nodeName])) return false
+
+      const { selection } = state
+      const { $to: $originTo } = selection
+      const currentChain = chain()
+
+      if (isNodeSelection(selection)) {
+        currentChain.insertContentAt($originTo.pos, { type: nodeName })
+      } else {
+        currentChain.insertContent({ type: nodeName })
+      }
+
+      return currentChain
+        .command(({ state: chainState, tr, dispatch }) => {
+          if (dispatch) {
+            const { $to } = tr.selection
+            const posAfter = $to.end()
+
+            if ($to.nodeAfter) {
+              if ($to.nodeAfter.isTextblock) {
+                tr.setSelection(TextSelection.create(tr.doc, $to.pos + 1))
+              } else if ($to.nodeAfter.isBlock) {
+                tr.setSelection(NodeSelection.create(tr.doc, $to.pos))
+              } else {
+                tr.setSelection(TextSelection.create(tr.doc, $to.pos))
+              }
+            } else {
+              // Fin de document : rien après le marqueur — un paragraphe vide
+              // donne au curseur un endroit textuel où continuer d'écrire.
+              const paragraphType =
+                chainState.schema.nodes.paragraph || $to.parent.type.contentMatch.defaultType
+              const node = paragraphType?.create()
+              if (node) {
+                tr.insert(posAfter, node)
+                tr.setSelection(TextSelection.create(tr.doc, posAfter + 1))
+              }
+            }
+            tr.scrollIntoView()
+          }
+          return true
+        })
+        .run()
+    }
+}
+
 export const SceneBreak = Node.create<SceneBreakOptions>({
   name: 'sceneBreak',
 
@@ -68,10 +129,7 @@ export const SceneBreak = Node.create<SceneBreakOptions>({
 
   addCommands() {
     return {
-      setSceneBreak:
-        () =>
-        ({ chain }) =>
-          chain().insertContent({ type: this.name }).run()
+      setSceneBreak: insertBlockAtomCommand(this.name)
     }
   },
 
@@ -115,10 +173,7 @@ export const PageBreak = Node.create<PageBreakOptions>({
 
   addCommands() {
     return {
-      setPageBreak:
-        () =>
-        ({ chain }) =>
-          chain().insertContent({ type: this.name }).run()
+      setPageBreak: insertBlockAtomCommand(this.name)
     }
   }
 })
