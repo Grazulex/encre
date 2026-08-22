@@ -16,6 +16,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useEntityFieldEditor } from '../composables/useEntityFieldEditor'
 import { useBookStore } from '../stores/book'
+import { useEntitiesStore } from '../stores/entities'
 import { useTimelineStore } from '../stores/timeline'
 import { mediaUrl } from '../utils/media'
 import { autoGrowClamped } from '../utils/autoGrow'
@@ -25,7 +26,25 @@ import type { EntityKind } from '../../../shared/types'
 const props = defineProps<{ entityId: number }>()
 
 const bookStore = useBookStore()
+const entitiesStore = useEntitiesStore()
 const timelineStore = useTimelineStore()
+
+// EntityDrawer reste monté (dans BookView) quel que soit le changement de
+// section : un tiroir ouvert depuis une mention pendant l'écriture, laissé
+// ouvert, peut donc coexister avec cette page si l'auteur bascule sur
+// personnages/lieux et sélectionne la MÊME fiche. Les deux monteraient alors
+// chacun leur propre instance de useEntityFieldEditor — donc leur propre
+// copie locale d'attrPairs — et leurs sauvegardes debouncées pourraient
+// s'écraser silencieusement l'une l'autre. Cette page étant remontée par
+// :key="entityId" (voir EntitiesSection) à chaque changement de sélection,
+// ce contrôle au montage suffit : aucun moyen d'ouvrir un tiroir tant que la
+// section personnages/lieux reste affichée (le tiroir ne s'ouvre que depuis
+// l'éditeur ou une carte de chronologie, deux vues d'une autre section), donc
+// aucun watch supplémentaire n'est nécessaire pour la durée de vie de cette
+// instance.
+onMounted(() => {
+  if (entitiesStore.drawerEntityId === props.entityId) entitiesStore.closeDrawer()
+})
 
 const {
   entity,

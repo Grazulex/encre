@@ -57,9 +57,13 @@ export function useEntityFieldEditor(
   onMounted(loadOccurrences)
   const occurrences = computed(() => occurrencesOverride?.() ?? localOccurrences.value)
 
-  // closeDrawer() est un no-op inoffensif si le tiroir n'est pas ouvert (cas
-  // d'un appel depuis EntityPage) : il se contente de remettre drawerEntityId
-  // à null, déjà sa valeur dans ce cas.
+  // Sert deux appelants (EntityCard dans le tiroir lui-même, EntityPage en
+  // pleine page) : dans les deux cas, on quitte la vue actuelle pour aller
+  // lire un chapitre — un tiroir resté ouvert n'aurait alors plus de rapport
+  // avec ce qui est affiché, fermer inconditionnellement est donc correct
+  // quel que soit l'appelant. Sans effet si aucun tiroir n'est ouvert :
+  // closeDrawer() se contente alors de remettre drawerEntityId à null, déjà
+  // sa valeur dans ce cas.
   function goToOccurrence(chapterId: number): void {
     bookStore.openChapter(chapterId)
     bookStore.setSection('chapitres')
