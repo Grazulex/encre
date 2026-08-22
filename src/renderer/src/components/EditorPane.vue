@@ -261,10 +261,16 @@ async function loadChapterNotes(): Promise<void> {
     chapterNotes.value = []
     return
   }
+  // Garde de péremption : si l'utilisateur a déjà changé de chapitre pendant
+  // cet appel IPC (chapter.id capturé ci-dessus, comparé à la valeur actuelle
+  // après l'await), la réponse est pour un chapitre qui n'est plus affiché —
+  // on l'ignore plutôt que d'écraser chapterNotes avec des notes obsolètes.
+  const requestedId = chapter.id
   try {
     const all = await window.encre.outline.listByBook(chapter.bookId)
+    if (store.currentChapter?.id !== requestedId) return
     chapterNotes.value = all
-      .filter((n) => n.chapterId === chapter.id)
+      .filter((n) => n.chapterId === requestedId)
       .sort((a, b) => a.position - b.position)
   } catch (err) {
     console.error('Échec du chargement des notes du chapitre', err)
@@ -276,7 +282,12 @@ function onChapterNoteInput(note: OutlineNote, event: Event): void {
   clearTimeout(noteTimers.get(note.id))
   noteTimers.set(
     note.id,
-    setTimeout(() => window.encre.outline.update(note.id, note.content), 600)
+    setTimeout(() => {
+      noteTimers.delete(note.id)
+      window.encre.outline
+        .update(note.id, note.content)
+        .catch((err) => console.error('Échec de la sauvegarde de la note', err))
+    }, 600)
   )
 }
 
@@ -306,6 +317,11 @@ async function moveChapterNote(index: number, direction: -1 | 1): Promise<void> 
 
 async function removeChapterNote(note: OutlineNote): Promise<void> {
   if (!confirm('Supprimer cette note ?')) return
+  // Idem OutlineSection.removeNote : purge le debounce en attente pour cette
+  // note avant suppression, sinon il se déclencherait après coup sur un id
+  // qui n'existe plus (le .catch ci-dessus couvre aussi ce cas).
+  clearTimeout(noteTimers.get(note.id))
+  noteTimers.delete(note.id)
   await window.encre.outline.remove(note.id)
   chapterNotes.value = chapterNotes.value.filter((n) => n.id !== note.id)
 }

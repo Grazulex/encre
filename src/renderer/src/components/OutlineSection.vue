@@ -31,7 +31,12 @@ function commitNote(note: OutlineNote): void {
   clearTimeout(timers.get(note.id))
   timers.set(
     note.id,
-    setTimeout(() => window.encre.outline.update(note.id, note.content), 600)
+    setTimeout(() => {
+      timers.delete(note.id)
+      window.encre.outline
+        .update(note.id, note.content)
+        .catch((err) => console.error('Échec de la sauvegarde de la note', err))
+    }, 600)
   )
 }
 
@@ -74,6 +79,12 @@ async function moveNote(index: number, direction: -1 | 1): Promise<void> {
 
 async function removeNote(note: OutlineNote): Promise<void> {
   if (!confirm('Supprimer cette note ?')) return
+  // Sans ce clearTimeout, un debounce encore en attente (note éditée puis
+  // supprimée dans les 600 ms) se déclencherait après coup avec l'id d'une
+  // note qui n'existe plus côté renderer — d'où le .catch ci-dessus en
+  // complément, pour ce cas comme pour tout autre échec IPC.
+  clearTimeout(timers.get(note.id))
+  timers.delete(note.id)
   await window.encre.outline.remove(note.id)
   notes.value = notes.value.filter((n) => n.id !== note.id)
 }
