@@ -100,6 +100,21 @@ describe('excerpt', () => {
     expect(result.startsWith('mot1 mot2 mot3')).toBe(true)
     expect(result).not.toContain('mot4')
   })
+
+  it("renvoie une chaîne vide pour un texte vide", () => {
+    expect(excerpt('', 50)).toBe('')
+  })
+
+  it('texte court avec espaces multiples/internes : trim externe seulement, contenu inchangé', () => {
+    const text = '  mot1   mot2\tmot3\n\nmot4  '
+    // parts.length (4) <= maxWords (50) → branche "inchangé" : trim() seul, pas de collapse interne.
+    expect(excerpt(text, 50)).toBe(text.trim())
+  })
+
+  it('normalise les espaces multiples/internes (split \\s+) quand la troncature a lieu', () => {
+    const text = '  mot1   mot2\tmot3\n\nmot4  '
+    expect(excerpt(text, 2)).toBe('mot1 mot2 …')
+  })
 })
 
 describe('tailExcerpt', () => {
@@ -183,6 +198,12 @@ describe('buildWritePrompt', () => {
     expect(bundle.prompt).toContain('TEXTE EXISTANT')
     expect(bundle.prompt).toContain('phrase2500')
     expect(bundle.prompt).not.toContain('phrase1 ')
+  })
+
+  it('mode continuer sans texte existant (contentText vide) n\'ajoute pas la section TEXTE EXISTANT', () => {
+    saveChapterContent(db, ch2Id, '{"type":"doc","content":[]}', '')
+    const bundle = buildWritePrompt(db, ch2Id, { continueFromText: true })
+    expect(bundle.prompt).not.toContain('TEXTE EXISTANT')
   })
 
   it('respecte une sélection explicite de entityIds', () => {
