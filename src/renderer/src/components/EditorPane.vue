@@ -16,6 +16,7 @@ const editor = useEditor({
   onUpdate: () => {
     if (!store.currentChapter) return
     pendingChapterId = store.currentChapter.id
+    store.markDirty()
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(flush, 800)
   }
@@ -114,7 +115,15 @@ const STATUSES: { value: ChapterStatus; label: string }[] = [
 .editor-pane {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* .editor-pane est un enfant flex de <main> (BookView, flex-direction: column)
+     au même niveau que <StatusBar>. `height: 100%` le forcerait à occuper toute
+     la hauteur de main et pousserait la barre d'état hors champ dès que le
+     contenu dépasse ~4 lignes (min-height auto par défaut empêche l'enfant de
+     rétrécir). flex: 1 + min-height: 0 le laisse partager l'espace avec
+     StatusBar et rétrécir sous sa taille de contenu, pour que .page défile en
+     interne pendant que la barre reste ancrée en bas. */
+  flex: 1;
+  min-height: 0;
 }
 
 header {
@@ -192,6 +201,7 @@ header {
 
 .page {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 .page :deep(.tiptap) {

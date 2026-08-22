@@ -5,6 +5,12 @@ import { useBookStore } from '../stores/book'
 const store = useBookStore()
 const sessionStart = ref<Map<number, number>>(new Map())
 
+const SAVE_LABELS: Record<'dirty' | 'saving' | 'saved', string> = {
+  dirty: 'Modifié',
+  saving: 'Enregistrement…',
+  saved: 'Enregistré'
+}
+
 watch(
   () => store.currentChapter?.id,
   (id) => {
@@ -37,7 +43,7 @@ const sessionWords = computed(() => {
     <span class="spacer" />
     <span class="save-state" :class="store.saveState">
       <span class="pulse" />
-      {{ store.saveState === 'saved' ? 'Enregistré' : 'Enregistrement…' }}
+      {{ SAVE_LABELS[store.saveState] }}
     </span>
   </footer>
 </template>
@@ -76,6 +82,9 @@ const sessionWords = computed(() => {
   border-radius: 50%;
   background: var(--fg-muted);
   transition: background-color 0.2s ease;
+}
+.save-state.dirty .pulse {
+  background: var(--accent);
 }
 .save-state.saving .pulse {
   background: var(--accent);

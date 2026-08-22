@@ -6,9 +6,15 @@ export const useBookStore = defineStore('book', {
     book: null as Book | null,
     chapters: [] as ChapterMeta[],
     currentChapter: null as Chapter | null,
-    saveState: 'saved' as 'saved' | 'saving'
+    // 'dirty' : frappe en attente, minuteur de sauvegarde armé mais pas encore
+    // déclenché (l'éditeur seul sait quand une frappe survient : voir
+    // EditorPane.markDirty). 'saving' : requête IPC en vol. 'saved' : à jour.
+    saveState: 'saved' as 'saved' | 'dirty' | 'saving'
   }),
   actions: {
+    markDirty() {
+      this.saveState = 'dirty'
+    },
     async open(bookId: number) {
       this.book = await window.encre.books.get(bookId)
       this.chapters = await window.encre.chapters.listByBook(bookId)
