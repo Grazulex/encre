@@ -15,6 +15,7 @@ import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
 import { stripCodeBlocks } from '../../../shared/stripCodeBlocks'
 import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
 import type { ChapterStatus, Entity, OutlineNote } from '../../../shared/types'
+import { autoGrowClamped } from '../utils/autoGrow'
 
 const store = useBookStore()
 const ui = useUiStore()
@@ -292,9 +293,14 @@ const chapterNotes = ref<OutlineNote[]>([])
 const noteRefs = new Map<number, HTMLTextAreaElement>()
 const noteTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
+// Plafonné à 40vh (voir utils/autoGrow.ts) : une note de chapitre très longue
+// arrête de grandir et défile en interne (max-height + overflow-y: auto sur
+// .note-text ci-dessous) plutôt que de pousser .summary-body au-delà de la
+// hauteur disponible — sans quoi la zone devenait illisible/inaccessible
+// (bug utilisateur), main ayant overflow: hidden et .summary-zone étant hors
+// de la zone de scroll .page.
 function autoGrowNote(el: HTMLTextAreaElement): void {
-  el.style.height = 'auto'
-  el.style.height = `${el.scrollHeight}px`
+  autoGrowClamped(el)
 }
 function setNoteRef(note: OutlineNote, el: Element | null): void {
   if (!(el instanceof HTMLTextAreaElement)) return
@@ -1220,6 +1226,16 @@ header {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 10px;
+  /* Filet de sécurité au niveau du CONTENEUR, pas seulement des textareas
+     qu'il porte : .summary-zone est un frère de .page (flex-shrink: 0), pas
+     un descendant de la zone qui défile (contrairement à ce qu'on pourrait
+     supposer en lisant le template) — et main (BookView) a overflow: hidden.
+     Sans ce plafond, un résumé + de nombreuses notes, chacun capé à 40vh,
+     peuvent quand même s'additionner à une hauteur totale qui dépasse
+     l'espace disponible, et l'excédent serait alors purement rogné par main,
+     invisible et inaccessible, sans aucune scrollbar. */
+  max-height: 50vh;
+  overflow-y: auto;
 }
 
 .field {
@@ -1248,6 +1264,8 @@ header {
 .summary-text {
   width: 100%;
   resize: vertical;
+  max-height: 40vh;
+  overflow-y: auto;
   border: 1px solid var(--border);
   background: var(--bg);
   border-radius: 6px;
@@ -1293,7 +1311,13 @@ header {
   flex: 1;
   min-width: 0;
   resize: none;
-  overflow: hidden;
+  /* Plafonné (Task 4b) : au-delà de 40vh, la textarea défile en interne au
+     lieu de continuer à grandir (voir autoGrowClamped dans utils/autoGrow.ts,
+     qui clampe la hauteur JS à ce même seuil) — overflow-y: auto (pas hidden)
+     est nécessaire pour que ce défilement soit possible une fois le plafond
+     atteint. */
+  max-height: 40vh;
+  overflow-y: auto;
   /* Filet de sécurité (Task 15 bis) : si autoGrowNote se déclenche jamais
      (scrollHeight mesuré sur un élément pas encore connecté au DOM, cas
      historique du bug « notes illisibles ») ou renvoie 0, min-height garantit

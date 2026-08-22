@@ -3,6 +3,7 @@ import { nextTick, onMounted, ref, watch } from 'vue'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
 import type { OutlineNote } from '../../../shared/types'
+import { autoGrowClamped } from '../utils/autoGrow'
 
 const store = useBookStore()
 const ui = useUiStore()
@@ -56,10 +57,13 @@ function commitNote(note: OutlineNote): void {
 // Auto-grow : la hauteur suit le contenu plutôt qu'une poignée de
 // redimensionnement manuelle, pour rester cohérent avec l'esprit fiche/carte
 // du reste de l'app (EntityCard, ChapterList) où le texte libre reste court.
+// Plafonné à 40vh (voir utils/autoGrow.ts) : une note globale très longue
+// arrête de grandir et défile en interne (max-height + overflow-y: auto sur
+// .note-text ci-dessous) plutôt que de pousser le reste de la liste hors
+// champ.
 const textareaRefs = new Map<number, HTMLTextAreaElement>()
 function autoGrow(el: HTMLTextAreaElement): void {
-  el.style.height = 'auto'
-  el.style.height = `${el.scrollHeight}px`
+  autoGrowClamped(el)
 }
 function setTextareaRef(note: OutlineNote, el: Element | null): void {
   if (!(el instanceof HTMLTextAreaElement)) return
@@ -233,7 +237,14 @@ h2 {
   flex: 1;
   min-width: 0;
   resize: none;
-  overflow: hidden;
+  /* Plafonné (Task 4b) : au-delà de 40vh, la textarea défile en interne au
+     lieu de continuer à grandir (voir autoGrowClamped, utils/autoGrow.ts) —
+     overflow-y: auto (pas hidden) rend ce défilement possible une fois le
+     plafond atteint. Le conteneur .section défile déjà lui-même (overflow-y:
+     auto, height: 100vh) : ce plafond évite juste qu'une note démesurée ne
+     domine visuellement toute la liste. */
+  max-height: 40vh;
+  overflow-y: auto;
   border: 1px solid var(--border);
   background: var(--bg);
   border-radius: 6px;

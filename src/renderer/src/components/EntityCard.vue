@@ -517,6 +517,16 @@ function removeEntity(): void {
   font-size: 12.5px;
   line-height: 1.5;
 }
+/* Plafond (Task 4b) : .notes n'est pas auto-grow en JS (redimensionnement
+   manuel via `resize: vertical` ci-dessus, comme .description) mais peut
+   contenir des notes très longues — sans plafond, un glisser-déposer de la
+   poignée de redimensionnement pouvait l'étirer sans limite. .description
+   reste inchangé (pas concerné par le bug rapporté — texte plus court en
+   pratique, et hors du périmètre de l'audit puisque non auto-grow). */
+.notes {
+  max-height: 40vh;
+  overflow-y: auto;
+}
 
 .attributes h4,
 .occurrences h4 {

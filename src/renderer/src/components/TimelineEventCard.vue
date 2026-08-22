@@ -10,6 +10,7 @@ import { useTimelineStore } from '../stores/timeline'
 import { useBookStore } from '../stores/book'
 import { useEntitiesStore } from '../stores/entities'
 import { useUiStore } from '../stores/ui'
+import { autoGrowClamped } from '../utils/autoGrow'
 
 const props = defineProps<{ eventId: number }>()
 
@@ -143,10 +144,13 @@ onBeforeUnmount(() => {
 })
 
 // --- Auto-grow de la description ----------------------------------------
+// Plafonné à 40vh (voir utils/autoGrow.ts) : une description d'événement très
+// longue arrête de grandir et défile en interne (max-height + overflow-y:
+// auto sur .description ci-dessous) plutôt que de pousser la carte hors du
+// rail visible.
 const descRef = ref<HTMLTextAreaElement | null>(null)
 function autoGrow(el: HTMLTextAreaElement): void {
-  el.style.height = 'auto'
-  el.style.height = `${el.scrollHeight}px`
+  autoGrowClamped(el)
 }
 onMounted(() => {
   if (descRef.value) autoGrow(descRef.value)
@@ -443,7 +447,12 @@ function removeEvent(): void {
   background: none;
   padding: 0;
   resize: none;
-  overflow: hidden;
+  /* Plafonné (Task 4b) : au-delà de 40vh, la textarea défile en interne au
+     lieu de continuer à grandir (voir autoGrowClamped, utils/autoGrow.ts) —
+     overflow-y: auto (pas hidden) rend ce défilement possible une fois le
+     plafond atteint. `.section` (TimelineSection) défile déjà lui-même. */
+  max-height: 40vh;
+  overflow-y: auto;
   font-size: 13px;
   line-height: 1.55;
   color: var(--fg-muted);
