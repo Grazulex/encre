@@ -133,19 +133,26 @@ async function runImport(): Promise<void> {
       ? "Livre importé, mais certains titres n'ont pas pu être renommés."
       : `« ${book.title} » importé (${n} chapitre${n > 1 ? 's' : ''}).`
   )
-  importing.value = false
+  // importing.value reste `true` jusqu'après router.push : library.load()
+  // est un autre await, donc encore un instant où requestClose() (Échap,
+  // Annuler, clic hors carte) pourrait sinon repasser à travers et fermer
+  // l'assistant avant la fin de la chaîne — la même fenêtre de "fermeture
+  // perçue puis navigation surprise" que la garde ci-dessous vise à éliminer.
   await library.load()
   close()
   router.push(`/book/${book.id}`)
+  importing.value = false
 }
 
 // close() ferme sans condition — utilisé en interne à la fin d'un import
-// réussi, où importing.value est encore true à cet instant précis.
-// requestClose() est la voie utilisateur (Échap, Annuler, clic hors carte) :
-// tant qu'un import est en cours, Escape/Annuler sont avalés plutôt que
-// d'unmonter l'assistant, pour ne jamais laisser l'utilisateur croire qu'il a
-// annulé alors que la chaîne async (toast, library.load, navigation) continue
-// en arrière-plan après coup.
+// réussi, où importing.value est encore true (il n'est remis à false
+// qu'après router.push, voir runImport). requestClose() est la voie
+// utilisateur (Échap, Annuler, clic hors carte) : tant qu'un import est en
+// cours, Escape/Annuler sont avalés plutôt que d'unmonter l'assistant, pour
+// ne jamais laisser l'utilisateur croire qu'il a annulé alors que la chaîne
+// async (toast, library.load, navigation) continue en arrière-plan après
+// coup — y compris pendant l'instant qui sépare ce close() interne du
+// router.push qui le suit.
 function close(): void {
   emit('close')
 }
