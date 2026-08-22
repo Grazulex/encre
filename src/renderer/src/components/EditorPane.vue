@@ -504,6 +504,10 @@ function buildParagraphNode(text: string): Record<string, unknown> {
 // si le brouillon est vide après nettoyage.
 async function insertDraftIntoEditor(chapterId: number, draft: string): Promise<boolean> {
   const ed = editor.value
+  // Garde initiale (panneau resté ouvert alors que le chapitre a déjà changé
+  // avant même l'appel) + garde symétrique reprise après l'`await` plus bas
+  // (voir son commentaire) : ensemble, elles rendent la navigation entre
+  // chapitres — jamais désactivée pendant une insertion — sans risque.
   if (!ed || editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) return false
   try {
     await window.encre.snapshots.create(
@@ -514,6 +518,16 @@ async function insertDraftIntoEditor(chapterId: number, draft: string): Promise<
   } catch (err) {
     console.error("Échec du snapshot avant insertion IA", err)
     ui.toast('Impossible de créer un point de restauration — insertion annulée.')
+    return false
+  }
+  // Re-vérifié après l'`await` ci-dessus : la liste des chapitres n'est pas
+  // désactivée pendant ce snapshot, l'utilisateur a pu changer de chapitre
+  // entre-temps (le watch de chargement a alors déjà remplacé le contenu de
+  // l'éditeur) — sans cette garde, le brouillon du chapitre A serait inséré
+  // (et autosauvegardé) dans le chapitre B désormais affiché, alors que le
+  // snapshot protège A, pas B.
+  if (editorChapterId !== chapterId || store.currentChapter?.id !== chapterId) {
+    ui.toast('Chapitre changé — insertion annulée.')
     return false
   }
   const paragraphs = draft
