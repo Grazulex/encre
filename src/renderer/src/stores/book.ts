@@ -111,6 +111,19 @@ export const useBookStore = defineStore('book', {
     async saveContent(contentJson: string, contentText: string) {
       if (this.currentChapter)
         await this.saveContentFor(this.currentChapter.id, contentJson, contentText)
+    },
+    // Résumé manuel (Task 13) : prioritaire sur un résumé auto pour le plan 3.
+    // Écrit sur un id précis (comme saveContentFor) car l'appelant (zone
+    // repliable de l'éditeur) peut viser le chapitre qui vient d'être quitté ;
+    // on ne réconcilie currentChapter que si c'est encore le même id.
+    async saveSummary(id: number, summary: string) {
+      try {
+        await window.encre.chapters.saveSummary(id, summary)
+        if (this.currentChapter?.id === id) this.currentChapter.summary = summary
+      } catch (err) {
+        console.error('Échec de la sauvegarde du résumé', err)
+        useUiStore().toast("Échec de l'enregistrement du résumé.")
+      }
     }
   }
 })

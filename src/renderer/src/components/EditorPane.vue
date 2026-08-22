@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onMounted, onBeforeUnmount, ref } from 'vue'
+import { watch, onMounted, onBeforeUnmount, nextTick, ref } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { useBookStore } from '../stores/book'
@@ -9,7 +9,7 @@ import { EntityMention } from '../editor/mention'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
 import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
-import type { ChapterStatus, Entity } from '../../../shared/types'
+import type { ChapterStatus, Entity, OutlineNote } from '../../../shared/types'
 
 const store = useBookStore()
 const ui = useUiStore()
@@ -195,6 +195,137 @@ function applyAutolink(selected: AutolinkMatch[]): void {
   ed.view.dispatch(tr)
 }
 
+// Résumé & notes de plan du chapitre (Task 13) : zone entièrement séparée du
+// cycle flush/generation-token du corps ci-dessus — minuteur propre, état de
+// repli propre, liste de notes propre. Rien ici n'écrit dans saveTimer,
+// pendingChapterId ni editorChapterId, et rien ci-dessus ne lit cette
+// section.
+
+// Repli/dépli mémorisé par chapitre, en session seulement : une Map hors
+// réactivité suffit (pas de persistance disque voulue), seule la valeur du
+// chapitre affiché a besoin d'être réactive pour le template.
+const summaryOpenByChapter = new Map<number, boolean>()
+const summaryOpen = ref(false)
+
+let summaryTimer: ReturnType<typeof setTimeout> | null = null
+// Capture le chapitre concerné par la frappe en attente, jamais relu depuis
+// store.currentChapter au moment du flush : au changement de chapitre,
+// currentChapter pointe déjà vers le nouveau avant que ce minuteur n'ait eu
+// l'occasion de se déclencher (même raison que pendingChapterId plus haut).
+let pendingSummary: { id: number; text: string } | null = null
+
+function flushSummary(): void {
+  if (summaryTimer) {
+    clearTimeout(summaryTimer)
+    summaryTimer = null
+  }
+  if (!pendingSummary) return
+  const { id, text } = pendingSummary
+  pendingSummary = null
+  store.saveSummary(id, text)
+}
+
+function onSummaryInput(event: Event): void {
+  const chapter = store.currentChapter
+  if (!chapter) return
+  pendingSummary = { id: chapter.id, text: (event.target as HTMLTextAreaElement).value }
+  if (summaryTimer) clearTimeout(summaryTimer)
+  summaryTimer = setTimeout(flushSummary, 600)
+}
+
+function toggleSummary(): void {
+  const id = store.currentChapter?.id
+  summaryOpen.value = !summaryOpen.value
+  if (id != null) summaryOpenByChapter.set(id, summaryOpen.value)
+}
+
+// Notes de plan portant sur ce chapitre précis (outline.chapterId === id),
+// distinctes des notes globales du livre affichées par OutlineSection.
+const chapterNotes = ref<OutlineNote[]>([])
+const noteRefs = new Map<number, HTMLTextAreaElement>()
+const noteTimers = new Map<number, ReturnType<typeof setTimeout>>()
+
+function autoGrowNote(el: HTMLTextAreaElement): void {
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+function setNoteRef(note: OutlineNote, el: Element | null): void {
+  if (!(el instanceof HTMLTextAreaElement)) return
+  noteRefs.set(note.id, el)
+  autoGrowNote(el)
+}
+
+async function loadChapterNotes(): Promise<void> {
+  const chapter = store.currentChapter
+  if (!chapter) {
+    chapterNotes.value = []
+    return
+  }
+  try {
+    const all = await window.encre.outline.listByBook(chapter.bookId)
+    chapterNotes.value = all
+      .filter((n) => n.chapterId === chapter.id)
+      .sort((a, b) => a.position - b.position)
+  } catch (err) {
+    console.error('Échec du chargement des notes du chapitre', err)
+  }
+}
+
+function onChapterNoteInput(note: OutlineNote, event: Event): void {
+  autoGrowNote(event.target as HTMLTextAreaElement)
+  clearTimeout(noteTimers.get(note.id))
+  noteTimers.set(
+    note.id,
+    setTimeout(() => window.encre.outline.update(note.id, note.content), 600)
+  )
+}
+
+async function addChapterNote(): Promise<void> {
+  const chapter = store.currentChapter
+  if (!chapter) return
+  const note = await window.encre.outline.create(chapter.bookId, chapter.id)
+  chapterNotes.value.push(note)
+  await nextTick()
+  noteRefs.get(note.id)?.focus()
+}
+
+async function moveChapterNote(index: number, direction: -1 | 1): Promise<void> {
+  const chapter = store.currentChapter
+  const j = index + direction
+  if (!chapter || j < 0 || j >= chapterNotes.value.length) return
+  ;[chapterNotes.value[index], chapterNotes.value[j]] = [
+    chapterNotes.value[j],
+    chapterNotes.value[index]
+  ]
+  await window.encre.outline.reorder(
+    chapter.bookId,
+    chapter.id,
+    chapterNotes.value.map((n) => n.id)
+  )
+}
+
+async function removeChapterNote(note: OutlineNote): Promise<void> {
+  if (!confirm('Supprimer cette note ?')) return
+  await window.encre.outline.remove(note.id)
+  chapterNotes.value = chapterNotes.value.filter((n) => n.id !== note.id)
+}
+
+// Changement de chapitre : (a) force la sauvegarde d'un résumé en attente
+// pour le chapitre QUITTÉ avant de perdre sa référence (pendingSummary porte
+// déjà son propre id, donc rien à lire sur store.currentChapter ici), (b)
+// reflète l'état replié/déplié mémorisé pour le nouveau chapitre, (c)
+// recharge ses notes. Watcher entièrement étranger à celui du corps
+// ci-dessus, même s'il observe la même source.
+watch(
+  () => store.currentChapter?.id,
+  (id) => {
+    flushSummary()
+    summaryOpen.value = id != null ? (summaryOpenByChapter.get(id) ?? false) : false
+    loadChapterNotes()
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   ui.registerQuitFlusher(() => flush())
 })
@@ -209,6 +340,17 @@ onMounted(() => {
 onBeforeUnmount(() => {
   flush()
   ui.registerQuitFlusher(null)
+})
+
+// Hook séparé (pas fusionné au précédent) pour ne pas toucher au flush du
+// corps ci-dessus : démontage du composant (fermeture du livre, navigation
+// hors de BookView) déclenche aussi la sauvegarde d'un résumé en attente.
+// Comme flushSummary(), fire-and-forget — même limite assumée que le reste
+// des champs debouncés de l'app (EntityCard) : un quit très rapide dans les
+// 600 ms suivant la dernière frappe n'est pas couvert par la poignée de main
+// IPC de fermeture (celle-ci n'attend que le flusher du corps).
+onBeforeUnmount(() => {
+  flushSummary()
 })
 
 function rename(event: Event): void {
@@ -244,6 +386,72 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       </select>
       <button type="button" class="autolink-btn" @click="openAutolink">Lier les entités</button>
     </header>
+
+    <div class="summary-zone">
+      <button
+        type="button"
+        class="summary-toggle"
+        :aria-expanded="summaryOpen"
+        @click="toggleSummary"
+      >
+        <span class="chevron" :class="{ open: summaryOpen }">▸</span>
+        Résumé &amp; notes
+      </button>
+      <div v-if="summaryOpen" class="summary-body">
+        <div class="field">
+          <span class="field-label">Résumé</span>
+          <textarea
+            v-model="store.currentChapter.summary"
+            class="summary-text"
+            rows="2"
+            placeholder="Résumé manuel de ce chapitre — prioritaire pour le contexte donné à l'IA."
+            @input="onSummaryInput"
+          ></textarea>
+        </div>
+
+        <div class="field">
+          <div class="field-head">
+            <span class="field-label">Notes de plan de ce chapitre</span>
+            <button type="button" class="add-note" @click="addChapterNote">+ Note</button>
+          </div>
+          <p v-if="chapterNotes.length === 0" class="empty-notes">
+            Aucune note de plan pour ce chapitre.
+          </p>
+          <ol v-else class="notes-list">
+            <li v-for="(note, index) in chapterNotes" :key="note.id" class="note">
+              <textarea
+                :ref="(el) => setNoteRef(note, el as Element | null)"
+                v-model="note.content"
+                class="note-text"
+                rows="1"
+                placeholder="Note…"
+                @input="onChapterNoteInput(note, $event)"
+              ></textarea>
+              <span class="note-controls">
+                <button
+                  :disabled="index === 0"
+                  type="button"
+                  title="Monter"
+                  @click="moveChapterNote(index, -1)"
+                >
+                  ↑
+                </button>
+                <button
+                  :disabled="index === chapterNotes.length - 1"
+                  type="button"
+                  title="Descendre"
+                  @click="moveChapterNote(index, 1)"
+                >
+                  ↓
+                </button>
+                <button type="button" title="Supprimer" @click="removeChapterNote(note)">×</button>
+              </span>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
     <div v-if="chapterEntities.length" class="chapter-chips">
       <button
         v-for="entity in chapterEntities"
@@ -361,6 +569,144 @@ header {
 .autolink-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.summary-zone {
+  max-width: 42rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 0 10px;
+  flex-shrink: 0;
+}
+
+.summary-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  padding: 3px 4px 3px 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+.summary-toggle:hover {
+  color: var(--accent);
+}
+.chevron {
+  display: inline-block;
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+  padding: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.field-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--fg-muted);
+}
+
+/* Résumé et notes : texte de travail, pas manuscrit — hérite de --font-ui
+   (posé sur <body>, theme.css) plutôt que --font-manuscript, comme les
+   champs description/notes des fiches personnages/lieux (EntityCard). */
+.summary-text {
+  width: 100%;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.add-note {
+  font-size: 11px;
+  padding: 3px 9px;
+  color: var(--fg-muted);
+}
+.add-note:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.empty-notes {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.notes-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.note-text {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  border: none;
+  background: none;
+  padding: 3px 2px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.note-text:focus {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-radius: 4px;
+}
+.note-controls {
+  flex-shrink: 0;
+  display: flex;
+  gap: 1px;
+  padding-top: 2px;
+}
+.note-controls button {
+  border: none;
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 4px;
+  color: var(--fg-muted);
+}
+.note-controls button:hover:not(:disabled) {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.note-controls button:disabled {
+  opacity: 0.25;
+  cursor: default;
 }
 
 .chapter-chips {

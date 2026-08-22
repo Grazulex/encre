@@ -10,6 +10,7 @@ import ChapterList from '../components/ChapterList.vue'
 import EditorPane from '../components/EditorPane.vue'
 import StatusBar from '../components/StatusBar.vue'
 import EntitiesSection from '../components/EntitiesSection.vue'
+import OutlineSection from '../components/OutlineSection.vue'
 import EntityDrawer from '../components/EntityDrawer.vue'
 
 const props = defineProps<{ bookId: number }>()
@@ -111,7 +112,8 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
       </div>
       <EntitiesSection v-if="store.section === 'personnages'" kind="character" />
       <EntitiesSection v-if="store.section === 'lieux'" kind="place" />
-      <p v-if="store.section === 'chronologie' || store.section === 'plan'" class="empty">
+      <OutlineSection v-if="store.section === 'plan'" />
+      <p v-if="store.section === 'chronologie'" class="empty">
         {{ SECTION_LABELS[store.section] }} — à venir.
       </p>
     </main>
