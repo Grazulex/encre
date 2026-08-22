@@ -83,18 +83,37 @@ watch(step, async (s) => {
 async function runImport(): Promise<void> {
   if (!folder.value || importing.value) return
   importing.value = true
+
+  // orderedFiles vient de .map() puis d'un spread : un tableau natif, jamais
+  // le proxy réactif de items — nécessaire pour passer la frontière IPC.
+  const orderedFiles = [...items.value.map((it) => it.file)]
+  const title = bookTitle.value.trim()
+
+  // Premier bloc : la création du livre elle-même. Une erreur ici veut dire
+  // qu'aucun livre n'existe encore côté base — l'assistant reste ouvert et un
+  // nouvel essai relance un importBook propre (comportement inchangé).
+  let book
   try {
-    // orderedFiles vient de .map() : un tableau natif, jamais le proxy
-    // réactif de items — nécessaire pour passer la frontière IPC.
-    const orderedFiles = [...items.value.map((it) => it.file)]
-    const title = bookTitle.value.trim()
-    const book = await window.encre.importer.importBook(folder.value, orderedFiles, title)
-    // importBook réutilise les titres détectés au scan (titre markdown ou nom
-    // de fichier) — sa signature ne prend pas de titres personnalisés. Les
-    // éventuelles éditions de l'étape 2 sont donc appliquées après coup par
-    // chapitre. L'ordre de création (transaction importBook) suit
-    // orderedFiles, et listByBook est trié par position : même ordre des deux
-    // côtés, on peut donc réconcilier par index.
+    book = await window.encre.importer.importBook(folder.value, orderedFiles, title)
+  } catch (err) {
+    console.error("Échec de l'import du livre", err)
+    ui.toast("Échec de l'import. Vérifiez les fichiers et réessayez.")
+    importing.value = false
+    return
+  }
+
+  // Second bloc, volontairement séparé : à partir d'ici, le livre existe déjà
+  // en base. importBook réutilise les titres détectés au scan (titre markdown
+  // ou nom de fichier) — sa signature ne prend pas de titres personnalisés —
+  // les éventuelles éditions de l'étape 2 sont donc appliquées après coup par
+  // chapitre. L'ordre de création (transaction importBook) suit orderedFiles,
+  // et listByBook est trié par position : même ordre des deux côtés, on peut
+  // donc réconcilier par index. Si un renommage échoue, ce n'est PAS un échec
+  // d'import : fusionner les deux erreurs sous le même toast pousserait
+  // l'utilisateur à « réessayer » et créerait un second livre en doublon. On
+  // continue donc le chemin de succès (toast dédié, load, close, navigation).
+  let renameFailed = false
+  try {
     const metas = await window.encre.chapters.listByBook(book.id)
     for (let i = 0; i < items.value.length; i++) {
       const edited = items.value[i].title.trim()
@@ -103,21 +122,37 @@ async function runImport(): Promise<void> {
         await window.encre.chapters.rename(meta.id, edited)
       }
     }
-    const n = items.value.length
-    ui.toast(`« ${book.title} » importé (${n} chapitre${n > 1 ? 's' : ''}).`)
-    await library.load()
-    close()
-    router.push(`/book/${book.id}`)
   } catch (err) {
-    console.error("Échec de l'import du livre", err)
-    ui.toast("Échec de l'import. Vérifiez les fichiers et réessayez.")
-  } finally {
-    importing.value = false
+    console.error('Échec du renommage de certains chapitres importés', err)
+    renameFailed = true
   }
+
+  const n = items.value.length
+  ui.toast(
+    renameFailed
+      ? "Livre importé, mais certains titres n'ont pas pu être renommés."
+      : `« ${book.title} » importé (${n} chapitre${n > 1 ? 's' : ''}).`
+  )
+  importing.value = false
+  await library.load()
+  close()
+  router.push(`/book/${book.id}`)
 }
 
+// close() ferme sans condition — utilisé en interne à la fin d'un import
+// réussi, où importing.value est encore true à cet instant précis.
+// requestClose() est la voie utilisateur (Échap, Annuler, clic hors carte) :
+// tant qu'un import est en cours, Escape/Annuler sont avalés plutôt que
+// d'unmonter l'assistant, pour ne jamais laisser l'utilisateur croire qu'il a
+// annulé alors que la chaîne async (toast, library.load, navigation) continue
+// en arrière-plan après coup.
 function close(): void {
   emit('close')
+}
+
+function requestClose(): void {
+  if (importing.value) return
+  close()
 }
 
 // Piège de focus : contrairement à CommandPalette (un seul élément
@@ -149,7 +184,7 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
-    close()
+    requestClose()
   } else if (event.key === 'Tab') {
     trapTab(event)
   }
@@ -162,7 +197,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="wizard-overlay" @click.self="close">
+  <div class="wizard-overlay" @click.self="requestClose">
     <div
       ref="cardEl"
       class="wizard-card"
@@ -280,7 +315,9 @@ onMounted(async () => {
       </div>
 
       <footer>
-        <button type="button" class="ghost" @click="close">Annuler</button>
+        <button type="button" class="ghost" :disabled="importing" @click="requestClose">
+          Annuler
+        </button>
         <div class="footer-nav">
           <button v-if="step > 1" type="button" :disabled="importing" @click="goBack">
             Précédent

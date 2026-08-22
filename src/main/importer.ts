@@ -1,7 +1,13 @@
 import { readdirSync, readFileSync } from 'fs'
 import { join, basename } from 'path'
 import { marked } from 'marked'
-import { generateJSON } from '@tiptap/html'
+// '@tiptap/html' résout vers la variante navigateur dès qu'on est chargé en
+// CommonJS (l'export conditionnel "require" du package n'a pas de branche
+// "node", contrairement à "import") — c'est le cas du process main d'Electron
+// une fois bundlé par electron-vite, d'où le crash "can only be used in a
+// browser environment" en prod comme en dev. L'import explicite du sous-chemin
+// /server force la variante Node (DOM simulé via linkedom) dans tous les cas.
+import { generateJSON } from '@tiptap/html/server'
 import { StarterKit } from '@tiptap/starter-kit'
 import { stripCodeBlocks } from '../shared/stripCodeBlocks'
 
