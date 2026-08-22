@@ -7,7 +7,8 @@ const api: EncreApi = {
     get: (id) => ipcRenderer.invoke('books:get', id),
     create: (input) => ipcRenderer.invoke('books:create', input),
     update: (id, patch) => ipcRenderer.invoke('books:update', id, patch),
-    remove: (id) => ipcRenderer.invoke('books:remove', id)
+    remove: (id) => ipcRenderer.invoke('books:remove', id),
+    pickCover: (id) => ipcRenderer.invoke('books:pickCover', id)
   },
   chapters: {
     listByBook: (bookId) => ipcRenderer.invoke('chapters:listByBook', bookId),

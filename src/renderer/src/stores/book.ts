@@ -1,6 +1,19 @@
 import { defineStore } from 'pinia'
 import { useUiStore } from './ui'
-import type { Book, BookSection, Chapter, ChapterMeta, ChapterStatus } from '../../../shared/types'
+import type {
+  Book,
+  BookPatch,
+  BookSection,
+  Chapter,
+  ChapterMeta,
+  ChapterStatus
+} from '../../../shared/types'
+
+// Garde de séquence par livre (même principe que entities.ts) : deux champs
+// du panneau d'édition du livre (BookSettingsPanel) sauvegardés à des
+// instants différents ne doivent jamais voir la réponse la plus ancienne
+// écraser un état local plus récent posé par l'autre champ entre-temps.
+const bookUpdateSeq = new Map<number, number>()
 
 export const useBookStore = defineStore('book', {
   state: () => ({
@@ -37,6 +50,38 @@ export const useBookStore = defineStore('book', {
       } catch (err) {
         console.error('Échec du chargement du livre', err)
         useUiStore().toast('Impossible de charger — élément introuvable.')
+      }
+    },
+    // Fiche du livre (Task 15, BookSettingsPanel) : chaque champ a son propre
+    // minuteur de débounce côté composant, comme EntityCard.onXInput. Ici, on
+    // ne réconcilie que les clés du patch envoyé — jamais le livre entier
+    // renvoyé par le serveur — pour ne pas écraser un autre champ en cours de
+    // frappe (voir entities.update pour le même raisonnement).
+    async update(patch: BookPatch) {
+      if (!this.book) return
+      const id = this.book.id
+      const seq = (bookUpdateSeq.get(id) ?? 0) + 1
+      bookUpdateSeq.set(id, seq)
+      try {
+        const updated = await window.encre.books.update(id, patch)
+        if (this.book && this.book.id === id && bookUpdateSeq.get(id) === seq) {
+          for (const key of Object.keys(patch) as (keyof BookPatch)[]) {
+            ;(this.book as Record<string, unknown>)[key] = updated[key]
+          }
+        }
+      } catch (err) {
+        console.error('Échec de la sauvegarde du livre', err)
+        useUiStore().toast("Échec de l'enregistrement du livre.")
+      }
+    },
+    async pickCover() {
+      if (!this.book) return
+      try {
+        const updated = await window.encre.books.pickCover(this.book.id)
+        this.book.coverPath = updated.coverPath
+      } catch (err) {
+        console.error('Échec de la sélection de la couverture', err)
+        useUiStore().toast("Impossible de charger l'image.")
       }
     },
     async refreshChapters() {

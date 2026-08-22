@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import { useBookStore } from '../stores/book'
+import { mediaUrl } from '../utils/media'
 import type { EntityOccurrence } from '../../../shared/types'
 
 const props = defineProps<{
@@ -158,10 +159,11 @@ function removeAttrPair(index: number): void {
 }
 
 // --- Image ---------------------------------------------------------------
-// imagePath est un chemin absolu ; la CSP du renderer (img-src 'self' data:)
-// bloque le chargement d'un <img src="file://…"> — voir index.html. On
-// tente quand même l'affichage (au cas où la politique change) et on bascule
-// sur un monogramme dès que le navigateur signale l'échec.
+// imagePath est un chemin absolu côté disque ; affiché via le protocole
+// encre-media (mediaUrl), seule voie autorisée par la CSP du renderer
+// (img-src 'self' data: encre-media: — voir index.html). On bascule sur un
+// monogramme dès que le navigateur signale l'échec (fichier déplacé/supprimé
+// hors de l'app, par ex.).
 const imgFailed = ref(false)
 watch(
   () => entity.value?.imagePath,
@@ -204,7 +206,7 @@ function removeEntity(): void {
     <div class="avatar">
       <img
         v-if="entity.imagePath && !imgFailed"
-        :src="`file://${entity.imagePath}`"
+        :src="mediaUrl(entity.imagePath) ?? undefined"
         alt=""
         @error="imgFailed = true"
       />

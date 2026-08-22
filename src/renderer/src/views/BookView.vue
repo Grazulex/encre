@@ -9,9 +9,11 @@ import ChapterList from '../components/ChapterList.vue'
 import EditorPane from '../components/EditorPane.vue'
 import StatusBar from '../components/StatusBar.vue'
 import EntitiesSection from '../components/EntitiesSection.vue'
+import EntityList from '../components/EntityList.vue'
 import OutlineSection from '../components/OutlineSection.vue'
 import TimelineSection from '../components/TimelineSection.vue'
 import EntityDrawer from '../components/EntityDrawer.vue'
+import BookSettingsPanel from '../components/BookSettingsPanel.vue'
 
 const props = defineProps<{ bookId: number }>()
 const store = useBookStore()
@@ -36,6 +38,9 @@ const progress = computed(() => {
 })
 
 const focusMode = ref(false)
+// Panneau d'édition du livre (Task 15) : ouvert par le bouton discret ⚙ de
+// l'aside, fermé par son propre bouton « Fermer » ou Échap (BookSettingsPanel).
+const settingsOpen = ref(false)
 
 function navigateChapter(direction: -1 | 1): void {
   if (store.section !== 'chapitres') return
@@ -86,7 +91,18 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
         <span class="chevron">←</span> Bibliothèque
       </button>
       <div v-if="store.book" class="header">
-        <h1>{{ store.book.title }}</h1>
+        <div class="title-row">
+          <h1>{{ store.book.title }}</h1>
+          <button
+            class="edit-book"
+            type="button"
+            title="Modifier le livre"
+            aria-label="Modifier le livre"
+            @click="settingsOpen = true"
+          >
+            ⚙
+          </button>
+        </div>
         <p class="meta">
           <span v-if="store.book.author">{{ store.book.author }}</span>
           <span v-if="store.book.author && store.book.genre" class="dot">·</span>
@@ -96,6 +112,8 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
       </div>
       <SectionNav />
       <ChapterList v-if="store.section === 'chapitres'" />
+      <EntityList v-if="store.section === 'personnages'" kind="character" />
+      <EntityList v-if="store.section === 'lieux'" kind="place" />
     </aside>
     <main>
       <!-- v-show plutôt que v-if : l'éditeur ne doit pas être démonté quand on
@@ -116,6 +134,7 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
       <TimelineSection v-if="store.section === 'chronologie'" />
     </main>
     <EntityDrawer />
+    <BookSettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
   </div>
 </template>
 
@@ -169,7 +188,14 @@ aside {
   padding: 10px 18px 14px;
   border-bottom: 1px solid var(--border);
 }
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .header h1 {
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-manuscript);
   font-size: 19px;
   font-weight: 600;
@@ -177,6 +203,32 @@ aside {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.edit-book {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  border-color: transparent;
+  color: var(--fg-muted);
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.header:hover .edit-book,
+.edit-book:focus-visible {
+  opacity: 1;
+}
+.edit-book:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .header .meta {
   color: var(--fg-muted);

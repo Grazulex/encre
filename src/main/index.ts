@@ -1,10 +1,35 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
+import { join, normalize, sep } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { openDb } from './db/connection'
 import { createApi } from './api'
 import { registerIpc } from './ipc'
+
+// Protocole privilégié `encre-media` : seule voie d'affichage des images
+// (couvertures de livres, photos de fiches personnages/lieux) dans le
+// renderer — la CSP (index.html) n'autorise ni file:// ni http(s):// dans
+// img-src, uniquement 'self', data: et encre-media:. Sert EXCLUSIVEMENT les
+// fichiers du dossier media de userData : on normalise le chemin demandé et
+// on vérifie qu'il reste préfixé par ce dossier avant de le lire, pour
+// qu'une requête du type encre-media://../../etc/passwd ne puisse jamais en
+// sortir. Pas d'enregistrement via protocol.registerSchemesAsPrivileged
+// (scheme non "standard") : le nom de fichier demandé (l'« hôte » de l'URL)
+// garde ainsi sa casse d'origine, au lieu d'être passé en minuscules par le
+// parseur d'URL WHATWG comme le ferait un schéma "standard".
+function registerMediaProtocol(mediaDir: string): void {
+  const PREFIX = 'encre-media://'
+  protocol.handle('encre-media', (request) => {
+    const raw = request.url.startsWith(PREFIX) ? request.url.slice(PREFIX.length) : ''
+    const name = decodeURIComponent(raw.split(/[?#]/)[0])
+    const filePath = normalize(join(mediaDir, name))
+    if (filePath !== mediaDir && !filePath.startsWith(mediaDir + sep)) {
+      return new Response('Chemin refusé', { status: 403 })
+    }
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -71,6 +96,8 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  registerMediaProtocol(join(app.getPath('userData'), 'media'))
 
   const db = openDb(join(app.getPath('userData'), 'library.db'))
   registerIpc(createApi(db))

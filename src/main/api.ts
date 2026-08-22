@@ -18,7 +18,25 @@ export function createApi(db: Db): Omit<EncreApi, 'app'> {
       get: async (id) => books.getBook(db, id),
       create: async (input) => books.createBook(db, input),
       update: async (id, patch) => books.updateBook(db, id, patch),
-      remove: async (id) => books.deleteBook(db, id)
+      remove: async (id) => books.deleteBook(db, id),
+      // Même mécanique que entities.pickImage ci-dessous : dialog, copie dans
+      // media/, mise à jour de la colonne (ici cover_path), retour de l'objet
+      // complet. Fichier nommé par id (book-<id>.<ext>) pour rester stable
+      // d'un choix de couverture à l'autre (écrase l'ancien fichier).
+      pickCover: async (id) => {
+        const { app, dialog } = await import('electron')
+        const res = await dialog.showOpenDialog({
+          title: 'Choisir une couverture',
+          filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+          properties: ['openFile']
+        })
+        if (res.canceled || res.filePaths.length === 0) return books.getBook(db, id)
+        const mediaDir = join(app.getPath('userData'), 'media')
+        mkdirSync(mediaDir, { recursive: true })
+        const dest = join(mediaDir, `book-${id}${extname(res.filePaths[0])}`)
+        copyFileSync(res.filePaths[0], dest)
+        return books.updateBook(db, id, { coverPath: dest })
+      }
     },
     chapters: {
       listByBook: async (bookId) => chapters.listChapters(db, bookId),

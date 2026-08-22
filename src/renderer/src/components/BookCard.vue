@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import type { Book } from '../../../shared/types'
 import { BOOK_STATUS_LABELS } from '../../../shared/labels'
+import { mediaUrl } from '../utils/media'
 
 const props = defineProps<{ book: Book }>()
 defineEmits<{ open: []; remove: [] }>()
@@ -12,6 +14,14 @@ function progress(): string {
   if (!props.book.wordGoal) return `${words} mots`
   return `${words} / ${props.book.wordGoal.toLocaleString('fr-FR')} mots`
 }
+
+// Même garde que EntityCard : bascule sur le monogramme dégradé si l'image
+// échoue à charger (fichier déplacé/supprimé hors de l'app).
+const coverFailed = ref(false)
+watch(
+  () => props.book.coverPath,
+  () => (coverFailed.value = false)
+)
 </script>
 
 <template>
@@ -25,7 +35,13 @@ function progress(): string {
     @keydown.space.prevent="$emit('open')"
   >
     <div class="cover">
-      <span>{{ book.title.slice(0, 1).toUpperCase() }}</span>
+      <img
+        v-if="book.coverPath && !coverFailed"
+        :src="mediaUrl(book.coverPath) ?? undefined"
+        alt=""
+        @error="coverFailed = true"
+      />
+      <span v-else>{{ book.title.slice(0, 1).toUpperCase() }}</span>
     </div>
     <h3>{{ book.title }}</h3>
     <p class="meta">
@@ -109,6 +125,12 @@ function progress(): string {
   font-size: 2.75rem;
   font-weight: 600;
   color: var(--bg);
+}
+.cover img {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 h3 {

@@ -11,6 +11,7 @@ export interface EncreApi {
     create(input: BookCreate): Promise<Book>
     update(id: number, patch: BookPatch): Promise<Book>
     remove(id: number): Promise<void>
+    pickCover(id: number): Promise<Book>
   }
   chapters: {
     listByBook(bookId: number): Promise<ChapterMeta[]>
