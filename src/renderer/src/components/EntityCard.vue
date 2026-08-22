@@ -93,14 +93,24 @@ function removeAlias(index: number): void {
 // pourrait effacer une paire en cours d'édition (ex. une ligne fraîchement
 // ajoutée, clé encore vide).
 interface AttrPair {
+  id: number
   key: string
   value: string
 }
 const attrPairs = ref<AttrPair[]>([])
+// Identifiant stable par ligne (indépendant de la position) : la clé de
+// v-for doit rester attachée à la même ligne après une suppression au
+// milieu de la liste, sous peine de réassigner le focus/l'état DOM d'un
+// <input> à la mauvaise paire.
+let nextPairId = 0
 
 function seedAttrPairs(): void {
   attrPairs.value = entity.value
-    ? Object.entries(entity.value.attributes).map(([key, value]) => ({ key, value }))
+    ? Object.entries(entity.value.attributes).map(([key, value]) => ({
+        id: nextPairId++,
+        key,
+        value
+      }))
     : []
 }
 onMounted(seedAttrPairs)
@@ -119,7 +129,7 @@ function commitAttributesDebounced(): void {
   debounced('attributes', commitAttributesNow)
 }
 function addAttrPair(): void {
-  attrPairs.value.push({ key: '', value: '' })
+  attrPairs.value.push({ id: nextPairId++, key: '', value: '' })
 }
 function removeAttrPair(index: number): void {
   attrPairs.value.splice(index, 1)
@@ -208,7 +218,7 @@ function removeEntity(): void {
 
     <div class="attributes">
       <h4>Attributs</h4>
-      <div v-for="(pair, index) in attrPairs" :key="index" class="attr-row">
+      <div v-for="(pair, index) in attrPairs" :key="pair.id" class="attr-row">
         <input
           v-model="pair.key"
           type="text"
