@@ -39,3 +39,23 @@ describe('tiptapToXhtml', () => {
     )
   })
 })
+
+describe('hardBreak et nœuds inconnus', () => {
+  it('hardBreak et texte des nœuds inconnus', () => {
+    const docWithBreak = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'ligne un' },
+            { type: 'hardBreak' },
+            { type: 'text', text: 'ligne deux' }
+          ]
+        }
+      ]
+    })
+    expect(tiptapToMarkdown(docWithBreak)).toBe('ligne un\nligne deux\n')
+    expect(tiptapToXhtml(docWithBreak)).toBe('<p>ligne un<br/>ligne deux</p>\n')
+  })
+})

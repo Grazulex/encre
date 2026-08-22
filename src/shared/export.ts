@@ -17,6 +17,12 @@ function renderInline(node: any): Inline {
     if (marks.includes('italic')) { md = `*${md}*`; xhtml = `<em>${xhtml}</em>` }
     return { md, xhtml }
   }
+  if (node.type === 'hardBreak') {
+    return { md: '\n', xhtml: '<br/>' }
+  }
+  if (typeof node.text === 'string') {
+    return { md: node.text, xhtml: escapeXml(node.text) }
+  }
   if (Array.isArray(node.content)) return joinInline(node.content)
   return { md: '', xhtml: '' }
 }
