@@ -50,4 +50,69 @@ export interface ChapterMeta {
 export interface Chapter extends ChapterMeta {
   contentJson: string
   contentText: string
+  summary: string
 }
+
+export type EntityKind = 'character' | 'place'
+
+export interface Entity {
+  id: number
+  bookId: number
+  kind: EntityKind
+  name: string
+  aliases: string[]
+  description: string
+  attributes: Record<string, string>
+  notes: string
+  imagePath: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface EntityCreate {
+  bookId: number
+  kind: EntityKind
+  name: string
+}
+
+export type EntityPatch = Partial<{
+  name: string
+  aliases: string[]
+  description: string
+  attributes: Record<string, string>
+  notes: string
+  imagePath: string | null
+}>
+
+export interface EntityOccurrence {
+  chapterId: number
+  chapterTitle: string
+  chapterPosition: number
+}
+
+export interface OutlineNote {
+  id: number
+  bookId: number
+  chapterId: number | null
+  position: number
+  content: string
+  updatedAt: string
+}
+
+export interface TimelineEvent {
+  id: number
+  bookId: number
+  position: number
+  dateLabel: string
+  title: string
+  description: string
+  chapterIds: number[]
+  entityIds: number[]
+  updatedAt: string
+}
+
+export type TimelineEventPatch = Partial<{
+  dateLabel: string
+  title: string
+  description: string
+}>

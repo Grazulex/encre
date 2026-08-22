@@ -31,7 +31,7 @@ export function listChapters(db: Db, bookId: number): ChapterMeta[] {
 export function getChapter(db: Db, id: number): Chapter {
   const row = db.prepare('SELECT * FROM chapters WHERE id = ?').get(id) as any
   if (!row) throw new Error(`Chapitre introuvable: ${id}`)
-  return { ...rowToMeta(row), contentJson: row.content_json, contentText: row.content_text }
+  return { ...rowToMeta(row), contentJson: row.content_json, contentText: row.content_text, summary: row.summary }
 }
 
 export function createChapter(db: Db, bookId: number, title: string): ChapterMeta {
