@@ -30,4 +30,15 @@ describe('mdToTiptapJson', () => {
     const { contentJson } = mdToTiptapJson('```\nindenté\n```\n')
     expect(contentJson).not.toContain('codeBlock')
   })
+
+  it("sépare le texte des blocs imbriqués (listItem) par des sauts de ligne", () => {
+    const { contentText } = mdToTiptapJson('- Item 1\n- Item 2\n')
+    expect(contentText).toContain('Item 1\nItem 2')
+  })
+
+  it('tolère les lignes vides avant le titre de tête', () => {
+    const { contentJson, contentText } = mdToTiptapJson('\n# Titre\n\nCorps.')
+    expect(contentJson).not.toContain('"heading"')
+    expect(contentText.startsWith('Corps.')).toBe(true)
+  })
 })

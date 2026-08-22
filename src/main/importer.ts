@@ -27,14 +27,25 @@ export function scanChapterFiles(folder: string): { file: string; title: string 
   })
 }
 
+const INLINE_TYPES = new Set(['text', 'mention', 'hardBreak'])
+
 function docText(node: any): string {
   if (node?.type === 'text') return node.text ?? ''
-  return (node?.content ?? []).map(docText).join(node?.type === 'doc' ? '\n' : '')
+  if (node?.type === 'hardBreak') return '\n'
+  const children = node?.content ?? []
+  if (children.length === 0) return ''
+  // Les enfants inline (texte, mention, saut de ligne) se concatènent sans
+  // séparateur ; tout le reste (paragraphes, items de liste, citations, …)
+  // est un conteneur de blocs et doit être séparé par des retours à la ligne
+  // pour ne pas coller le texte de blocs distincts (ex. "Item 1Item 2").
+  const allInline = children.every((c: any) => INLINE_TYPES.has(c?.type))
+  return children.map(docText).join(allInline ? '' : '\n')
 }
 
 export function mdToTiptapJson(md: string): { contentJson: string; contentText: string } {
   // retirer le premier # Titre (il devient le titre du chapitre, pas son corps)
-  const body = md.replace(/^#\s+.+\n+/, '')
+  // — tolérant aux lignes vides/espaces qui précéderaient ce titre de tête.
+  const body = md.replace(/^\s*#\s+.+\n+/, '')
   const html = marked.parse(body, { async: false }) as string
   const raw = generateJSON(html, EXTENSIONS)
   const { json } = stripCodeBlocks(JSON.stringify(raw)) // ceinture + bretelles
