@@ -1,12 +1,16 @@
 import { defineStore } from 'pinia'
 import { useUiStore } from './ui'
-import type { Book, Chapter, ChapterMeta, ChapterStatus } from '../../../shared/types'
+import type { Book, BookSection, Chapter, ChapterMeta, ChapterStatus } from '../../../shared/types'
 
 export const useBookStore = defineStore('book', {
   state: () => ({
     book: null as Book | null,
     chapters: [] as ChapterMeta[],
     currentChapter: null as Chapter | null,
+    // Section active de l'espace livre (nav de gauche). Les raccourcis de
+    // focus/navigation de chapitre (BookView) ne s'appliquent qu'en
+    // 'chapitres' : les autres sections sont des placeholders sans éditeur.
+    section: 'chapitres' as BookSection,
     // 'dirty' : frappe en attente, minuteur de sauvegarde armé mais pas encore
     // déclenché (l'éditeur seul sait quand une frappe survient : voir
     // EditorPane.markDirty). 'saving' : requête IPC en vol. 'saved' : à jour.
@@ -20,11 +24,15 @@ export const useBookStore = defineStore('book', {
     markDirty() {
       this.saveState = 'dirty'
     },
+    setSection(section: BookSection) {
+      this.section = section
+    },
     async open(bookId: number) {
       try {
         this.book = await window.encre.books.get(bookId)
         this.chapters = await window.encre.chapters.listByBook(bookId)
         this.currentChapter = null
+        this.section = 'chapitres'
         if (this.chapters.length > 0) await this.openChapter(this.chapters[0].id)
       } catch (err) {
         console.error('Échec du chargement du livre', err)

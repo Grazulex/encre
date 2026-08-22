@@ -1,5 +1,9 @@
 export type BookStatus = 'en_cours' | 'termine' | 'archive'
 export type ChapterStatus = 'brouillon' | 'premier_jet' | 'relu' | 'final'
+// Sections de navigation de l'espace livre (Task 8). Personnages/Lieux
+// (Task 10), Chronologie (Task 14) et Plan (Task 13) sont des placeholders
+// tant que ces tâches ne sont pas implémentées.
+export type BookSection = 'chapitres' | 'personnages' | 'lieux' | 'chronologie' | 'plan'
 
 export interface Book {
   id: number

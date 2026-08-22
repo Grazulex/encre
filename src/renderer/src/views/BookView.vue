@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
 import { useShortcuts } from '../composables/useShortcuts'
+import { SECTION_LABELS } from '../../../shared/labels'
+import SectionNav from '../components/SectionNav.vue'
 import ChapterList from '../components/ChapterList.vue'
 import EditorPane from '../components/EditorPane.vue'
 import StatusBar from '../components/StatusBar.vue'
@@ -25,14 +27,25 @@ const progress = computed(() => {
 const focusMode = ref(false)
 
 function navigateChapter(direction: -1 | 1): void {
+  if (store.section !== 'chapitres') return
   if (!store.currentChapter) return
   const ids = store.chapters.map((c) => c.id)
   const next = ids[ids.indexOf(store.currentChapter.id) + direction]
   if (next != null) store.openChapter(next)
 }
 
+// Le focus mode et la navigation de chapitre n'ont de sens qu'en section
+// chapitres (seule section avec un éditeur) : gardés en tête de handler
+// plutôt que dé/re-liés à chaque changement de section, pour ne pas
+// complexifier le cycle de vie de useShortcuts.
 useShortcuts([
-  { combo: 'meta+shift+f', handler: () => (focusMode.value = !focusMode.value) },
+  {
+    combo: 'meta+shift+f',
+    handler: () => {
+      if (store.section !== 'chapitres') return
+      focusMode.value = !focusMode.value
+    }
+  },
   { combo: 'meta+alt+arrowdown', handler: () => navigateChapter(1) },
   { combo: 'meta+alt+arrowup', handler: () => navigateChapter(-1) },
   // No-op quand le mode focus est déjà inactif : Échap n'a alors aucun effet
@@ -60,16 +73,27 @@ useShortcuts([
         </p>
         <p class="progress">{{ progress }}</p>
       </div>
-      <ChapterList />
+      <SectionNav />
+      <ChapterList v-if="store.section === 'chapitres'" />
     </aside>
     <main>
-      <p v-if="!store.currentChapter" class="empty">
-        Créez un chapitre pour commencer à écrire.
+      <!-- v-show plutôt que v-if : l'éditeur ne doit pas être démonté quand on
+           quitte la section chapitres (ni le chapitre en cours ni le contenu
+           en mémoire du store ne sont resynchronisés à l'ouverture d'une
+           autre section — voir EditorPane), sous peine de perdre l'état de
+           frappe/scroll au retour. -->
+      <div v-show="store.section === 'chapitres'" class="chapitres-view">
+        <p v-if="!store.currentChapter" class="empty">
+          Créez un chapitre pour commencer à écrire.
+        </p>
+        <template v-else>
+          <EditorPane />
+          <StatusBar />
+        </template>
+      </div>
+      <p v-if="store.section !== 'chapitres'" class="empty">
+        {{ SECTION_LABELS[store.section] }} — à venir.
       </p>
-      <template v-else>
-        <EditorPane />
-        <StatusBar />
-      </template>
     </main>
   </div>
 </template>
@@ -152,6 +176,12 @@ main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.chapitres-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 .empty {
   margin: auto;
