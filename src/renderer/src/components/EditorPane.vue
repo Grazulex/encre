@@ -833,20 +833,22 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       <button
         type="button"
         class="autolink-btn"
-        title="Convertit les noms de fiches écrits sans @ en mentions liées"
+        title="Lier les entités — convertit les noms de fiches écrits sans @ en mentions liées"
+        aria-label="Lier les entités"
         @click="openAutolink"
       >
-        Lier les entités
+        🔗
       </button>
       <button
         type="button"
         class="claude-btn"
         :class="{ active: ai.open }"
         title="Assistant Claude (⌘⇧K)"
+        aria-label="Assistant Claude"
         :aria-pressed="ai.open"
         @click="ai.toggle()"
       >
-        Assistant Claude
+        🪶
       </button>
       <div ref="formatWrapEl" class="format-wrap">
         <button
@@ -1037,6 +1039,16 @@ header {
 .chapter-title {
   flex: 1;
   min-width: 0;
+  /* Redesign en-tête (retour utilisateur : titre tronqué à quelques lettres) :
+     le titre garde la priorité flex sur toute la rangée — désormais peu
+     disputée, les deux boutons texte voisins étant devenus des icônes
+     compactes ci-dessous. overflow/text-overflow ne changent rien tant que le
+     titre tient dans l'espace disponible ; ils n'entrent en jeu que pour un
+     titre VRAIMENT long (ellipse plutôt qu'un défilement interne à l'input,
+     qui masquerait le DÉBUT du titre une fois le focus perdu ailleurs qu'au
+     début du champ). */
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: none;
   border-radius: 4px;
   background: none;
@@ -1093,23 +1105,30 @@ header {
   color: var(--accent);
 }
 
-.autolink-btn {
-  flex-shrink: 0;
-  font-size: 11.5px;
-  padding: 5px 12px;
-  color: var(--fg-muted);
-}
-.autolink-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
+/* Redesign en-tête (Task 6, retour utilisateur) : « Lier les entités » et
+   « Assistant Claude » étaient des boutons pleine largeur avec libellé texte —
+   à eux deux, ils réduisaient l'espace disponible pour le titre au point de le
+   tronquer à quelques lettres dans une fenêtre de largeur normale. Convertis
+   en icônes compactes 30×30, même gabarit que .format-btn/.snapshot-btn
+   ci-dessous (déjà ce langage visuel) plutôt qu'un menu « ⋯ » qui masquerait
+   ces deux actions derrière un clic supplémentaire : elles restent d'usage
+   courant (Assistant Claude a même un raccourci clavier dédié) et un menu de
+   dépôt n'aurait récupéré qu'une icône de large pour une perte de
+   découvrabilité — le tooltip (title) porte désormais tout le texte
+   explicatif. */
+.autolink-btn,
 .claude-btn {
   flex-shrink: 0;
-  font-size: 11.5px;
-  padding: 5px 12px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
   color: var(--fg-muted);
 }
+.autolink-btn:hover,
 .claude-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
