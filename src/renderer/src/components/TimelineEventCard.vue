@@ -9,12 +9,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTimelineStore } from '../stores/timeline'
 import { useBookStore } from '../stores/book'
 import { useEntitiesStore } from '../stores/entities'
+import { useUiStore } from '../stores/ui'
 
 const props = defineProps<{ eventId: number }>()
 
 const store = useTimelineStore()
 const bookStore = useBookStore()
 const entitiesStore = useEntitiesStore()
+const ui = useUiStore()
 
 const event = computed(() => store.events.find((e) => e.id === props.eventId) ?? null)
 
@@ -69,9 +71,15 @@ function openEntityBadge(id: number): void {
 // entre événements comme EntityCard/T15) : les commits ci-dessous peuvent
 // donc relire props.eventId/event.value directement à l'échéance, sans
 // capture — seul le FLUSH-vs-CANCEL au démontage change ici.
+// `run` retourne la promesse de store.update (au lieu d'un simple fire-and-
+// forget) : c'est ce qui permet à flushAll(), appelé aussi comme
+// quit-flusher (voir onMounted plus bas), d'être réellement attendu par
+// runQuitFlush() avant que la fenêtre ne se ferme. store.update ne rejette
+// jamais (catch interne, voir stores/timeline.ts), donc le Promise.all dans
+// flushAll ne peut pas provoquer d'échec en cascade.
 const timers: Partial<Record<string, ReturnType<typeof setTimeout>>> = {}
-const pendingCommits: Partial<Record<string, () => void>> = {}
-function debounced(field: string, run: () => void): void {
+const pendingCommits: Partial<Record<string, () => Promise<void> | void>> = {}
+function debounced(field: string, run: () => Promise<void> | void): void {
   clearTimeout(timers[field])
   pendingCommits[field] = run
   timers[field] = setTimeout(() => {
@@ -81,34 +89,57 @@ function debounced(field: string, run: () => void): void {
 }
 function onDateInput(): void {
   debounced('dateLabel', () => {
-    if (event.value) store.update(props.eventId, { dateLabel: event.value.dateLabel })
+    if (!event.value) return undefined
+    return store.update(props.eventId, { dateLabel: event.value.dateLabel })
   })
 }
 function onTitleInput(): void {
   debounced('title', () => {
-    if (event.value) store.update(props.eventId, { title: event.value.title })
+    if (!event.value) return undefined
+    return store.update(props.eventId, { title: event.value.title })
   })
 }
 function onDescriptionInput(e: Event): void {
   autoGrow(e.target as HTMLTextAreaElement)
   debounced('description', () => {
-    if (event.value) store.update(props.eventId, { description: event.value.description })
+    if (!event.value) return undefined
+    return store.update(props.eventId, { description: event.value.description })
   })
 }
-// FLUSH (pas annulation) au démontage : un debounce encore en attente (champ
-// édité juste avant de changer de sélection/suppression de l'événement) doit
+// FLUSH (pas annulation), extrait en fonction nommée pour être appelable
+// depuis deux endroits : le démontage du composant ci-dessous, ET le
+// quit-flusher enregistré auprès du store ui (onMounted plus bas) — un
+// debounce encore en attente (champ édité juste avant de changer de
+// sélection/suppression de l'événement, ou avant un quit de l'app) doit
 // quand même persister, sous peine de perdre silencieusement la dernière
 // frappe (même bug que EntityCard/T15 avant son propre correctif). Les
 // closures ci-dessus gardent leur garde `if (event.value)` : si la carte est
 // démontée parce que l'événement a été SUPPRIMÉ entre-temps, event.value est
 // déjà null et le commit devient un no-op plutôt que d'écrire sur un id qui
 // n'existe plus côté serveur (leçon de OutlineSection.removeNote / Task 13).
-onBeforeUnmount(() => {
+function flushAll(): Promise<void> {
+  const pending: (Promise<void> | void)[] = []
   for (const field of Object.keys(pendingCommits)) {
     clearTimeout(timers[field])
-    pendingCommits[field]?.()
+    pending.push(pendingCommits[field]?.())
     delete pendingCommits[field]
   }
+  return Promise.all(pending).then(() => undefined)
+}
+onBeforeUnmount(() => {
+  flushAll()
+})
+
+// Quit-flusher (fermeture de l'app, pas juste démontage du composant) :
+// chaque carte de la chronologie s'abonne à son montage et se désabonne à
+// son démontage, pour que le store ui n'appelle jamais flushAll() sur une
+// instance déjà démontée.
+let unsubscribeQuitFlusher: (() => void) | null = null
+onMounted(() => {
+  unsubscribeQuitFlusher = ui.addQuitFlusher(() => flushAll())
+})
+onBeforeUnmount(() => {
+  unsubscribeQuitFlusher?.()
 })
 
 // --- Auto-grow de la description ----------------------------------------

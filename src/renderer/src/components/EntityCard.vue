@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import { useBookStore } from '../stores/book'
+import { useUiStore } from '../stores/ui'
 import { mediaUrl } from '../utils/media'
 import type { EntityOccurrence } from '../../../shared/types'
 
@@ -16,6 +17,7 @@ const props = defineProps<{
 
 const store = useEntitiesStore()
 const bookStore = useBookStore()
+const ui = useUiStore()
 
 const entity = computed(() => store.entities.find((e) => e.id === props.entityId) ?? null)
 
@@ -56,9 +58,15 @@ function goToOccurrence(chapterId: number): void {
 // minuteur, jamais relus à l'échéance — et pendingCommits garde une
 // référence à ce commit pour pouvoir le flusher immédiatement (changement de
 // fiche, démontage) plutôt que de le perdre en l'annulant.
+// `run` retourne désormais la promesse de store.update (au lieu d'un simple
+// fire-and-forget) : c'est ce qui permet à flushAll(), appelé comme
+// quit-flusher (voir onMounted plus bas), d'être réellement attendu par
+// runQuitFlush() avant que la fenêtre ne se ferme. store.update ne rejette
+// jamais (catch interne, voir stores/entities.ts), donc les Promise.all ici
+// ne peuvent pas provoquer d'échec en cascade.
 const timers: Partial<Record<string, ReturnType<typeof setTimeout>>> = {}
-const pendingCommits: Partial<Record<string, () => void>> = {}
-function debounced(field: string, run: () => void): void {
+const pendingCommits: Partial<Record<string, () => Promise<void> | void>> = {}
+function debounced(field: string, run: () => Promise<void> | void): void {
   clearTimeout(timers[field])
   pendingCommits[field] = run
   timers[field] = setTimeout(() => {
@@ -66,33 +74,38 @@ function debounced(field: string, run: () => void): void {
     run()
   }, 600)
 }
-function flushAll(): void {
+function flushAll(): Promise<void> {
+  const pending: (Promise<void> | void)[] = []
   for (const field of Object.keys(pendingCommits)) {
     clearTimeout(timers[field])
-    pendingCommits[field]?.()
+    pending.push(pendingCommits[field]?.())
     delete pendingCommits[field]
   }
+  return Promise.all(pending).then(() => undefined)
 }
 
 function onNameInput(): void {
   const id = props.entityId
   const value = entity.value?.name
   debounced('name', () => {
-    if (value !== undefined) store.update(id, { name: value })
+    if (value === undefined) return undefined
+    return store.update(id, { name: value })
   })
 }
 function onDescriptionInput(): void {
   const id = props.entityId
   const value = entity.value?.description
   debounced('description', () => {
-    if (value !== undefined) store.update(id, { description: value })
+    if (value === undefined) return undefined
+    return store.update(id, { description: value })
   })
 }
 function onNotesInput(): void {
   const id = props.entityId
   const value = entity.value?.notes
   debounced('notes', () => {
-    if (value !== undefined) store.update(id, { notes: value })
+    if (value === undefined) return undefined
+    return store.update(id, { notes: value })
   })
 }
 
@@ -158,6 +171,20 @@ watch(
 // raisonnement que le watch ci-dessus, pour la dernière fiche affichée par
 // cette instance de carte.
 onBeforeUnmount(flushAll)
+
+// Quit-flusher (fermeture de l'app, pas juste démontage du composant) :
+// chaque instance de carte (grille personnages/lieux, plusieurs cartes
+// montées à la fois) s'abonne à son montage et se désabonne à son démontage,
+// pour que le store ui n'appelle jamais flushAll() sur une instance déjà
+// démontée. Ferme la même fenêtre de 600 ms que EditorPane pour les champs de
+// fiche édités juste avant un quit.
+let unsubscribeQuitFlusher: (() => void) | null = null
+onMounted(() => {
+  unsubscribeQuitFlusher = ui.addQuitFlusher(() => flushAll())
+})
+onBeforeUnmount(() => {
+  unsubscribeQuitFlusher?.()
+})
 
 // Deux lignes avec la même clé (une fois espaces de bord retirés) : côté
 // serveur, la dernière valeur écrase silencieusement l'autre — et sans
@@ -516,10 +543,10 @@ function removeEntity(): void {
    thème plutôt qu'une couleur d'erreur figée, pour rester cohérent en clair
    comme en sombre. Signal discret, pas de modale. */
 .attr-row.duplicate input {
-  border-color: color-mix(in srgb, #c0392b 55%, var(--border));
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
 }
 .attr-row.duplicate input:focus {
-  border-color: color-mix(in srgb, #c0392b 70%, var(--accent));
+  border-color: color-mix(in srgb, var(--danger) 70%, var(--accent));
 }
 .attr-row button {
   flex-shrink: 0;

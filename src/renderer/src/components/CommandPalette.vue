@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useLibraryStore } from '../stores/library'
 import { useBookStore } from '../stores/book'
 import { SECTION_LABELS } from '../../../shared/labels'
+import { normalizeForSearch } from '../../../shared/textNormalize'
 import type { BookSection } from '../../../shared/types'
 
 const emit = defineEmits<{ close: [] }>()
@@ -22,14 +23,10 @@ onMounted(async () => {
   if (!library.loaded) library.load()
 })
 
-function normalize(value: string): string {
-  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-}
-
 function matches(label: string): boolean {
-  const q = normalize(query.value.trim())
+  const q = normalizeForSearch(query.value.trim())
   if (!q) return true
-  return normalize(label).includes(q)
+  return normalizeForSearch(label).includes(q)
 }
 
 function close(): void {

@@ -15,6 +15,9 @@
   --fg-muted: #6e665a;
   --accent: #3d4d78;
   --border: #e3ddd0;
+  /* Signal d'erreur/danger (clé en double, etc.), dérivé en teinte plutôt que
+     figé en dur dans les composants — voir EntityCard.vue. */
+  --danger: #c0392b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,6 +28,8 @@
     --fg-muted: #8b887f;
     --accent: #8b9bd1;
     --border: #2a2b30;
+    /* Éclairci depuis #c0392b pour garder un contraste lisible sur fond sombre. */
+    --danger: #e2695c;
   }
 }
 

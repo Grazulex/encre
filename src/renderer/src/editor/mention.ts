@@ -11,6 +11,7 @@ import type { SuggestionKeyDownProps, SuggestionOptions, SuggestionProps } from 
 import tippy, { type GetReferenceClientRect, type Instance as TippyInstance } from 'tippy.js'
 import { watch } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
+import { normalizeForSearch } from '../../../shared/textNormalize'
 import type { Entity, EntityKind } from '../../../shared/types'
 import MentionList from '../components/MentionList.vue'
 
@@ -33,16 +34,11 @@ export interface MentionSuggestionItem {
 
 const MAX_SUGGESTIONS = 8
 
-// Même normalisation que CommandPalette.matches : accents/casse ignorés.
-function normalize(value: string): string {
-  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-}
-
 function matchesQuery(entity: Entity, query: string): boolean {
   if (!query) return true
-  const q = normalize(query)
-  if (normalize(entity.name).includes(q)) return true
-  return entity.aliases.some((alias) => normalize(alias).includes(q))
+  const q = normalizeForSearch(query)
+  if (normalizeForSearch(entity.name).includes(q)) return true
+  return entity.aliases.some((alias) => normalizeForSearch(alias).includes(q))
 }
 
 // Personnages d'abord, puis lieux (brief), chaque groupe filtré par la

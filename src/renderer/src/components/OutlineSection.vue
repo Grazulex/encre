@@ -45,9 +45,10 @@ function commitNote(note: OutlineNote): void {
     note.id,
     setTimeout(() => {
       timers.delete(note.id)
-      window.encre.outline
-        .update(note.id, note.content)
-        .catch((err) => console.error('Échec de la sauvegarde de la note', err))
+      window.encre.outline.update(note.id, note.content).catch((err) => {
+        console.error('Échec de la sauvegarde de la note', err)
+        ui.toast('Échec de la sauvegarde de la note.')
+      })
     }, 600)
   )
 }

@@ -226,15 +226,21 @@ let summaryTimer: ReturnType<typeof setTimeout> | null = null
 // l'occasion de se déclencher (même raison que pendingChapterId plus haut).
 let pendingSummary: { id: number; text: string } | null = null
 
-function flushSummary(): void {
+// Renvoie la promesse de store.saveSummary (au lieu d'un simple fire-and-
+// forget) : c'est ce qui permet au flusher enregistré auprès du store ui
+// (onMounted plus bas) d'être réellement attendu par runQuitFlush() avant que
+// la fenêtre ne se ferme. Les appels existants (débounce, changement de
+// chapitre) ignorent toujours la valeur de retour, sans changement de
+// comportement pour eux.
+function flushSummary(): Promise<void> {
   if (summaryTimer) {
     clearTimeout(summaryTimer)
     summaryTimer = null
   }
-  if (!pendingSummary) return
+  if (!pendingSummary) return Promise.resolve()
   const { id, text } = pendingSummary
   pendingSummary = null
-  store.saveSummary(id, text)
+  return store.saveSummary(id, text)
 }
 
 function onSummaryInput(event: Event): void {
@@ -323,6 +329,16 @@ async function loadChapterNotes(): Promise<void> {
   }
 }
 
+// Commit d'une note de chapitre : jamais rejeté (catch interne + toast
+// français), pour que ni le setTimeout ci-dessous ni flushChapterNotesQuit
+// (quit-flusher, voir plus bas) n'aient à gérer un rejet.
+function commitChapterNote(note: OutlineNote): Promise<void> {
+  return window.encre.outline.update(note.id, note.content).catch((err) => {
+    console.error('Échec de la sauvegarde de la note', err)
+    ui.toast('Échec de la sauvegarde de la note.')
+  })
+}
+
 function onChapterNoteInput(note: OutlineNote, event: Event): void {
   autoGrowNote(event.target as HTMLTextAreaElement)
   clearTimeout(noteTimers.get(note.id))
@@ -330,11 +346,25 @@ function onChapterNoteInput(note: OutlineNote, event: Event): void {
     note.id,
     setTimeout(() => {
       noteTimers.delete(note.id)
-      window.encre.outline
-        .update(note.id, note.content)
-        .catch((err) => console.error('Échec de la sauvegarde de la note', err))
+      commitChapterNote(note)
     }, 600)
   )
+}
+
+// Flusher de fermeture (voir onMounted plus bas) : force l'envoi immédiat de
+// tout commit de note de chapitre encore derrière son debounce 600 ms, pour
+// fermer la fenêtre de perte identifiée dans le plan (quit juste après la
+// dernière frappe). commitChapterNote ne rejette jamais (catch interne
+// ci-dessus), donc Promise.all ici ne peut pas provoquer d'échec en cascade.
+function flushChapterNotesQuit(): Promise<void> {
+  const pendingIds = Array.from(noteTimers.keys())
+  const commits = pendingIds.map((id) => {
+    clearTimeout(noteTimers.get(id))
+    noteTimers.delete(id)
+    const note = chapterNotes.value.find((n) => n.id === id)
+    return note ? commitChapterNote(note) : Promise.resolve()
+  })
+  return Promise.all(commits).then(() => undefined)
 }
 
 async function addChapterNote(): Promise<void> {
@@ -393,31 +423,44 @@ watch(
   { immediate: true }
 )
 
+// Trois flushers distincts (corps, résumé, notes de chapitre) plutôt qu'un
+// seul agrégat : chacun garde sa propre logique de purge (voir plus haut/bas),
+// et runQuitFlush() du store ui les exécute tous via Promise.allSettled — un
+// échec de l'un n'empêche jamais les autres de partir.
+let unsubscribeBodyFlusher: (() => void) | null = null
+let unsubscribeSummaryFlusher: (() => void) | null = null
+let unsubscribeNotesFlusher: (() => void) | null = null
+
 onMounted(() => {
-  ui.registerQuitFlusher(() => flush())
+  unsubscribeBodyFlusher = ui.addQuitFlusher(() => flush())
+  unsubscribeSummaryFlusher = ui.addQuitFlusher(() => flushSummary())
+  unsubscribeNotesFlusher = ui.addQuitFlusher(() => flushChapterNotesQuit())
 })
 
 // Le flush ici est fire-and-forget (onBeforeUnmount ne peut pas attendre une
 // promesse) : historiquement une frappe juste avant démontage pouvait donc se
 // perdre si la fermeture de l'app survenait au même instant. Ce n'est plus le
 // cas depuis Task 7 — la fermeture passe désormais par la poignée de main
-// IPC (onFlushRequest / flushDone), qui, elle, attend réellement le flusher
-// enregistré via ui.registerQuitFlusher avant de laisser la fenêtre se
+// IPC (onFlushRequest / flushDone), qui, elle, attend réellement les
+// flushers enregistrés via ui.addQuitFlusher avant de laisser la fenêtre se
 // fermer.
 onBeforeUnmount(() => {
   flush()
-  ui.registerQuitFlusher(null)
+  unsubscribeBodyFlusher?.()
 })
 
 // Hook séparé (pas fusionné au précédent) pour ne pas toucher au flush du
 // corps ci-dessus : démontage du composant (fermeture du livre, navigation
-// hors de BookView) déclenche aussi la sauvegarde d'un résumé en attente.
-// Comme flushSummary(), fire-and-forget — même limite assumée que le reste
-// des champs debouncés de l'app (EntityCard) : un quit très rapide dans les
-// 600 ms suivant la dernière frappe n'est pas couvert par la poignée de main
-// IPC de fermeture (celle-ci n'attend que le flusher du corps).
+// hors de BookView) déclenche aussi la sauvegarde d'un résumé en attente
+// (fire-and-forget ici, comme flushSummary() partout ailleurs — une simple
+// navigation n'a pas besoin d'attendre). Le cas qui comptait vraiment (quit
+// de l'app dans les 600 ms suivant la dernière frappe) est désormais couvert
+// par le flusher enregistré auprès du store ui (onMounted ci-dessus), que
+// runQuitFlush() attend réellement avant de laisser la fenêtre se fermer.
 onBeforeUnmount(() => {
   flushSummary()
+  unsubscribeSummaryFlusher?.()
+  unsubscribeNotesFlusher?.()
 })
 
 function rename(event: Event): void {
