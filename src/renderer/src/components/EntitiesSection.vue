@@ -1,12 +1,20 @@
 <script setup lang="ts">
-// Corps de la section personnages/lieux (Task 15, motif maître-détail) :
-// affiche la fiche sélectionnée dans EntityList (aside), ou un état vide si
-// aucune sélection. La liste et la création vivent désormais dans EntityList
-// — cette section ne fait plus que présenter le détail.
+// Corps de la section personnages/lieux (Task 15, motif maître-détail ; Task
+// D3, retour utilisateur) : affiche la fiche sélectionnée dans EntityList
+// (aside) en PLEINE PAGE via EntityPage, ou un état vide si aucune sélection.
+// EntityCard (l'ancienne carte de grille) reste utilisée ailleurs (tiroir de
+// quick-peek, EntityDrawer) mais plus ici — elle ne remplissait qu'une petite
+// portion de l'espace disponible à droite, héritage de l'époque où la liste
+// vivait dans ce même volet (avant son déplacement à gauche).
+//
+// :key="selected.id" (contrairement à l'ancien <EntityCard> sans clé) : une
+// instance d'EntityPage par fiche, démontée/remontée au changement de
+// sélection plutôt que réutilisée — voir le commentaire d'en-tête de
+// useEntityFieldEditor pour ce que cette clé simplifie côté logique de champ.
 import { computed } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import type { EntityKind } from '../../../shared/types'
-import EntityCard from './EntityCard.vue'
+import EntityPage from './EntityPage.vue'
 
 const props = defineProps<{ kind: EntityKind }>()
 
@@ -25,26 +33,18 @@ const selected = computed(() => {
 
 <template>
   <div class="section">
-    <div v-if="selected" class="detail">
-      <EntityCard :entity-id="selected.id" />
-    </div>
+    <EntityPage v-if="selected" :key="selected.id" :entity-id="selected.id" />
     <p v-else class="empty">Sélectionnez ou créez une fiche.</p>
   </div>
 </template>
 
 <style scoped>
 .section {
-  padding: 28px 36px 48px;
   height: 100vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.detail {
-  width: 100%;
-  max-width: 44rem;
 }
 
 .empty {

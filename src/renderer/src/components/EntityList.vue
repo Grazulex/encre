@@ -2,9 +2,10 @@
 // Liste maître de l'aside pour les sections personnages/lieux (Task 15) :
 // même motif que ChapterList (liste + bouton +, form inline de création,
 // élément actif surligné), la fiche sélectionnée s'affichant dans le corps
-// via EntitiesSection. La suppression reste portée par la fiche elle-même
-// (EntityCard.removeEntity) — pas dupliquée ici — pour ne pas multiplier les
-// actions destructrices sur le même objet.
+// via EntitiesSection → EntityPage (Task D3). La suppression reste portée par
+// la fiche elle-même (bouton « Supprimer la fiche » d'EntityPage) — pas
+// dupliquée ici — pour ne pas multiplier les actions destructrices sur le
+// même objet.
 import { computed, nextTick, ref } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import { useBookStore } from '../stores/book'

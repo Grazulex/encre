@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/book'
 import { useEntitiesStore } from '../stores/entities'
+import { useTimelineStore } from '../stores/timeline'
 import { useAiStore } from '../stores/ai'
 import { useShortcuts } from '../composables/useShortcuts'
 import SectionNav from '../components/SectionNav.vue'
@@ -21,15 +22,26 @@ import ClaudePanel from '../components/ClaudePanel.vue'
 const props = defineProps<{ bookId: number }>()
 const store = useBookStore()
 const entitiesStore = useEntitiesStore()
+const timelineStore = useTimelineStore()
 const ai = useAiStore()
 const router = useRouter()
 
 // Chargé ici (pas paresseusement à l'entrée de la section Personnages/Lieux) :
 // les mentions de l'éditeur (Task 11) et l'autolink (Task 12) ont besoin des
 // entités dès que l'éditeur est visible, quelle que soit la section active.
+//
+// timelineStore est chargé de la même façon depuis Task D3 : EntityPage (section
+// personnages/lieux) affiche les événements de chronologie liés à la fiche
+// affichée sans réclamer son propre aller-retour IPC — un simple filtre sur
+// timelineStore.events, qui doit donc déjà être en mémoire quelle que soit la
+// section active, pas seulement une fois la section Chronologie visitée
+// (TimelineSection continue par ailleurs de rappeler store.load lui-même, ce
+// second appel est sans effet indésirable — même contrat que load(), voir son
+// commentaire dans stores/timeline.ts).
 onMounted(() => {
   store.open(props.bookId)
   entitiesStore.load(props.bookId)
+  timelineStore.load(props.bookId)
 })
 
 const progress = computed(() => {
