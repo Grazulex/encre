@@ -140,6 +140,11 @@ const editor = useEditor({
       }
       const draft = draftFromLayoutNode(node.type.name, node.attrs)
       if (draft) {
+        // Les deux panneaux (menu ¶+ et popover d'édition) partagent le même
+        // point d'ancrage (formatWrapEl) : un seul doit rester visible à la
+        // fois, sans quoi le popover, plus tardif dans le DOM, recouvrirait
+        // silencieusement le menu.
+        formatMenuOpen.value = false
         layoutDraft.value = { draft, pos: nodePos }
         return true
       }
@@ -925,6 +930,10 @@ function chooseFormatNode(kind: 'sceneBreak' | 'pageBreak'): void {
 
 function toggleFormatMenu(): void {
   formatMenuOpen.value = !formatMenuOpen.value
+  // Même exclusion mutuelle que côté handleClickOn (voir son commentaire) :
+  // le menu et le popover d'édition partagent le même ancrage, donc ouvrir
+  // l'un doit fermer l'autre plutôt que de les empiler au même endroit.
+  if (formatMenuOpen.value) layoutDraft.value = null
 }
 
 function onWindowMousedownForFormatMenu(event: MouseEvent): void {
@@ -1686,12 +1695,18 @@ header {
   font-size: 12.5px;
   color: var(--fg);
 }
-.layout-popover-actions {
+/* Pied d'actions commun aux popovers légers (snapshot ci-dessous et
+   édition/insertion de mise en page ci-dessus) : même sélecteur groupé plutôt
+   que deux copies identiques (voir 711df64, qui avait retiré ce genre de
+   duplication locale). */
+.layout-popover-actions,
+.snapshot-popover-actions {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
 }
-.layout-popover-actions button {
+.layout-popover-actions button,
+.snapshot-popover-actions button {
   font-size: 11.5px;
   padding: 5px 10px;
 }
@@ -1741,15 +1756,6 @@ header {
 }
 .snapshot-label-input:focus {
   border-color: var(--accent);
-}
-.snapshot-popover-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-.snapshot-popover-actions button {
-  font-size: 11.5px;
-  padding: 5px 10px;
 }
 
 .summary-zone {
