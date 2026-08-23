@@ -1,6 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { execFileSync } from 'child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs'
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  existsSync,
+  unlinkSync,
+  utimesSync
+} from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { openDb, type Db } from '../db/connection'
@@ -157,6 +166,43 @@ describe('createBackupService — instantané et manifeste', () => {
     const status = await svc.status()
     expect(status.pending.chaptersAdded).toBe(1)
     expect(status.pending.changedTitles).toEqual(['Écrit pendant la sauvegarde'])
+  })
+})
+
+describe('createBackupService — instantanés locaux', () => {
+  it('prend un instantané frais à chaque run', async () => {
+    // Spec §2, étape 1 : jamais le fichier de la veille, sinon un
+    // « Sauvegarder maintenant » enverrait l'état d'hier.
+    const svc = createBackupService(db, paths)
+    await svc.runNow()
+    const apresUn = readdirSync(paths.backupsDir).filter((f) => f.endsWith('.db'))
+    expect(apresUn).toHaveLength(1)
+
+    createChapter(db, 1, 'Ch. 2')
+    await svc.runNow()
+    const apresDeux = readdirSync(paths.backupsDir).filter((f) => f.endsWith('.db'))
+    expect(apresDeux).toHaveLength(2)
+    expect(apresDeux[1]).not.toBe(apresUn[0])
+  })
+
+  it('élague les vieux instantanés, y compris ceux d\'un run manuel', async () => {
+    mkdirSync(paths.backupsDir, { recursive: true })
+    const vieux = join(paths.backupsDir, 'library-2020-01-01T00-00-00-000Z.db')
+    const vieuxWal = `${vieux}-wal`
+    const jadis = new Date('2020-01-01T00:00:00Z')
+    for (const f of [vieux, vieuxWal]) {
+      writeFileSync(f, '')
+      utimesSync(f, jadis, jadis)
+    }
+
+    const svc = createBackupService(db, paths)
+    await svc.runNow()
+
+    // pruneBackups ne tournait que dans performBackup, une fois par jour et
+    // avant que l'instantané du run distant n'existe : chaque « Sauvegarder
+    // maintenant » coûtait 11 Mo pendant 30 jours.
+    expect(existsSync(vieux)).toBe(false)
+    expect(existsSync(vieuxWal)).toBe(false)
   })
 })
 

@@ -36,6 +36,23 @@ describe('shouldBackup / pruneBackups', () => {
     expect(shouldBackup(backups, new Date())).toBe(false)
   })
 
+  it('pruneBackups emporte les fichiers -wal et -shm avec leur instantané', () => {
+    const backups = join(dir, 'backups')
+    mkdirSync(backups, { recursive: true })
+    // Chaque db.backup() laisse trois fichiers. Sans eux, les -wal et -shm
+    // survivent à l'élagage pour toujours.
+    const freres = ['library-old.db', 'library-old.db-wal', 'library-old.db-shm']
+    const old = new Date('2026-06-01T00:00:00Z')
+    for (const f of freres) {
+      writeFileSync(join(backups, f), '')
+      utimesSync(join(backups, f), old, old)
+    }
+    writeFileSync(join(backups, 'library-new.db'), '')
+
+    pruneBackups(backups, new Date('2026-08-22T00:00:00Z'), 30)
+    expect(readdirSync(backups)).toEqual(['library-new.db'])
+  })
+
   it('pruneBackups supprime les fichiers plus vieux que 30 jours', () => {
     const backups = join(dir, 'backups')
     mkdirSync(backups, { recursive: true })

@@ -3,7 +3,7 @@ import { join } from 'path'
 import Database from 'better-sqlite3'
 import type { Db } from '../db/connection'
 import type { BackupDiff, BackupStatus } from '../../shared/types'
-import { backupDatabase } from './local'
+import { backupDatabase, pruneBackups } from './local'
 import { buildManifest, diffManifests, type Manifest } from './manifest'
 import { cloneRepo, commitAll, hasRepo, pushRepo, runGit, GIT_BIN } from './git'
 import { dumpDatabase, SQLITE_BIN } from './dump'
@@ -151,6 +151,18 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
         // Instantané frais, jamais le fichier de la veille : sans ça un
         // « Sauvegarder maintenant » enverrait l'état d'hier.
         const snapshot = await backupDatabase(db, paths.backupsDir, now)
+
+        // Élagage ici et pas seulement dans le déclencheur quotidien : celui-ci
+        // tourne une fois par jour et avant que l'instantané du run distant
+        // n'existe, si bien que chaque « Sauvegarder maintenant » laissait
+        // 11 Mo derrière lui pendant 30 jours. Un échec d'élagage (course sur
+        // les fichiers) ne doit jamais faire échouer la sauvegarde elle-même.
+        try {
+          pruneBackups(paths.backupsDir, now)
+        } catch (err) {
+          console.error(err)
+        }
+
         await dumpDatabase(snapshot, join(paths.repoDir, 'library.sql'))
 
         syncMedia(paths.mediaDir, join(paths.repoDir, 'media'))
