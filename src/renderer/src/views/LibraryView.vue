@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import type { BookStatus } from '../../../shared/types'
+import { BOOK_STATUS_LABELS } from '../../../shared/labels'
 import { useLibraryStore } from '../stores/library'
 import BookCard from '../components/BookCard.vue'
 import ImportWizard from '../components/ImportWizard.vue'
@@ -16,8 +18,16 @@ const importing = ref(false)
 
 onMounted(() => store.load())
 
+const statusFilter = ref<BookStatus | null>(null)
+
+const filteredBooks = computed(() =>
+  statusFilter.value === null
+    ? store.books
+    : store.books.filter((book) => book.status === statusFilter.value)
+)
+
 const bookCountLabel = computed(() => {
-  const n = store.books.length
+  const n = filteredBooks.value.length
   return n === 0 ? '' : n === 1 ? '1 livre' : `${n} livres`
 })
 
@@ -78,6 +88,26 @@ function cancelRemoval(): void {
       </div>
     </header>
 
+    <div
+      v-if="store.loaded && store.books.length > 0"
+      class="status-filter"
+      role="group"
+      aria-label="Filtrer par statut"
+    >
+      <button type="button" :class="{ active: statusFilter === null }" @click="statusFilter = null">
+        Tous
+      </button>
+      <button
+        v-for="(label, status) in BOOK_STATUS_LABELS"
+        :key="status"
+        type="button"
+        :class="{ active: statusFilter === status }"
+        @click="statusFilter = status"
+      >
+        {{ label }}
+      </button>
+    </div>
+
     <ImportWizard v-if="importing" @close="importing = false" />
 
     <Transition name="unfold">
@@ -106,9 +136,13 @@ function cancelRemoval(): void {
       <button class="primary" type="button" @click="openCreateForm">Créer le premier</button>
     </div>
 
+    <div v-else-if="store.loaded && filteredBooks.length === 0" class="empty">
+      <p>Aucun livre avec ce statut.</p>
+    </div>
+
     <TransitionGroup v-else name="card" tag="div" class="grid">
       <BookCard
-        v-for="book in store.books"
+        v-for="book in filteredBooks"
         :key="book.id"
         :book="book"
         @open="router.push(`/book/${book.id}`)"
@@ -166,6 +200,39 @@ h1 {
   align-items: center;
   gap: 8px;
   -webkit-app-region: no-drag;
+}
+
+.status-filter {
+  display: inline-flex;
+  margin-bottom: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.status-filter button {
+  border: none;
+  border-radius: 0;
+  padding: 5px 14px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.status-filter button + button {
+  border-left: 1px solid var(--border);
+}
+.status-filter button:hover:not(.active) {
+  color: var(--accent);
+}
+.status-filter button.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+.status-filter button:active:not(:disabled) {
+  transform: none;
+}
+/* L'outline de :focus-visible (theme.css) déborde avec offset 2px ; le
+   conteneur est en overflow:hidden, on le rentre pour qu'il reste visible. */
+.status-filter button:focus-visible {
+  outline-offset: -2px;
 }
 
 .create-form {
