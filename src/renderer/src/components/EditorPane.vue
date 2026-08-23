@@ -10,6 +10,12 @@ import { useAiStore } from '../stores/ai'
 import { EntityMention } from '../editor/mention'
 import { SceneBreak, PageBreak } from '../editor/formatNodes'
 import { Illustration } from '../editor/illustration'
+import {
+  ChapterOpening,
+  PartOpening,
+  TableOfContents,
+  FrontMatterPage
+} from '../editor/layoutNodes'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import SnapshotManager from './SnapshotManager.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -55,7 +61,11 @@ const editor = useEditor({
     EntityMention,
     SceneBreak,
     PageBreak,
-    Illustration
+    Illustration,
+    ChapterOpening,
+    PartOpening,
+    TableOfContents,
+    FrontMatterPage
   ],
   content: '',
   onUpdate: () => {

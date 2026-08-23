@@ -226,6 +226,66 @@ textarea:focus {
   outline-offset: 2px;
 }
 
+/* Nœuds de mise en page (Task 6) : chacun produira une page entière dans le
+   PDF. Le rendu éditeur les montre comme des blocs encadrés, pour qu'ils se
+   distinguent du texte sans prétendre en être un aperçu fidèle. */
+.tiptap [data-ouverture],
+.tiptap [data-partie],
+.tiptap [data-sommaire],
+.tiptap [data-liminaire] {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-s);
+  padding: 1.2em 1em;
+  margin: 1.6em 0;
+  text-align: center;
+}
+.tiptap [data-ouverture]::before {
+  content: attr(data-enseigne);
+  display: block;
+  font-size: 0.75em;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-bottom: 0.5em;
+}
+.tiptap [data-ouverture]::after {
+  content: attr(data-titre);
+  display: block;
+  font-size: 1.4em;
+}
+.tiptap [data-partie]::after {
+  content: attr(data-label);
+  display: block;
+  font-size: 1.1em;
+  letter-spacing: 0.08em;
+}
+.tiptap [data-sommaire]::after {
+  content: attr(data-titre) " — rempli à l'export";
+  display: block;
+  color: var(--fg-muted);
+  font-size: 0.9em;
+  letter-spacing: 0.1em;
+}
+.tiptap [data-liminaire] {
+  text-align: left;
+}
+.tiptap [data-liminaire]::before {
+  content: 'Page liminaire — ' attr(data-genre);
+  display: block;
+  font-size: 0.75em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-bottom: 0.6em;
+}
+.tiptap [data-ouverture].ProseMirror-selectednode,
+.tiptap [data-partie].ProseMirror-selectednode,
+.tiptap [data-sommaire].ProseMirror-selectednode,
+.tiptap [data-liminaire].ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Classes partagées (audit UI/UX, proposition #1) : coquille de dialogue,
    étiquette de champ, raccourci clavier, indicateur de chargement, texte
    d'aide/d'erreur — copiées à l'identique dans 5 à 6 composants avant cette
