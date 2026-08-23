@@ -177,4 +177,61 @@ describe('buildBookHtml', () => {
     expect(html).toContain('<p class="apres-scene">Après.</p>')
     expect(html).not.toContain('<p class="apres-scene">Avant.</p>')
   })
+
+  it('ne pose pas la classe premier sur un paragraphe vide en tête de segment', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      { type: 'paragraph' },
+      para('Vrai premier.')
+    ), 'Vrai premier.')
+
+    const html = buildBookHtml(db, book.id, [])
+    expect(html).toContain('<p class="premier">Vrai premier.</p>')
+    expect(html).not.toContain('<p class="premier"></p>')
+  })
+
+  it('un chapitre qui commence par un séparateur de scène pose apres-scene, pas premier', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      { type: 'sceneBreak' },
+      para('Après.')
+    ), 'Après.')
+
+    const html = buildBookHtml(db, book.id, [])
+    expect(html).toContain('<p class="apres-scene">Après.</p>')
+    expect(html).not.toContain('<p class="premier">Après.</p>')
+  })
+
+  it('développement du sommaire dans plusieurs nœuds', async () => {
+    const { db, api, book } = await livre()
+    const lim = await api.chapters.create(book.id, 'Liminaires')
+    await api.chapters.saveContent(lim.id, doc(
+      { type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } },
+      { type: 'tableOfContents', attrs: { titre: 'TABLE DES MATIÈRES' } }
+    ), '')
+    const c1 = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(c1.id, doc(
+      { type: 'partOpening', attrs: { label: 'Première partie', recto: true } },
+      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } },
+      para('Le cri.')
+    ), 'Le cri.')
+    const c2 = await api.chapters.create(book.id, 'Deux')
+    await api.chapters.saveContent(c2.id, doc(
+      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 2', titre: 'CEUX QUI', recto: true } },
+      para('Suite.')
+    ), 'Suite.')
+
+    const html = buildBookHtml(db, book.id, [])
+    const sommaires = html.match(/<section class="sommaire">[\s\S]*?<\/section>/g) ?? []
+    expect(sommaires).toHaveLength(2)
+    for (const sommaire of sommaires) {
+      expect(sommaire).toContain('<li class="toc-partie">Première partie</li>')
+      expect(sommaire).toContain('href="#ouv-1"')
+      expect(sommaire).toContain('href="#ouv-2"')
+    }
+    expect(sommaires[0]).toContain('<h2>SOMMAIRE</h2>')
+    expect(sommaires[1]).toContain('<h2>TABLE DES MATIÈRES</h2>')
+  })
 })

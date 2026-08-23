@@ -42,7 +42,14 @@ const MAQUETTES: Record<BookPageFormat, Maquette> = {
 // les antislashs doivent être échappés, sinon un titre contenant l'un des deux
 // casse la règle et le titre courant disparaît.
 function echapperChaineCss(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  // Les retours à la ligne ne sont pas échappables dans une chaîne CSS entre
+  // guillemets : un titre qui en contient romprait littéralement la
+  // déclaration `content: "…"` et ferait taire le titre courant des versos.
+  // On les remplace par une espace plutôt que de tenter de les échapper.
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/[\n\r]+/g, ' ')
 }
 
 export function buildPrintCss(format: BookPageFormat, bookTitle: string): string {

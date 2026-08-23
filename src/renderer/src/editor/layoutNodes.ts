@@ -51,10 +51,22 @@ function parseRecto(element: HTMLElement): boolean {
   return element.getAttribute('data-recto') !== 'false'
 }
 
+// Groupe `miseEnPage` (Fix 1, revue finale) : les quatre nœuds de mise en
+// page restent des `block` ordinaires (insertables en tête de chapitre via
+// le menu ¶+), mais portent EN PLUS ce groupe pour pouvoir être exclus du
+// contenu de FrontMatterPage ci-dessous. Un nœud de mise en page imbriqué
+// DANS une page liminaire romprait la segmentation du PDF : html.ts découpe
+// le rendu sur les marqueurs %%ENCRE-SECTION%% qui entourent chaque section
+// de premier niveau, et le nœud imbriqué émettrait sa propre paire de
+// marqueurs à l'intérieur de la section `<section class="liminaire">…</section>`
+// du parent — celle-ci se retrouve alors coupée en deux par le split, avec une
+// balise `<section>` non refermée et une `</section>` orpheline : la page
+// suivante du PDF hérite d'un DOM invalide, et le sommaire (qui cite les
+// ancres par position dans ce flux) pointe sur la mauvaise page.
 export const ChapterOpening = Node.create({
   name: 'chapterOpening',
 
-  group: 'block',
+  group: 'block miseEnPage',
   atom: true,
   selectable: true,
 
@@ -103,7 +115,7 @@ export const ChapterOpening = Node.create({
 export const PartOpening = Node.create({
   name: 'partOpening',
 
-  group: 'block',
+  group: 'block miseEnPage',
   atom: true,
   selectable: true,
 
@@ -142,7 +154,7 @@ export const PartOpening = Node.create({
 export const TableOfContents = Node.create({
   name: 'tableOfContents',
 
-  group: 'block',
+  group: 'block miseEnPage',
   atom: true,
   selectable: true,
 
@@ -172,22 +184,42 @@ export const TableOfContents = Node.create({
 })
 
 // Nœud à contenu (pas un atome) : une page liminaire porte du texte réel
-// (dédicace, épigraphe, avertissement…), donc `content: 'block+'` plutôt que
+// (dédicace, épigraphe, avertissement…), donc `content: '(…)+'` plutôt que
 // `atom: true`. La commande insère directement le nœud via insertContent
 // (pas insertBlockAtomCommand, qui suppose un atome sans contenu) et lui
 // donne un paragraphe vide de départ pour que le curseur ait où atterrir.
+//
+// Contenu volontairement énuméré plutôt que `'block+'` (Fix 1, revue finale) :
+// le groupe `block` inclurait aussi les quatre nœuds de mise en page
+// eux-mêmes (voir leur groupe `block miseEnPage` ci-dessus), permettant au
+// menu ¶+ d'insérer par ex. un sommaire DANS une page liminaire. Voir le
+// commentaire au-dessus de ChapterOpening pour la raison précise (rupture de
+// la segmentation en sections du PDF). Cette énumération couvre les blocs
+// ordinaires (paragraphe, titre, citation, listes) et les atomes de mise en
+// forme existants (séparateur de scène, saut de page, illustration), mais
+// aucun `miseEnPage`.
 export const FrontMatterPage = Node.create({
   name: 'frontMatterPage',
 
-  group: 'block',
-  content: 'block+',
+  group: 'block miseEnPage',
+  content:
+    '(paragraph | heading | blockquote | bulletList | orderedList | sceneBreak | pageBreak | illustration)+',
   defining: true,
 
   addAttributes() {
     return {
       genre: {
         default: 'titre',
-        parseHTML: (element: HTMLElement) => element.getAttribute('data-genre') ?? 'titre',
+        // Clamp (Fix 5, revue finale) : un HTML collé de l'extérieur peut
+        // porter n'importe quelle valeur dans data-genre (ex. "junk"), ce qui
+        // produirait une classe CSS `liminaire-junk` sans alignement vertical
+        // défini. On retombe sur 'titre' pour toute valeur qui n'est pas l'un
+        // des trois genres reconnus — même clamp que draftFromLayoutNode côté
+        // EditorPane.vue.
+        parseHTML: (element: HTMLElement) => {
+          const v = element.getAttribute('data-genre')
+          return v === 'colophon' || v === 'dedicace' ? v : 'titre'
+        },
         renderHTML: (attributes: Record<string, unknown>) => ({ 'data-genre': attributes.genre })
       }
     }

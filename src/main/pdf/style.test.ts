@@ -25,6 +25,11 @@ describe('buildPrintCss', () => {
     expect(buildPrintCss('broche', 'LA MAISON')).toContain('content: "LA MAISON"')
     const css = buildPrintCss('broche', 'Guillemet " et \\ antislash')
     expect(css).toContain('content: "Guillemet \\" et \\\\ antislash"')
+    // Un retour à la ligne dans le titre romprait littéralement la
+    // déclaration CSS `content: "…"` : remplacé par une espace.
+    const cssMultiligne = buildPrintCss('broche', 'Ligne un\nLigne deux\r\nLigne trois')
+    expect(cssMultiligne).toContain('content: "Ligne un Ligne deux Ligne trois"')
+    expect(cssMultiligne).not.toMatch(/content: "[^"]*\n/)
   })
 
   it('contient les trois éléments obligatoires et jamais leader()', () => {

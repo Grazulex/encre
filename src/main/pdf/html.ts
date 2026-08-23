@@ -125,9 +125,17 @@ function makeLayoutRenderer(ancres: Ancre[]): NonNullable<ExportOptions['layout'
       return { md: '', xhtml: entourer(renderToc(ancres, String(attrs.titre ?? 'SOMMAIRE'))) }
     }
     const genre = String(attrs.genre ?? 'titre')
+    // Ceinture-et-bretelles (Fix 1, revue finale) : le schéma (layoutNodes.ts,
+    // groupe `miseEnPage`) interdit désormais d'imbriquer un nœud de mise en
+    // page dans une liminaire, mais un document existant ou importé pourrait
+    // encore en contenir un. Si c'était le cas, `children.xhtml` porterait les
+    // marqueurs COUPURE du nœud imbriqué — on les retire ici avant d'encadrer
+    // la section, pour garantir un HTML bien formé même dans ce cas résiduel
+    // plutôt que de laisser une <section> mal refermée.
+    const enfants = children.xhtml.split(COUPURE).join('')
     return {
       md: '',
-      xhtml: entourer(`<section class="liminaire liminaire-${escapeXml(genre)}">${children.xhtml}</section>`)
+      xhtml: entourer(`<section class="liminaire liminaire-${escapeXml(genre)}">${enfants}</section>`)
     }
   }
 }
@@ -155,9 +163,14 @@ function makeIllustrationRenderer(mediaDir?: string): NonNullable<ExportOptions[
 // (:first-of-type), qui ne survit pas à la fragmentation de paged.js — un
 // export réel de 340 pages a montré la coupure de page recomposant le DOM
 // et perdant ces sélecteurs. Ne touche que la toute première occurrence de
-// `<p>` littéral dans ce segment.
+// `<p>` littéral dans ce segment — le lookahead négatif exclut un `<p></p>`
+// vide en tête (defect 2a, revue finale) : un paragraphe vide n'a ni lettrine
+// ni petites capitales à afficher, la classe irait sur le mauvais paragraphe.
+// Appelée APRÈS poserApresScene (voir segmenter) : un paragraphe déjà classé
+// `apres-scene` ne porte plus `<p>` nu, donc n'est plus une cible possible ici
+// — un paragraphe ne peut jamais recevoir les deux classes (defect 2b).
 function poserPremier(contenu: string): string {
-  return contenu.replace('<p>', '<p class="premier">')
+  return contenu.replace(/<p>(?!<\/p>)/, '<p class="premier">')
 }
 
 // Même raison que poserPremier : `.scene-break + p` ne survit pas non plus à la
@@ -193,12 +206,16 @@ function segmenter(xhtml: string, titreRepli: string | null): string {
     const debut = titreRepli !== null && !repliPose ? ' data-debut="true"' : ''
     repliPose = true
 
-    let corpsSegment = contenu
+    // Ordre important (defect 2b, revue finale) : poserApresScene doit tourner
+    // AVANT poserPremier. Un chapitre qui commence par un séparateur de scène
+    // a son premier <p> déjà classé "apres-scene" une fois ce premier appel
+    // passé ; poserPremier, cherchant un `<p>` nu, ne le retague alors plus —
+    // sans quoi ce paragraphe recevait "premier" au lieu de "apres-scene".
+    let corpsSegment = poserApresScene(contenu)
     if (premierSegmentCorps) {
       corpsSegment = poserPremier(corpsSegment)
       premierSegmentCorps = false
     }
-    corpsSegment = poserApresScene(corpsSegment)
 
     sorties.push(`<section class="chapitre"${debut}>\n${tete}${corpsSegment}\n</section>`)
   }

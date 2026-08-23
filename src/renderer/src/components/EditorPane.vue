@@ -186,6 +186,10 @@ watch(
   () => store.currentChapter?.id,
   async (_newId, _oldId) => {
     const generation = ++watchGeneration
+    // Un changement de chapitre via la palette ⌘K ne déclenche aucun
+    // mousedown extérieur (voir onWindowMousedownForLayoutDraft) : sans ce
+    // reset, le popover garderait une `pos` qui vise le document quitté.
+    layoutDraft.value = null
     // Le flush du chapitre précédent doit partir avant de charger le nouveau,
     // sans quoi setContent écraserait un éditeur qui a encore des frappes
     // non enregistrées.
