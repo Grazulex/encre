@@ -6,10 +6,12 @@ import type { ChapterMeta } from '../shared/types'
 import * as books from './db/books'
 import * as chapters from './db/chapters'
 import * as entities from './db/entities'
+import * as dbIllustrations from './db/illustrations'
 import * as outline from './db/outline'
 import * as timeline from './db/timeline'
 import * as snapshots from './db/snapshots'
 import * as series from './db/series'
+import { addIllustrationFiles, removeIllustration, illustrationUsage } from './illustrations'
 import { createAiSession, addAiMessage } from './db/aiSessions'
 import { buildWritePrompt } from './ai/context'
 import { buildFormatPrompt } from './ai/formatContext'
@@ -208,6 +210,28 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
         }
         return updated
       }
+    },
+    illustrations: {
+      listByBook: async (bookId) => dbIllustrations.listIllustrations(db, bookId),
+      // Même découpage que importer.importChapter : le dialogue vit ici, toute
+      // la logique copie+insertion (testable) dans addIllustrationFiles.
+      add: async (bookId) => {
+        const { app, dialog } = await import('electron')
+        const res = await dialog.showOpenDialog({
+          title: 'Ajouter des illustrations',
+          filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+          properties: ['openFile', 'multiSelections']
+        })
+        if (res.canceled || res.filePaths.length === 0) return []
+        const mediaDir = join(app.getPath('userData'), 'media')
+        return addIllustrationFiles(db, bookId, res.filePaths, mediaDir)
+      },
+      rename: async (id, displayName) => dbIllustrations.renameIllustration(db, id, displayName),
+      remove: async (id) => {
+        const { app } = await import('electron')
+        removeIllustration(db, id, join(app.getPath('userData'), 'media'))
+      },
+      usage: async (id) => illustrationUsage(db, id)
     },
     outline: {
       listByBook: async (bookId) => outline.listOutline(db, bookId),

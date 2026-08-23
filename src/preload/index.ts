@@ -32,6 +32,13 @@ const api: EncreApi = {
     inChapter: (chapterId) => ipcRenderer.invoke('entities:inChapter', chapterId),
     pickImage: (id) => ipcRenderer.invoke('entities:pickImage', id)
   },
+  illustrations: {
+    listByBook: (bookId) => ipcRenderer.invoke('illustrations:listByBook', bookId),
+    add: (bookId) => ipcRenderer.invoke('illustrations:add', bookId),
+    rename: (id, displayName) => ipcRenderer.invoke('illustrations:rename', id, displayName),
+    remove: (id) => ipcRenderer.invoke('illustrations:remove', id),
+    usage: (id) => ipcRenderer.invoke('illustrations:usage', id)
+  },
   outline: {
     listByBook: (bookId) => ipcRenderer.invoke('outline:listByBook', bookId),
     create: (bookId, chapterId) => ipcRenderer.invoke('outline:create', bookId, chapterId),

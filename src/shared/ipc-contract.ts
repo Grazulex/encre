@@ -1,7 +1,7 @@
 import type {
   Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
   Entity, EntityCreate, EntityKind, EntityOccurrence, EntityPatch,
-  FormatConventions, OutlineNote, Series, Snapshot, TimelineEvent, TimelineEventPatch
+  FormatConventions, Illustration, OutlineNote, Series, Snapshot, TimelineEvent, TimelineEventPatch
 } from './types'
 
 export interface EncreApi {
@@ -33,6 +33,13 @@ export interface EncreApi {
     occurrences(id: number): Promise<EntityOccurrence[]>
     inChapter(chapterId: number): Promise<Entity[]>
     pickImage(id: number): Promise<Entity>
+  }
+  illustrations: {
+    listByBook(bookId: number): Promise<Illustration[]>
+    add(bookId: number): Promise<Illustration[]>       // showOpenDialog multiSelections ; [] si annulé
+    rename(id: number, displayName: string): Promise<Illustration>
+    remove(id: number): Promise<void>                  // supprime ligne + fichier media ; orphelin toléré
+    usage(id: number): Promise<number>                 // nb de chapitres référençant le fichier
   }
   outline: {
     listByBook(bookId: number): Promise<OutlineNote[]>
@@ -134,5 +141,5 @@ export interface EncreApi {
 // `ai` mêle les deux : prepareWrite/startWrite/cancel sont des invoke normaux,
 // mais onChunk/onDone/onError sont préload-only (ipcRenderer.on), comme `app`.
 export const API_DOMAINS = [
-  'books', 'chapters', 'entities', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots', 'series'
+  'books', 'chapters', 'entities', 'illustrations', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots', 'series'
 ] as const

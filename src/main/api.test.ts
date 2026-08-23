@@ -471,4 +471,23 @@ describe('createApi', () => {
     const all = await api.series.list()
     expect(all.map((s) => s.id)).toContain(s1.id)
   })
+
+  it('expose la bibliothèque d\'illustrations (list/rename/usage/remove)', async () => {
+    const { mkdtempSync, writeFileSync } = await import('fs')
+    const { tmpdir } = await import('os')
+    const { join } = await import('path')
+    const { openDb } = await import('./db/connection')
+    const { addIllustrationFiles } = await import('./illustrations')
+    const db = openDb(':memory:')
+    const api = createApi(db)
+    const book = await api.books.create({ title: 'Illustré' })
+    const srcDir = mkdtempSync(join(tmpdir(), 'encre-api-ill-'))
+    const mediaDir = mkdtempSync(join(tmpdir(), 'encre-api-media-'))
+    writeFileSync(join(srcDir, 'planche.png'), 'png')
+    const [ill] = addIllustrationFiles(db, book.id, [join(srcDir, 'planche.png')], mediaDir)
+
+    expect(await api.illustrations.listByBook(book.id)).toHaveLength(1)
+    expect((await api.illustrations.rename(ill.id, 'La maison')).displayName).toBe('La maison')
+    expect(await api.illustrations.usage(ill.id)).toBe(0)
+  })
 })
