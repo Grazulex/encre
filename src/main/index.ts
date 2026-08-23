@@ -32,6 +32,17 @@ function registerMediaProtocol(mediaDir: string): void {
   })
 }
 
+// Vrai pendant toute la séquence de quit (Cmd+Q, menu Quitter, arrêt système).
+// Le handler `close` ci-dessous appelle `event.preventDefault()` pour laisser le
+// renderer flusher : or ça n'annule pas seulement la fermeture de la fenêtre, ça
+// annule le quit *entier*. Sans ce drapeau, le flush se terminait par un simple
+// `mainWindow.close()` et l'app restait vivante (macOS ne quitte pas sur
+// `window-all-closed`) — il fallait refaire Cmd+Q une seconde fois.
+let quitting = false
+app.on('before-quit', () => {
+  quitting = true
+})
+
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -76,7 +87,10 @@ function createWindow(): void {
       quitFlushDone = true
       clearTimeout(timer)
       ipcMain.removeListener('app:flush-done', finish)
-      mainWindow.close()
+      // Reprend la séquence annulée par le preventDefault, sinon on ne ferait
+      // que refermer la fenêtre en laissant le process debout.
+      if (quitting) app.quit()
+      else mainWindow.close()
     }
     ipcMain.once('app:flush-done', finish)
     mainWindow.webContents.send('app:request-flush')
