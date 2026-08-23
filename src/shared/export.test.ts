@@ -225,3 +225,37 @@ describe('hardBreak et nœuds inconnus', () => {
     expect(tiptapToXhtml(docWithBreak)).toBe('<p>ligne un<br/>ligne deux</p>\n')
   })
 })
+
+describe('nœud illustration', () => {
+  const doc = JSON.stringify({
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Avant.' }] },
+      { type: 'illustration', attrs: { fileName: 'ill-1-9-0.png', displayName: 'La maison' } },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Après.' }] },
+      { type: 'illustration', attrs: { fileName: 'ill-1-9-0.png', displayName: 'La maison' } },
+      { type: 'illustration', attrs: { fileName: 'ill-1-9-1.jpg', displayName: 'Le café' } }
+    ]
+  })
+
+  it('est rendu via le callback du consommateur', () => {
+    const opts = {
+      illustration: ({ fileName, displayName }: { fileName: string; displayName: string }) => ({
+        md: `![${displayName}](Illustrations/${fileName})`,
+        xhtml: `<div class="illustration"><img src="images/${fileName}" alt="${displayName}"/></div>`
+      })
+    }
+    expect(tiptapToMarkdown(doc, opts)).toContain('![La maison](Illustrations/ill-1-9-0.png)')
+    expect(tiptapToXhtml(doc, opts)).toContain('<img src="images/ill-1-9-0.png" alt="La maison"/>')
+  })
+
+  it('est omis quand le callback retourne null ou est absent', () => {
+    const withNull = { illustration: () => null }
+    expect(tiptapToMarkdown(doc, withNull)).not.toContain('ill-1-9-0.png')
+    expect(tiptapToMarkdown(doc)).not.toContain('ill-1-9-0.png')
+    expect(tiptapToXhtml(doc)).not.toContain('ill-1-9-0.png')
+    // les paragraphes autour restent rendus
+    expect(tiptapToMarkdown(doc)).toContain('Avant.')
+    expect(tiptapToMarkdown(doc)).toContain('Après.')
+  })
+})

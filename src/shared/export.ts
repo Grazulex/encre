@@ -1,3 +1,11 @@
+export interface IllustrationAttrs { fileName: string; displayName: string }
+export interface ExportOptions {
+  // Rendu d'un nœud illustration par le consommateur ; retourner null l'omet.
+  // Option absente => tous les nœuds illustration sont omis (défaut sûr : pas
+  // de lien mort dans un export qui n'a pas prévu les images).
+  illustration?: (attrs: IllustrationAttrs) => { md: string; xhtml: string } | null
+}
+
 export function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -51,14 +59,14 @@ const BLOCK_CONTAINER_TYPES = new Set(['bulletList', 'orderedList', 'listItem', 
 // même item (paragraphes additionnels, sous-liste) sont indentés de deux
 // espaces (Fix 2, correctif review — un seul niveau d'imbrication géré
 // simplement, comme demandé par la revue).
-function renderListItemMarkdown(item: any, marker: string): string {
+function renderListItemMarkdown(item: any, marker: string, opts: ExportOptions): string {
   const children = item.content ?? []
   const blocks: { md: string; isNestedList: boolean }[] = []
   for (const child of children) {
     if (child?.type === 'bulletList' || child?.type === 'orderedList') {
-      blocks.push({ md: renderListMarkdown(child), isNestedList: true })
+      blocks.push({ md: renderListMarkdown(child, opts), isNestedList: true })
     } else {
-      const rendered = renderBlockNode(child)
+      const rendered = renderBlockNode(child, opts)
       if (rendered.md !== '') blocks.push({ md: rendered.md, isNestedList: false })
     }
   }
@@ -73,21 +81,21 @@ function renderListItemMarkdown(item: any, marker: string): string {
   return [firstLine, ...restLines].join('\n')
 }
 
-function renderListMarkdown(node: any): string {
+function renderListMarkdown(node: any, opts: ExportOptions): string {
   const ordered = node.type === 'orderedList'
   const start = ordered ? Number(node.attrs?.start ?? node.attrs?.order ?? 1) : 1
   const items = node.content ?? []
   return items
-    .map((item: any, idx: number) => renderListItemMarkdown(item, ordered ? `${start + idx}. ` : '- '))
+    .map((item: any, idx: number) => renderListItemMarkdown(item, ordered ? `${start + idx}. ` : '- ', opts))
     .join('\n')
 }
 
 // Rendu Markdown d'un blockquote : chaque ligne (y compris les lignes vides
 // entre blocs internes) préfixée par `> ` (`>` seul si vide) — syntaxe
 // Markdown standard de citation multi-paragraphes.
-function renderBlockquoteMarkdown(node: any): string {
+function renderBlockquoteMarkdown(node: any, opts: ExportOptions): string {
   const children = node.content ?? []
-  const rendered = children.map((c: any) => renderBlockNode(c).md).filter((md: string) => md !== '')
+  const rendered = children.map((c: any) => renderBlockNode(c, opts).md).filter((md: string) => md !== '')
   return rendered
     .join('\n\n')
     .split('\n')
@@ -95,7 +103,7 @@ function renderBlockquoteMarkdown(node: any): string {
     .join('\n')
 }
 
-function renderBlockNode(node: any): { md: string; xhtml: string } {
+function renderBlockNode(node: any, opts: ExportOptions): { md: string; xhtml: string } {
   const children = node.content ?? []
   // Atomes de bloc (Task 3) : pas d'enfants à aplatir, un rendu fixe par
   // format. Traités avant le repli paragraphe générique.
@@ -112,6 +120,16 @@ function renderBlockNode(node: any): { md: string; xhtml: string } {
   if (node.type === 'pageBreak') {
     return { md: '<!-- page-break -->', xhtml: '<hr class="page-break"/>' }
   }
+  if (node.type === 'illustration') {
+    const fileName = String(node.attrs?.fileName ?? '')
+    const displayName = String(node.attrs?.displayName ?? '')
+    // Le rendu appartient au consommateur (Markdown copie les fichiers, EPUB
+    // les embarque, PDF les référence en file://) : sans callback, ou si le
+    // callback répond null (fichier manquant), le nœud est omis — un export
+    // ne doit jamais contenir de lien mort (spec §5).
+    const rendered = fileName && opts.illustration ? opts.illustration({ fileName, displayName }) : null
+    return rendered ?? { md: '', xhtml: '' }
+  }
   if (node.type === 'heading') {
     const level = Math.min(Math.max(Number(node.attrs?.level ?? 1), 1), 6)
     const inline = joinInline(children)
@@ -119,7 +137,7 @@ function renderBlockNode(node: any): { md: string; xhtml: string } {
   }
   const isInline = children.every((c: any) => INLINE_TYPES.has(c?.type))
   if (BLOCK_CONTAINER_TYPES.has(node.type) && !isInline) {
-    const nested = children.map(renderBlockNode)
+    const nested = children.map((c: any) => renderBlockNode(c, opts))
     // XHTML : un <li>/<blockquote> n'a pas besoin d'un balisage sémantique
     // dédié ici : ses paragraphes internes en <p> séparés suffisent à ne pas
     // les coller (rendu XHTML inchangé par le Fix 2, cf. revue).
@@ -129,9 +147,9 @@ function renderBlockNode(node: any): { md: string; xhtml: string } {
     // garde l'ancien aplatissement générique par paragraphes séparés.
     let md: string
     if (node.type === 'bulletList' || node.type === 'orderedList') {
-      md = renderListMarkdown(node)
+      md = renderListMarkdown(node, opts)
     } else if (node.type === 'blockquote') {
-      md = renderBlockquoteMarkdown(node)
+      md = renderBlockquoteMarkdown(node, opts)
     } else {
       md = nested.map((b: { md: string }) => b.md).join('\n\n')
     }
@@ -141,29 +159,29 @@ function renderBlockNode(node: any): { md: string; xhtml: string } {
   return { md: inline.md, xhtml: `<p>${inline.xhtml}</p>` }
 }
 
-function renderBlocks(doc: any): { md: string[]; xhtml: string[] } {
+function renderBlocks(doc: any, opts: ExportOptions): { md: string[]; xhtml: string[] } {
   const md: string[] = []
   const xhtml: string[] = []
   for (const node of doc.content ?? []) {
-    const block = renderBlockNode(node)
+    const block = renderBlockNode(node, opts)
     md.push(block.md)
     xhtml.push(block.xhtml)
   }
   return { md, xhtml }
 }
 
-export function tiptapToMarkdown(contentJson: string): string {
+export function tiptapToMarkdown(contentJson: string, opts: ExportOptions = {}): string {
   try {
-    const { md } = renderBlocks(JSON.parse(contentJson))
+    const { md } = renderBlocks(JSON.parse(contentJson), opts)
     return md.length ? md.join('\n\n') + '\n' : ''
   } catch {
     return ''
   }
 }
 
-export function tiptapToXhtml(contentJson: string): string {
+export function tiptapToXhtml(contentJson: string, opts: ExportOptions = {}): string {
   try {
-    const { xhtml } = renderBlocks(JSON.parse(contentJson))
+    const { xhtml } = renderBlocks(JSON.parse(contentJson), opts)
     return xhtml.length ? xhtml.join('\n') + '\n' : ''
   } catch {
     return ''
