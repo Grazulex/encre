@@ -119,4 +119,20 @@ describe('buildBookHtml', () => {
     expect(html).toContain('<section class="liminaire liminaire-colophon">')
     expect(html).toContain('<p>© 2026</p>')
   })
+
+  it('échappe les attributs XML issus de valeurs contrôlées par l’auteur', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      { type: 'chapterOpening', attrs: { enseigne: 'CH. 1 & 2', titre: 'Fer <acier>', recto: true } },
+      para('Texte.')
+    ), 'Texte.')
+
+    const html = buildBookHtml(db, book.id, [])
+    expect(html).toContain('CH. 1 &amp; 2')
+    expect(html).toContain('Fer &lt;acier&gt;')
+    // ni le & ni le < ne doivent survivre bruts dans le HTML produit
+    expect(html).not.toMatch(/&(?!amp;|lt;|gt;|quot;|#)/)
+    expect(html).not.toContain('<acier>')
+  })
 })

@@ -144,7 +144,7 @@ function makeIllustrationRenderer(mediaDir?: string): NonNullable<ExportOptions[
     return {
       md: '',
       xhtml: entourer(
-        `<section class="illustration"><img src="${pathToFileURL(src).toString()}" alt="${escapeXml(displayName)}"/></section>`
+        `<section class="illustration"><img src="${escapeXml(pathToFileURL(src).toString())}" alt="${escapeXml(displayName)}"/></section>`
       )
     }
   }
