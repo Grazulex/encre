@@ -63,11 +63,12 @@ export function runGit(
       resolve({ ok, stdout, stderr })
     }
 
+    const timeoutMs = opts.timeoutMs ?? PUSH_TIMEOUT_MS
     const timer = setTimeout(() => {
-      stderr += `\nDélai dépassé après ${opts.timeoutMs} ms.`
+      stderr += `\nDélai dépassé après ${timeoutMs} ms.`
       child.kill('SIGKILL')
       finish(false)
-    }, opts.timeoutMs ?? PUSH_TIMEOUT_MS)
+    }, timeoutMs)
 
     child.stdout.on('data', (d) => (stdout += d.toString()))
     child.stderr.on('data', (d) => (stderr += d.toString()))

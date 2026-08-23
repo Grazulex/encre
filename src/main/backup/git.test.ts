@@ -82,6 +82,14 @@ describe('runGit', () => {
     expect(r.ok).toBe(false)
   })
 
+  it('tue la commande et le dit quand le délai est dépassé', async () => {
+    // `git hash-object --stdin` attend EOF sur son entrée standard, que runGit
+    // ne ferme jamais : blocage déterministe, sans dépendre du réseau.
+    const r = await runGit(['hash-object', '--stdin'], { cwd: dir, timeoutMs: 300 })
+    expect(r.ok).toBe(false)
+    expect(r.stderr).toContain('Délai dépassé après 300 ms.')
+  })
+
   it('ne laisse pas de dossier derrière un clone raté', async () => {
     const r = await cloneRepo(join(dir, 'vide.git'), join(dir, 'rate'))
     expect(r.ok).toBe(false)
