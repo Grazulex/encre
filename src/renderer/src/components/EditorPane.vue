@@ -9,6 +9,7 @@ import { useEntitiesStore } from '../stores/entities'
 import { useAiStore } from '../stores/ai'
 import { EntityMention } from '../editor/mention'
 import { SceneBreak, PageBreak } from '../editor/formatNodes'
+import { Illustration } from '../editor/illustration'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import SnapshotManager from './SnapshotManager.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -47,7 +48,8 @@ const editor = useEditor({
     StarterKit.configure({ codeBlock: false, code: false, horizontalRule: false }),
     EntityMention,
     SceneBreak,
-    PageBreak
+    PageBreak,
+    Illustration
   ],
   content: '',
   onUpdate: () => {

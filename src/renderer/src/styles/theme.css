@@ -213,6 +213,19 @@ textarea:focus {
   color: var(--accent);
 }
 
+/* Nœud illustration : planche pleine largeur dans le flux du texte. L'alt
+   (displayName) sert d'état « manquant » : si le fichier media a disparu,
+   le navigateur affiche l'alt dans le cadre de l'image cassée. */
+.tiptap img[data-illustration] {
+  display: block;
+  max-width: 100%;
+  margin: 1.6em auto;
+}
+.tiptap img[data-illustration].ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Classes partagées (audit UI/UX, proposition #1) : coquille de dialogue,
    étiquette de champ, raccourci clavier, indicateur de chargement, texte
    d'aide/d'erreur — copiées à l'identique dans 5 à 6 composants avant cette

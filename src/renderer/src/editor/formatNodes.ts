@@ -57,8 +57,13 @@ const SCENE_BREAK_INPUT_REGEX = /^(?:\*\*\*|---|\* \* \*)\n$/
 // sélection de nœud selon son type, comme en amont) ; sinon (fin de
 // document) un paragraphe vide est ajouté et le curseur y est placé. Utilisé
 // par sceneBreak ET pageBreak — seul le nom du nœud à insérer change.
-function insertBlockAtomCommand(nodeName: string): () => Command {
-  return () =>
+// Généralisée (Task 6) pour illustration : attrs optionnels transmis tels
+// quels au nœud inséré ; sceneBreak/pageBreak continuent d'appeler sans
+// argument (leurs nœuds n'ont pas d'attrs persistés).
+export function insertBlockAtomCommand(
+  nodeName: string
+): (attrs?: Record<string, unknown>) => Command {
+  return (attrs?: Record<string, unknown>) =>
     ({ chain, state }) => {
       if (!canInsertNode(state, state.schema.nodes[nodeName])) return false
 
@@ -67,9 +72,12 @@ function insertBlockAtomCommand(nodeName: string): () => Command {
       const currentChain = chain()
 
       if (isNodeSelection(selection)) {
-        currentChain.insertContentAt($originTo.pos, { type: nodeName })
+        currentChain.insertContentAt($originTo.pos, {
+          type: nodeName,
+          ...(attrs ? { attrs } : {})
+        })
       } else {
-        currentChain.insertContent({ type: nodeName })
+        currentChain.insertContent({ type: nodeName, ...(attrs ? { attrs } : {}) })
       }
 
       return currentChain
