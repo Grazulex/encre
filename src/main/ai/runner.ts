@@ -1,4 +1,36 @@
 import type { AiRunner } from './service'
+import { sep } from 'path'
+
+/**
+ * Un exécutable ne peut pas être lancé depuis `app.asar` : Electron redirige `fs`
+ * vers `app.asar.unpacked` de façon transparente, mais PAS `child_process.spawn`,
+ * qui échoue en ENOTDIR sur un chemin interne à l'archive. On réécrit donc le
+ * segment `app.asar` en `app.asar.unpacked`, où electron-builder déballe le binaire
+ * (clé `asarUnpack`). Hors paquet — en dev — le chemin ne contient pas ce segment
+ * et ressort inchangé.
+ */
+export function unpackedExecutablePath(resolved: string): string {
+  return resolved.replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`)
+}
+
+/**
+ * Chemin du binaire natif `claude` que le SDK embarque dans un paquet par plateforme
+ * (`@anthropic-ai/claude-agent-sdk-<platform>-<arch>`). On le passe explicitement à
+ * `query()` : la résolution interne du SDK renvoie le chemin *dans* l'asar, qui passe
+ * son test d'existence (`fs` traverse l'archive) mais échoue au spawn.
+ *
+ * `undefined` si le paquet natif est introuvable — on laisse alors le SDK résoudre
+ * lui-même et lever son propre message, plus explicite que le nôtre.
+ */
+export function resolveClaudeExecutable(): string | undefined {
+  try {
+    return unpackedExecutablePath(
+      require.resolve(`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude`)
+    )
+  } catch {
+    return undefined
+  }
+}
 
 /**
  * Forme structurelle du message `type: 'result'` du SDK (sans en dépendre au niveau
@@ -63,6 +95,7 @@ export function createSdkRunner(): AiRunner {
             model: params.model,
             allowedTools: [],
             maxTurns: 1,
+            pathToClaudeCodeExecutable: resolveClaudeExecutable(),
             includePartialMessages: true,
             abortController: queryAbortController
           }

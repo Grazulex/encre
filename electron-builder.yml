@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: encre
+appId: be.grazulex.encre
+productName: Encre
 directories:
   buildResources: build
 files:
@@ -11,6 +11,10 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  # Le SDK Claude Agent embarque un binaire natif `claude` (~310 Mo) résolu via
+  # node_modules ; on ne peut pas spawner un exécutable depuis app.asar, il doit
+  # rester sur le disque dans app.asar.unpacked.
+  - '**/node_modules/@anthropic-ai/claude-agent-sdk-*/**'
 win:
   executableName: encre
 nsis:
@@ -33,7 +37,7 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: jms@grazulex.be
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}

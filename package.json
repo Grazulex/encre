@@ -1,10 +1,10 @@
 {
   "name": "encre",
   "version": "1.0.0",
-  "description": "An Electron application with Vue and TypeScript",
+  "description": "Atelier d'écriture : chapitres, univers, maquette et export",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Jean-Marc Strauven <jms@grazulex.be>",
+  "homepage": "https://grazulex.be",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -33,6 +33,7 @@
     "@tiptap/suggestion": "^3.30.2",
     "@tiptap/vue-3": "^3.30.2",
     "better-sqlite3": "^13.0.3",
+    "happy-dom": "^20.11.6",
     "jszip": "^3.10.1",
     "marked": "^18.0.10",
     "pagedjs": "^0.4.3",
