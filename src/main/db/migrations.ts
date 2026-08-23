@@ -122,5 +122,16 @@ export const MIGRATIONS: string[] = [
     content    TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  `,
+  `
+  CREATE TABLE illustrations (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id      INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    file_name    TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    position     INTEGER NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_illustrations_book ON illustrations(book_id, position);
   `
 ]

@@ -49,6 +49,18 @@ export interface Series {
   name: string
 }
 
+// Illustration d'un livre : fichier image copié dans userData/media (comme
+// les couvertures), listé au niveau du livre et insérable dans le texte via
+// le nœud d'éditeur `illustration` (attrs fileName/displayName).
+export interface Illustration {
+  id: number
+  bookId: number
+  fileName: string      // nom dans userData/media — unique, généré côté main
+  displayName: string   // nom lisible, initialisé au nom du fichier source
+  position: number      // ordre dans la bibliothèque du livre
+  createdAt: string
+}
+
 export type AiRole = 'user' | 'assistant'
 
 // Conventions typographiques cibles pour l'harmonisation de mise en forme

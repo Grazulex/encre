@@ -36,7 +36,7 @@ describe('migration 3', () => {
 
   it('une base neuve part directement en v3', () => {
     const db = openDb(':memory:')
-    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
     db.close()
   })
 })
