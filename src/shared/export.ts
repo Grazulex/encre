@@ -1,10 +1,31 @@
 export interface IllustrationAttrs { fileName: string; displayName: string }
+
+export interface LayoutNode { type: string; attrs: Record<string, any> }
+// Rendu des nœuds de mise en page (chapterOpening, partOpening, tableOfContents,
+// frontMatterPage) par le consommateur. `children` porte le rendu déjà fait des
+// blocs enfants (vide pour les atomes). Retourner null omet le nœud.
+export type LayoutRenderer = (
+  node: LayoutNode,
+  children: { md: string; xhtml: string }
+) => { md: string; xhtml: string } | null
+
 export interface ExportOptions {
   // Rendu d'un nœud illustration par le consommateur ; retourner null l'omet.
   // Option absente => tous les nœuds illustration sont omis (défaut sûr : pas
   // de lien mort dans un export qui n'a pas prévu les images).
   illustration?: (attrs: IllustrationAttrs) => { md: string; xhtml: string } | null
+  // Point d'extension unique pour les nœuds de mise en page : le PDF (tâche 4)
+  // s'en sert pour poser des `id` d'ancrage et développer le sommaire. Sans
+  // callback, le rendu par défaut (defaultLayoutRender) sert l'EPUB et le
+  // Markdown, qui n'ont pas la notion de page.
+  layout?: LayoutRenderer
 }
+
+// Nœuds de mise en page (spec maquette PDF) : ils produisent des pages entières
+// dans le PDF, un simple bloc sémantique ailleurs. Le PDF passe par ExportOptions
+// .layout pour poser ses `id` d'ancrage et développer le sommaire ; sans callback,
+// le rendu par défaut ci-dessous sert l'EPUB et le Markdown.
+const LAYOUT_TYPES = new Set(['chapterOpening', 'partOpening', 'tableOfContents', 'frontMatterPage'])
 
 export function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -130,6 +151,16 @@ function renderBlockNode(node: any, opts: ExportOptions): { md: string; xhtml: s
     const rendered = fileName && opts.illustration ? opts.illustration({ fileName, displayName }) : null
     return rendered ?? { md: '', xhtml: '' }
   }
+  if (LAYOUT_TYPES.has(node.type)) {
+    // frontMatterPage porte des blocs enfants ; les trois autres sont des atomes.
+    const layoutChildren = node.type === 'frontMatterPage'
+      ? renderChildBlocks(node.content ?? [], opts)
+      : { md: '', xhtml: '' }
+    if (opts.layout) {
+      return opts.layout({ type: node.type, attrs: node.attrs ?? {} }, layoutChildren) ?? { md: '', xhtml: '' }
+    }
+    return defaultLayoutRender(node, layoutChildren)
+  }
   if (node.type === 'heading') {
     const level = Math.min(Math.max(Number(node.attrs?.level ?? 1), 1), 6)
     const inline = joinInline(children)
@@ -157,6 +188,39 @@ function renderBlockNode(node: any, opts: ExportOptions): { md: string; xhtml: s
   }
   const inline = joinInline(children)
   return { md: inline.md, xhtml: `<p>${inline.xhtml}</p>` }
+}
+
+// Rend une suite de blocs enfants comme le fait renderBlocks, mais pour un nœud
+// conteneur : les blocs Markdown sont séparés par une ligne vide, le XHTML par un
+// simple retour à la ligne.
+function renderChildBlocks(nodes: any[], opts: ExportOptions): { md: string; xhtml: string } {
+  const parts = nodes.map((n) => renderBlockNode(n, opts))
+  return {
+    md: parts.map((p) => p.md).filter((m) => m !== '').join('\n\n'),
+    xhtml: parts.map((p) => p.xhtml).filter((x) => x !== '').join('\n')
+  }
+}
+
+// Rendu par défaut des nœuds de mise en page : celui de l'EPUB et du Markdown.
+// Le sommaire n'y a pas de sens (l'EPUB a sa navigation native, le Markdown n'a
+// pas de pages) : il est omis.
+function defaultLayoutRender(node: any, children: { md: string; xhtml: string }): { md: string; xhtml: string } {
+  const attrs = node.attrs ?? {}
+  if (node.type === 'chapterOpening') {
+    const enseigne = String(attrs.enseigne ?? '')
+    const titre = String(attrs.titre ?? '')
+    const enseigneHtml = enseigne ? `<p class="enseigne">${escapeXml(enseigne)}</p>` : ''
+    return { md: `# ${titre}`, xhtml: `<div class="ouverture">${enseigneHtml}<h1>${escapeXml(titre)}</h1></div>` }
+  }
+  if (node.type === 'partOpening') {
+    const label = String(attrs.label ?? '')
+    return { md: `# ${label}`, xhtml: `<h1 class="partie">${escapeXml(label)}</h1>` }
+  }
+  if (node.type === 'tableOfContents') {
+    return { md: '', xhtml: '' }
+  }
+  const genre = String(attrs.genre ?? 'titre')
+  return { md: children.md, xhtml: `<div class="liminaire liminaire-${escapeXml(genre)}">${children.xhtml}</div>` }
 }
 
 function renderBlocks(doc: any, opts: ExportOptions): { md: string[]; xhtml: string[] } {

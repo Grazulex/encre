@@ -64,6 +64,28 @@ p {
 .illustration img {
   max-width: 100%;
 }
+.liminaire {
+  text-align: center;
+  text-indent: 0;
+  margin: 2em 0;
+}
+.liminaire p {
+  text-indent: 0;
+}
+.ouverture {
+  text-align: center;
+  margin: 2em 0;
+}
+.ouverture .enseigne {
+  font-variant: small-caps;
+  letter-spacing: 0.18em;
+  text-indent: 0;
+  font-size: 0.85em;
+}
+h1.partie {
+  text-align: center;
+  font-variant: small-caps;
+}
 `
 
 export async function buildEpub(db: Db, bookId: number, chapterIds: number[], mediaDir?: string): Promise<Buffer> {

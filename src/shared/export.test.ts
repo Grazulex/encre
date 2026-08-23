@@ -259,3 +259,55 @@ describe('nœud illustration', () => {
     expect(tiptapToMarkdown(doc)).toContain('Après.')
   })
 })
+
+describe('nœuds de mise en page', () => {
+  const doc = JSON.stringify({
+    type: 'doc',
+    content: [
+      { type: 'frontMatterPage', attrs: { genre: 'titre' },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'LA MAISON' }] }] },
+      { type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } },
+      { type: 'partOpening', attrs: { label: 'Première partie', recto: true } },
+      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Le cri.' }] }
+    ]
+  })
+
+  it('rend chaque nœud par défaut (EPUB / Markdown)', () => {
+    const md = tiptapToMarkdown(doc)
+    expect(md).toContain('LA MAISON')
+    expect(md).toContain('# Première partie')
+    expect(md).toContain('# TROIS HEURES')
+    expect(md).not.toContain('SOMMAIRE')      // sommaire omis hors PDF
+    const xhtml = tiptapToXhtml(doc)
+    expect(xhtml).toContain('<div class="liminaire liminaire-titre">')
+    expect(xhtml).toContain('<p class="enseigne">CHAPITRE 1</p>')
+    expect(xhtml).toContain('<h1>TROIS HEURES</h1>')
+    expect(xhtml).toContain('<h1 class="partie">Première partie</h1>')
+    expect(xhtml).toContain('<p>Le cri.</p>')
+  })
+
+  it('échappe le XML des attributs', () => {
+    const d = JSON.stringify({ type: 'doc', content: [
+      { type: 'partOpening', attrs: { label: 'Fer & <acier>', recto: false } }
+    ] })
+    expect(tiptapToXhtml(d)).toContain('Fer &amp; &lt;acier&gt;')
+  })
+
+  it('délègue au callback layout quand il est fourni, et omet sur null', () => {
+    const seen: string[] = []
+    const opts = {
+      layout: (node: any, children: { md: string; xhtml: string }) => {
+        seen.push(node.type)
+        if (node.type === 'tableOfContents') return { md: '', xhtml: '<nav>TDM</nav>' }
+        if (node.type === 'partOpening') return null
+        return { md: `[${node.type}]`, xhtml: `<x>${children.xhtml}</x>` }
+      }
+    }
+    const xhtml = tiptapToXhtml(doc, opts)
+    expect(seen).toEqual(['frontMatterPage', 'tableOfContents', 'partOpening', 'chapterOpening'])
+    expect(xhtml).toContain('<nav>TDM</nav>')
+    expect(xhtml).not.toContain('Première partie')
+    expect(xhtml).toContain('<x><p>LA MAISON</p></x>')  // enfants rendus, passés au callback
+  })
+})

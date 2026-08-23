@@ -85,4 +85,15 @@ describe('buildEpub', () => {
     const css = await zip.file('OEBPS/style.css')!.async('string')
     expect(css).toContain('.illustration')
   })
+
+  it('style.css définit les blocs de mise en page', async () => {
+    const db = openDb(':memory:')
+    const api = createApi(db)
+    const book = await api.books.create({ title: 'EPUB liminaires' })
+    await api.chapters.create(book.id, 'Un')
+    const zip = await JSZip.loadAsync(await buildEpub(db, book.id, []))
+    const css = await zip.file('OEBPS/style.css')!.async('string')
+    expect(css).toContain('.liminaire')
+    expect(css).toContain('.ouverture')
+  })
 })
