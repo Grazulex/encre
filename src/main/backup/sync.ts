@@ -69,6 +69,11 @@ async function repoManifest(repoDir: string): Promise<Manifest | null> {
   }
 }
 
+/** Deux manifestes disent-ils la même chose, `generatedAt` mis à part ? */
+function sameContent(a: Manifest, b: Manifest): boolean {
+  return JSON.stringify({ ...a, generatedAt: '' }) === JSON.stringify({ ...b, generatedAt: '' })
+}
+
 /**
  * Copie les fichiers absents du dépôt, en clone APFS : `COPYFILE_FICLONE`
  * partage les blocs au lieu de les dupliquer, donc la copie de travail ne
@@ -168,7 +173,16 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
         }
 
         const diff = diffManifests(previous, next)
-        writeFileSync(join(paths.repoDir, 'manifest.json'), JSON.stringify(next, null, 2))
+
+        // `generatedAt` change à chaque run : réécrit tel quel, le manifeste
+        // ferait un commit par sauvegarde même quand rien n'a bougé — la
+        // branche « arbre propre » de commitAll serait du code mort et
+        // « Sauvegardé aujourd'hui » ne dirait plus rien. Quand le manifeste ne
+        // dit rien de neuf, on réécrit celui de HEAD à l'octet près : l'arbre
+        // reste propre, aucun commit n'est fabriqué, et le champ reste au
+        // format de la spec §5.
+        const toWrite = previous && sameContent(previous, next) ? previous : next
+        writeFileSync(join(paths.repoDir, 'manifest.json'), JSON.stringify(toWrite, null, 2))
 
         const { committed, result } = await commitAll(paths.repoDir, commitMessage(now, diff))
         if (committed) {

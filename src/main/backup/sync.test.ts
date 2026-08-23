@@ -160,6 +160,35 @@ describe('createBackupService — instantané et manifeste', () => {
   })
 })
 
+describe('createBackupService — runs sans changement', () => {
+  it('n\'ajoute pas de commit quand rien n\'a changé', async () => {
+    const svc = createBackupService(db, paths)
+    const first = await svc.runNow()
+    const avant = await runGit(['rev-list', '--count', 'HEAD'], { cwd: paths.repoDir })
+
+    const second = await svc.runNow()
+    const apres = await runGit(['rev-list', '--count', 'HEAD'], { cwd: paths.repoDir })
+
+    // Sans ça, trois runs à vide font trois commits qui ne diffèrent que par
+    // `generatedAt` : la branche « arbre propre » est du code mort, et
+    // « Sauvegardé aujourd'hui » ne porte plus aucune information.
+    expect(apres.stdout.trim()).toBe(avant.stdout.trim())
+    expect(second.lastCommitAt).toBe(first.lastCommitAt)
+  })
+
+  it('commite bien dès qu\'un chapitre change', async () => {
+    const svc = createBackupService(db, paths)
+    await svc.runNow()
+    const avant = await runGit(['rev-list', '--count', 'HEAD'], { cwd: paths.repoDir })
+
+    createChapter(db, 1, 'Ch. 2')
+    await svc.runNow()
+    const apres = await runGit(['rev-list', '--count', 'HEAD'], { cwd: paths.repoDir })
+
+    expect(Number(apres.stdout.trim())).toBe(Number(avant.stdout.trim()) + 1)
+  })
+})
+
 describe('createBackupService — chemins d\'échec', () => {
   it('garde le commit local quand le push échoue', async () => {
     const svc = createBackupService(db, paths)
