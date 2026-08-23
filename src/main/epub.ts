@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'fs'
-import { extname, join } from 'path'
+import { extname, join, basename } from 'path'
 import JSZip from 'jszip'
 import type { Db } from './db/connection'
 import { getBook } from './db/books'
@@ -100,6 +100,7 @@ export async function buildEpub(db: Db, bookId: number, chapterIds: number[], me
   const illustrationManifest: string[] = []
   const opts: ExportOptions = {
     illustration: ({ fileName, displayName }) => {
+      if (fileName !== basename(fileName)) return null
       if (!mediaDir) return null
       const src = join(mediaDir, fileName)
       if (!existsSync(src)) return null

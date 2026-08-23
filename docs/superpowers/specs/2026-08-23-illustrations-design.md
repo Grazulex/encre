@@ -143,7 +143,7 @@ Consommateurs :
 - **Markdown** (`exporter.ts`) : copie chaque fichier référencé dans un
   sous-dossier `Illustrations/` à côté des `NN-titre.md` ;
 - **EPUB** (`epub.ts`) : chaque fichier référencé entre dans l'archive
-  (`Images/{fileName}`) avec entrée de manifest et media-type (table
+  (`images/{fileName}`) avec entrée de manifest et media-type (table
   d'extensions déjà en place) ; résolveur → chemin relatif depuis le XHTML
   du chapitre ;
 - **PDF** (`pdf.ts`) : **déviation vs conception initiale** — la fenêtre

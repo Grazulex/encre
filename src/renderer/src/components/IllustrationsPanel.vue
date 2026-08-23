@@ -52,7 +52,10 @@ async function add(): Promise<void> {
 
 async function rename(ill: Illustration, event: Event): Promise<void> {
   const displayName = (event.target as HTMLInputElement).value.trim()
-  if (!displayName || displayName === ill.displayName) return
+  if (!displayName || displayName === ill.displayName) {
+    (event.target as HTMLInputElement).value = ill.displayName
+    return
+  }
   await window.encre.illustrations.rename(ill.id, displayName)
   await reload()
 }

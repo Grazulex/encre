@@ -1,5 +1,5 @@
 import { writeFileSync, mkdirSync, copyFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { join, basename } from 'path'
 import type { Db } from './db/connection'
 import { getBook } from './db/books'
 import { listChapters, getChapter } from './db/chapters'
@@ -22,6 +22,9 @@ export function exportMarkdownToFolder(db: Db, bookId: number, folder: string, m
   // le nœud (pas de lien mort dans le Markdown exporté).
   const opts: ExportOptions = {
     illustration: ({ fileName, displayName }) => {
+      // Même garde anti-traversée que le protocole encre-media côté renderer ;
+      // un contentJson forgé ne doit pas faire sortir la copie du dossier media.
+      if (fileName !== basename(fileName)) return null
       if (!mediaDir || !existsSync(join(mediaDir, fileName))) return null
       if (!copied.has(fileName)) {
         mkdirSync(illustrationsDir, { recursive: true })

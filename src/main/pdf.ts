@@ -1,6 +1,6 @@
 import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
-import { join, extname } from 'path'
+import { join, extname, basename } from 'path'
 import { pathToFileURL } from 'url'
 import type { Db } from './db/connection'
 import { getBook } from './db/books'
@@ -99,6 +99,7 @@ export async function buildPdf(db: Db, bookId: number, chapterIds: number[], med
 
   const opts: ExportOptions = {
     illustration: ({ fileName, displayName }) => {
+      if (fileName !== basename(fileName)) return null
       if (!mediaDir) return null
       const src = join(mediaDir, fileName)
       if (!existsSync(src) || !(extname(fileName).toLowerCase() in IMAGE_MEDIA_TYPES)) return null
