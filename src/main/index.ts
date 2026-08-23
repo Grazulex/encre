@@ -6,7 +6,7 @@ import icon from '../../resources/icon.png?asset'
 import { openDb } from './db/connection'
 import { createApi } from './api'
 import { registerIpc } from './ipc'
-import { backupDatabase, pruneBackups, shouldBackup } from './backup'
+import { backupDatabase, pruneBackups, shouldBackup } from './backup/local'
 
 // Protocole privilégié `encre-media` : seule voie d'affichage des images
 // (couvertures de livres, photos de fiches personnages/lieux) dans le

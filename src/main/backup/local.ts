@@ -1,6 +1,6 @@
 import { mkdirSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import type { Db } from './db/connection'
+import type { Db } from '../db/connection'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

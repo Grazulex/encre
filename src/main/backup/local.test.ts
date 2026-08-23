@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync, utimesSync, existsSync, readdirS
 import { tmpdir } from 'os'
 import { join } from 'path'
 import Database from 'better-sqlite3'
-import { openDb } from './db/connection'
-import { backupDatabase, pruneBackups, shouldBackup } from './backup'
+import { openDb } from '../db/connection'
+import { backupDatabase, pruneBackups, shouldBackup } from './local'
 
 let dir: string
 beforeEach(() => {
