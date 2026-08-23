@@ -55,10 +55,12 @@ const backupLabel = computed(() => {
     <span class="session" :class="{ positive: sessionWords > 0 }">
       {{ sessionWords >= 0 ? '+' : '' }}{{ sessionWords.toLocaleString('fr-FR') }} cette session
     </span>
-    <span class="dot">·</span>
-    <button v-if="backupLabel" type="button" class="backup-link" @click="router.push('/')">
-      {{ backupLabel }}
-    </button>
+    <template v-if="backupLabel">
+      <span class="dot">·</span>
+      <button type="button" class="backup-link" @click="router.push('/')">
+        {{ backupLabel }}
+      </button>
+    </template>
     <span class="spacer" />
     <span class="save-state" :class="store.saveState">
       <span class="pulse" />
