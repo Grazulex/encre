@@ -7,6 +7,17 @@ export const useBackupStore = defineStore('backup', {
     status: null as BackupStatus | null,
     busy: false,
     error: null as string | null,
+    /** Date du dernier rafraîchissement **réussi**, ISO. */
+    lastRefreshAt: null as string | null,
+    /**
+     * Le dernier rafraîchissement a échoué : ce que porte `status` n'est plus
+     * l'état courant mais le dernier état connu. Sans ce drapeau, l'interface
+     * continue d'afficher le dernier bon état comme s'il était courant — y
+     * compris quand un dossier media illisible fait lever `buildManifest`,
+     * cas où l'échec bruyant a été délibérément préféré à un faux « tout est
+     * sauvegardé ». Le store le reconvertirait sinon en échec silencieux.
+     */
+    refreshFailed: false,
     timer: null as ReturnType<typeof setInterval> | null,
     // Compteur de vues abonnées au polling (BackupPanel dans la Bibliothèque,
     // le voyant dans la barre d'état). stopPolling() ne coupe la minuterie
@@ -20,8 +31,14 @@ export const useBackupStore = defineStore('backup', {
     async refresh() {
       try {
         this.status = await window.encre.backup.status()
+        // Remis à null : sans ça, une panne passagère épingle une ligne rouge
+        // indéfiniment alors que tout est rentré dans l'ordre.
+        this.error = null
+        this.refreshFailed = false
+        this.lastRefreshAt = new Date().toISOString()
       } catch (err) {
         this.error = err instanceof Error ? err.message : String(err)
+        this.refreshFailed = true
       }
     },
     async runNow() {
@@ -30,8 +47,11 @@ export const useBackupStore = defineStore('backup', {
       this.error = null
       try {
         this.status = await window.encre.backup.runNow()
+        this.refreshFailed = false
+        this.lastRefreshAt = new Date().toISOString()
       } catch (err) {
         this.error = err instanceof Error ? err.message : String(err)
+        this.refreshFailed = true
       } finally {
         this.busy = false
       }
