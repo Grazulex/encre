@@ -55,4 +55,34 @@ describe('buildEpub', () => {
     expect(ch1).toContain('<div class="scene-break">⁂</div>')
     expect(ch1).toContain('<hr class="page-break"/>')
   })
+
+  it('embarque les illustrations référencées et les déclare au manifest', async () => {
+    const { mkdtempSync, writeFileSync } = await import('fs')
+    const { tmpdir } = await import('os')
+    const { join } = await import('path')
+    const db = openDb(':memory:')
+    const api = createApi(db)
+    const book = await api.books.create({ title: 'EPUB illustré' })
+    const c1 = await api.chapters.create(book.id, 'Un')
+    const mediaDir = mkdtempSync(join(tmpdir(), 'encre-epub-media-'))
+    writeFileSync(join(mediaDir, 'ill-1-9-0.png'), 'png-bytes')
+    await api.chapters.saveContent(c1.id, JSON.stringify({
+      type: 'doc',
+      content: [
+        { type: 'illustration', attrs: { fileName: 'ill-1-9-0.png', displayName: 'La maison' } },
+        { type: 'illustration', attrs: { fileName: 'absente.png', displayName: 'Fantôme' } }
+      ]
+    }), '')
+
+    const buffer = await buildEpub(db, book.id, [], mediaDir)
+    const zip = await JSZip.loadAsync(buffer)
+    expect(await zip.file('OEBPS/images/ill-1-9-0.png')!.async('string')).toBe('png-bytes')
+    const opf = await zip.file('OEBPS/content.opf')!.async('string')
+    expect(opf).toContain('href="images/ill-1-9-0.png" media-type="image/png"')
+    const ch1 = await zip.file('OEBPS/chapter-1.xhtml')!.async('string')
+    expect(ch1).toContain('<img src="images/ill-1-9-0.png" alt="La maison"/>')
+    expect(ch1).not.toContain('absente.png')
+    const css = await zip.file('OEBPS/style.css')!.async('string')
+    expect(css).toContain('.illustration')
+  })
 })

@@ -1,12 +1,15 @@
 import { existsSync, readFileSync } from 'fs'
-import { extname } from 'path'
+import { extname, join } from 'path'
 import JSZip from 'jszip'
 import type { Db } from './db/connection'
 import { getBook } from './db/books'
 import { listChapters, getChapter } from './db/chapters'
 import { tiptapToXhtml, escapeXml } from '../shared/export'
+import type { ExportOptions } from '../shared/export'
 
-const COVER_MEDIA_TYPES: Record<string, string> = {
+// Exportée : réutilisée par pdf.ts pour vérifier l'extension d'une
+// illustration sans dupliquer cette table (même famille d'images partout).
+export const IMAGE_MEDIA_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -53,9 +56,17 @@ p {
   border: none;
   margin: 0;
 }
+.illustration {
+  text-align: center;
+  margin: 1.5em 0;
+  text-indent: 0;
+}
+.illustration img {
+  max-width: 100%;
+}
 `
 
-export async function buildEpub(db: Db, bookId: number, chapterIds: number[]): Promise<Buffer> {
+export async function buildEpub(db: Db, bookId: number, chapterIds: number[], mediaDir?: string): Promise<Buffer> {
   const book = getBook(db, bookId)
   const allChapters = listChapters(db, bookId)
   const selected = chapterIds.length === 0
@@ -73,7 +84,7 @@ export async function buildEpub(db: Db, bookId: number, chapterIds: number[]): P
 
   const hasCover = !!book.coverPath && existsSync(book.coverPath)
   const coverExt = hasCover ? extname(book.coverPath as string).toLowerCase() : ''
-  const coverMediaType = COVER_MEDIA_TYPES[coverExt] ?? 'application/octet-stream'
+  const coverMediaType = IMAGE_MEDIA_TYPES[coverExt] ?? 'application/octet-stream'
   if (hasCover) {
     zip.file(`OEBPS/cover${coverExt}`, readFileSync(book.coverPath as string))
   }
@@ -85,9 +96,31 @@ export async function buildEpub(db: Db, bookId: number, chapterIds: number[]): P
   const spineItems: string[] = []
   const navItems: string[] = []
 
+  const embeddedImages = new Set<string>()
+  const illustrationManifest: string[] = []
+  const opts: ExportOptions = {
+    illustration: ({ fileName, displayName }) => {
+      if (!mediaDir) return null
+      const src = join(mediaDir, fileName)
+      if (!existsSync(src)) return null
+      if (!embeddedImages.has(fileName)) {
+        zip.file(`OEBPS/images/${fileName}`, readFileSync(src))
+        const mediaType = IMAGE_MEDIA_TYPES[extname(fileName).toLowerCase()] ?? 'application/octet-stream'
+        illustrationManifest.push(
+          `<item id="illustration-${illustrationManifest.length + 1}" href="images/${fileName}" media-type="${mediaType}"/>`
+        )
+        embeddedImages.add(fileName)
+      }
+      return {
+        md: '',
+        xhtml: `<div class="illustration"><img src="images/${fileName}" alt="${escapeXml(displayName)}"/></div>`
+      }
+    }
+  }
+
   for (const meta of selected) {
     const full = getChapter(db, meta.id)
-    const body = tiptapToXhtml(full.contentJson)
+    const body = tiptapToXhtml(full.contentJson, opts)
     zip.file(`OEBPS/chapter-${meta.position}.xhtml`, xhtml(meta.title, body))
     manifestItems.push(
       `<item id="chapter-${meta.position}" href="chapter-${meta.position}.xhtml" media-type="application/xhtml+xml"/>`
@@ -103,6 +136,7 @@ export async function buildEpub(db: Db, bookId: number, chapterIds: number[]): P
       `<item id="cover-image" href="cover${coverExt}" properties="cover-image" media-type="${coverMediaType}"/>`
     )
   }
+  manifestItems.push(...illustrationManifest)
 
   const navXhtml = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>

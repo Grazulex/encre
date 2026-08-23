@@ -146,10 +146,14 @@ Consommateurs :
   (`Images/{fileName}`) avec entrée de manifest et media-type (table
   d'extensions déjà en place) ; résolveur → chemin relatif depuis le XHTML
   du chapitre ;
-- **PDF** (`pdf.ts`) : la fenêtre cachée charge une `data:` URL — les
-  images sont inlinées en **data-URI base64** par le résolveur ; CSS
-  pleine page (l'image occupe sa propre page, `page-break` avant/après,
-  cohérent avec l'usage « planche » de L'ENVERS).
+- **PDF** (`pdf.ts`) : **déviation vs conception initiale** — la fenêtre
+  cachée chargeait jusqu'ici une URL `data:`, mais Chromium plafonne la
+  longueur de ces URL (~2 Mo), ce qu'inliner des planches en base64
+  dépasserait pour un livre long. Le HTML est donc écrit dans un fichier
+  temporaire chargé via `loadFile`, et les images sont référencées par le
+  résolveur en `file://` (autorisé depuis une page `file://`) ; CSS pleine
+  page (l'image occupe sa propre page, `page-break` avant/après, cohérent
+  avec l'usage « planche » de L'ENVERS).
 
 Un nœud dont le fichier media a disparu est **omis** des trois exports
 (pas de lien mort dans un EPUB/PDF publié) ; l'export continue.

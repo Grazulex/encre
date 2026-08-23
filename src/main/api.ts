@@ -299,16 +299,17 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
     },
     exporter: {
       markdown: async (bookId) => {
-        const { dialog } = await import('electron')
+        const { app, dialog } = await import('electron')
         const res = await dialog.showOpenDialog({
           title: 'Choisir un dossier de destination',
           properties: ['openDirectory', 'createDirectory']
         })
         if (res.canceled || res.filePaths.length === 0) return null
-        return exportMarkdownToFolder(db, bookId, res.filePaths[0])
+        const mediaDir = join(app.getPath('userData'), 'media')
+        return exportMarkdownToFolder(db, bookId, res.filePaths[0], mediaDir)
       },
       epub: async (bookId, chapterIds) => {
-        const { dialog } = await import('electron')
+        const { app, dialog } = await import('electron')
         const book = books.getBook(db, bookId)
         const res = await dialog.showSaveDialog({
           title: 'Exporter en EPUB',
@@ -316,12 +317,13 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
           filters: [{ name: 'EPUB', extensions: ['epub'] }]
         })
         if (res.canceled || !res.filePath) return null
-        const buffer = await buildEpub(db, bookId, chapterIds)
+        const mediaDir = join(app.getPath('userData'), 'media')
+        const buffer = await buildEpub(db, bookId, chapterIds, mediaDir)
         writeFileSync(res.filePath, buffer)
         return res.filePath
       },
       pdf: async (bookId, chapterIds) => {
-        const { dialog } = await import('electron')
+        const { app, dialog } = await import('electron')
         const book = books.getBook(db, bookId)
         const res = await dialog.showSaveDialog({
           title: 'Exporter en PDF',
@@ -329,7 +331,8 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
           filters: [{ name: 'PDF', extensions: ['pdf'] }]
         })
         if (res.canceled || !res.filePath) return null
-        const buffer = await buildPdf(db, bookId, chapterIds)
+        const mediaDir = join(app.getPath('userData'), 'media')
+        const buffer = await buildPdf(db, bookId, chapterIds, mediaDir)
         writeFileSync(res.filePath, buffer)
         return res.filePath
       }
