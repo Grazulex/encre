@@ -7,6 +7,7 @@ import { openDb } from './db/connection'
 import { createApi } from './api'
 import { registerIpc } from './ipc'
 import { backupDatabase, pruneBackups, shouldBackup } from './backup/local'
+import { createBackupService } from './backup/sync'
 
 // Protocole privilégié `encre-media` : seule voie d'affichage des images
 // (couvertures de livres, photos de fiches personnages/lieux) dans le
@@ -130,6 +131,15 @@ app.whenReady().then(() => {
   const db = openDb(join(app.getPath('userData'), 'library.db'))
   const backupsDir = join(app.getPath('userData'), 'backups')
 
+  const backupService = createBackupService(db, {
+    repoDir: join(app.getPath('userData'), 'backup-repo'),
+    mediaDir: join(app.getPath('userData'), 'media'),
+    backupsDir,
+    keyPath: join(app.getPath('userData'), 'backup-key'),
+    statePath: join(app.getPath('userData'), 'backup-state.json'),
+    remoteUrl: 'git@github.com:Grazulex/encre_backup.git'
+  })
+
   // Daily backup with 24h check
   const performBackup = (): void => {
     // try/catch : shouldBackup/statSync peut lever en cas de course sur les
@@ -141,6 +151,10 @@ app.whenReady().then(() => {
           .then((path) => {
             console.log(`Backup créé: ${path}`)
             pruneBackups(backupsDir, new Date())
+            // Sauvegarde distante : même tranche de 24 h que le backup local.
+            // Le service enregistre lui-même ses erreurs dans son état ; on ne
+            // laisse jamais un échec réseau remonter jusqu'ici.
+            return backupService.runNow().catch((err) => console.error(err))
           })
           .catch(console.error)
       }
@@ -154,7 +168,7 @@ app.whenReady().then(() => {
   // Check every 6 hours
   setInterval(performBackup, 6 * 60 * 60 * 1000)
 
-  registerIpc(createApi(db))
+  registerIpc(createApi(db, { backup: backupService }))
 
   createWindow()
 

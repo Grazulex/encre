@@ -1,5 +1,5 @@
 import type {
-  Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
+  BackupStatus, Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
   Entity, EntityCreate, EntityKind, EntityOccurrence, EntityPatch,
   FormatConventions, Illustration, OutlineNote, Series, Snapshot, TimelineEvent, TimelineEventPatch
 } from './types'
@@ -133,6 +133,12 @@ export interface EncreApi {
     list(): Promise<Series[]>
     getOrCreate(name: string): Promise<Series>
     remove(id: number): Promise<void>
+  }
+  backup: {
+    /** Lit l'état sur disque et calcule le diff en attente. Ne touche jamais au réseau. */
+    status(): Promise<BackupStatus>
+    /** Force une sauvegarde. Rejette si une sauvegarde est déjà en cours. */
+    runNow(): Promise<BackupStatus>
   }
 }
 

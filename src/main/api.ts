@@ -11,6 +11,8 @@ import * as outline from './db/outline'
 import * as timeline from './db/timeline'
 import * as snapshots from './db/snapshots'
 import * as series from './db/series'
+import type { BackupService } from './backup/sync'
+import type { BackupStatus } from '../shared/types'
 import { addIllustrationFiles, removeIllustration, illustrationUsage } from './illustrations'
 import { createAiSession, addAiMessage } from './db/aiSessions'
 import { buildWritePrompt } from './ai/context'
@@ -75,6 +77,7 @@ const EXTRACT_MODEL = 'sonnet'
 export interface CreateApiOptions {
   runner?: AiRunner
   emitAiEvent?: (channel: string, payload: unknown) => void
+  backup?: BackupService
 }
 
 // `ai` mélange invoke (prepareWrite/startWrite/cancel) et événementiel préload-only
@@ -556,6 +559,26 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
       list: async () => series.listSeries(db),
       getOrCreate: async (name) => series.getOrCreateSeries(db, name),
       remove: async (id) => series.deleteSeries(db, id)
+    },
+    backup: {
+      // Sans service injecté (tests, ou bootstrap pas encore fait), on rend un
+      // état inerte plutôt que de lever : l'UI doit pouvoir s'afficher et dire
+      // « non configurée » sans traitement d'erreur particulier.
+      status: async () =>
+        options.backup?.status() ??
+        ({
+          configured: false, running: false, missingBinary: null,
+          lastCommitAt: null, lastPushAt: null, lastError: null,
+          pending: {
+            chaptersChanged: 0, chaptersAdded: 0, chaptersRemoved: 0,
+            wordsDelta: 0, mediaAdded: 0, booksAdded: 0, changedTitles: []
+          },
+          lastDiff: null
+        } as BackupStatus),
+      runNow: async () => {
+        if (!options.backup) throw new Error('La sauvegarde n\'est pas configurée sur cette machine.')
+        return options.backup.runNow()
+      }
     }
   }
 }

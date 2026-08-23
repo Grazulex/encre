@@ -105,6 +105,10 @@ const api: EncreApi = {
     list: () => ipcRenderer.invoke('series:list'),
     getOrCreate: (name) => ipcRenderer.invoke('series:getOrCreate', name),
     remove: (id) => ipcRenderer.invoke('series:remove', id)
+  },
+  backup: {
+    status: () => ipcRenderer.invoke('backup:status'),
+    runNow: () => ipcRenderer.invoke('backup:runNow')
   }
 }
 
