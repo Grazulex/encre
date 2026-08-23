@@ -121,14 +121,21 @@ export async function buildPdf(db: Db, bookId: number, chapterIds: number[], med
   // temporaire chargé via loadFile, ce qui autorise aussi les <img
   // src="file://…"> (déviation vs spec §5, cf. note de tâche).
   const tmpDir = mkdtempSync(join(tmpdir(), 'encre-pdf-'))
-  const htmlPath = join(tmpDir, 'livre.html')
-  writeFileSync(htmlPath, html)
-  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } })
   try {
-    await win.loadFile(htmlPath)
-    return await win.webContents.printToPDF({ pageSize: 'A5', printBackground: true })
+    // Le dossier temporaire doit être nettoyé même si l'écriture du HTML ou
+    // la création de la fenêtre échoue — d'où ce try englobant, distinct de
+    // celui qui ferme la fenêtre une fois qu'elle existe.
+    const htmlPath = join(tmpDir, 'livre.html')
+    writeFileSync(htmlPath, html)
+    let win: InstanceType<typeof BrowserWindow> | null = null
+    try {
+      win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } })
+      await win.loadFile(htmlPath)
+      return await win.webContents.printToPDF({ pageSize: 'A5', printBackground: true })
+    } finally {
+      win?.close()
+    }
   } finally {
-    win.close()
     rmSync(tmpDir, { recursive: true, force: true })
   }
 }
