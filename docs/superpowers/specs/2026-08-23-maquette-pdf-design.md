@@ -53,7 +53,7 @@ se scinde en trois modules à responsabilité unique, plus le point d'entrée :
 
 | Fichier | Responsabilité |
 |---|---|
-| `src/main/pdf/style.ts` | La feuille de style d'impression : `PRINT_CSS(format)` renvoie la CSS complète pour `'broche' \| 'relie'`. Aucune connaissance du livre. |
+| `src/main/pdf/style.ts` | La feuille de style d'impression : `buildPrintCss(format, bookTitle)` renvoie la CSS complète pour `'broche' \| 'relie'`. Le titre courant des versos est une chaîne littérale interpolée dans la CSS, comme dans `atelier`. |
 | `src/main/pdf/html.ts` | `buildBookHtml(db, bookId, chapterIds, mediaDir)` : assemble le document (liminaires, ouvertures, chapitres, planches), attribue les `id` d'ancrage et développe le sommaire. Pur, testable sans Electron. |
 | `src/main/pdf/render.ts` | `renderHtmlToPdf(html): Promise<Buffer>` : fichier temporaire, fenêtre cachée, injection de paged.js, attente de fin de pagination, `printToPDF`. Seul module qui touche Electron. |
 | `src/main/pdf.ts` | `buildPdf(db, bookId, chapterIds, mediaDir?)` inchangé en signature : orchestre les trois. |
