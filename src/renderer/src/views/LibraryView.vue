@@ -5,6 +5,7 @@ import type { BookStatus } from '../../../shared/types'
 import { BOOK_STATUS_LABELS } from '../../../shared/labels'
 import { useLibraryStore } from '../stores/library'
 import BookCard from '../components/BookCard.vue'
+import BackupPanel from '../components/BackupPanel.vue'
 import ImportWizard from '../components/ImportWizard.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
@@ -87,6 +88,8 @@ function cancelRemoval(): void {
         </button>
       </div>
     </header>
+
+    <BackupPanel />
 
     <div
       v-if="store.loaded && store.books.length > 0"

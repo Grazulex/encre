@@ -491,3 +491,29 @@ describe('createApi', () => {
     expect(await api.illustrations.usage(ill.id)).toBe(0)
   })
 })
+
+describe('domaine backup', () => {
+  it('délègue status et runNow au service injecté', async () => {
+    const fake = {
+      status: vi.fn(async () => ({ configured: true } as never)),
+      runNow: vi.fn(async () => ({ configured: true } as never))
+    }
+    const api = createApi(openDb(':memory:'), { backup: fake })
+    await api.backup.status()
+    await api.backup.runNow()
+    expect(fake.status).toHaveBeenCalledTimes(1)
+    expect(fake.runNow).toHaveBeenCalledTimes(1)
+  })
+
+  it('rend configured=false sans service injecté, au lieu de lever', async () => {
+    const api = createApi(openDb(':memory:'))
+    const status = await api.backup.status()
+    expect(status.configured).toBe(false)
+    expect(status.lastCommitAt).toBeNull()
+  })
+
+  it('runNow sans service injecté lève un message explicite', async () => {
+    const api = createApi(openDb(':memory:'))
+    await expect(api.backup.runNow()).rejects.toThrow(/pas configurée/)
+  })
+})

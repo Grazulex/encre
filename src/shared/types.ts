@@ -219,3 +219,26 @@ export type TimelineEventPatch = Partial<{
   title: string
   description: string
 }>
+
+export interface BackupDiff {
+  chaptersChanged: number
+  chaptersAdded: number
+  chaptersRemoved: number
+  wordsDelta: number
+  mediaAdded: number
+  booksAdded: number
+  /** Tronqué à 5 : c'est de l'affichage, pas de la donnée. */
+  changedTitles: string[]
+}
+
+export interface BackupStatus {
+  configured: boolean
+  running: boolean
+  /** Chemin du binaire manquant (git ou sqlite3), null si tout est là. */
+  missingBinary: string | null
+  lastCommitAt: string | null
+  lastPushAt: string | null
+  lastError: string | null
+  pending: BackupDiff
+  lastDiff: BackupDiff | null
+}

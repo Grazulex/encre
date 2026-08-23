@@ -1,5 +1,5 @@
 import type {
-  Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
+  BackupStatus, Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
   Entity, EntityCreate, EntityKind, EntityOccurrence, EntityPatch,
   FormatConventions, Illustration, OutlineNote, Series, Snapshot, TimelineEvent, TimelineEventPatch
 } from './types'
@@ -134,6 +134,12 @@ export interface EncreApi {
     getOrCreate(name: string): Promise<Series>
     remove(id: number): Promise<void>
   }
+  backup: {
+    /** Lit l'état sur disque et calcule le diff en attente. Ne touche jamais au réseau. */
+    status(): Promise<BackupStatus>
+    /** Force une sauvegarde. Rejette si une sauvegarde est déjà en cours. */
+    runNow(): Promise<BackupStatus>
+  }
 }
 
 // Canaux IPC : `${domaine}:${méthode}` — ex. 'books:list', 'chapters:saveContent'
@@ -141,5 +147,5 @@ export interface EncreApi {
 // `ai` mêle les deux : prepareWrite/startWrite/cancel sont des invoke normaux,
 // mais onChunk/onDone/onError sont préload-only (ipcRenderer.on), comme `app`.
 export const API_DOMAINS = [
-  'books', 'chapters', 'entities', 'illustrations', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots', 'series'
+  'books', 'chapters', 'entities', 'illustrations', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots', 'series', 'backup'
 ] as const
