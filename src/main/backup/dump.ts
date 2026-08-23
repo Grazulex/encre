@@ -47,8 +47,12 @@ export function dumpDatabase(dbPath: string, outPath: string): Promise<void> {
     child.on('error', fail)
 
     child.on('close', (code) => {
-      if (code !== 0) {
-        fail(new Error(stderr || `sqlite3 a quitté avec le code ${code}`))
+      // Le code de sortie ne suffit pas : sur une base corrompue, sqlite3 sort en 0
+      // en n'écrivant que des marqueurs d'erreur en commentaires SQL, et signale le
+      // vrai problème sur stderr. Un dump sain, lui, laisse stderr vide — c'est donc
+      // le seul signal qui distingue « sauvegarde valide » de « coquille vide ».
+      if (code !== 0 || stderr.trim() !== '') {
+        fail(new Error(stderr.trim() || `sqlite3 a quitté avec le code ${code}`))
         return
       }
 

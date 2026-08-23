@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdtempSync, readFileSync } from 'fs'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, readFileSync, writeFileSync, chmodSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import Database from 'better-sqlite3'
@@ -10,6 +10,15 @@ import { dumpDatabase } from './dump'
 let dir: string
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'encre-dump-'))
+})
+
+afterEach(() => {
+  // Restaurer les permissions pour que le nettoyage du dossier temporaire ne échoue pas
+  try {
+    chmodSync(dir, 0o755)
+  } catch {
+    // Ignorer si le répertoire n'existe pas ou si on n'a pas les permissions
+  }
 })
 
 describe('dumpDatabase', () => {
@@ -41,18 +50,43 @@ describe('dumpDatabase', () => {
     await expect(dumpDatabase(join(dir, 'nexistepas.db'), join(dir, 'o.sql'))).rejects.toThrow()
   })
 
-  it('lève si le fichier de sortie n\'est pas accessible en écriture', async () => {
-    const dbPath = join(dir, 'library.db')
-    const db = openDb(dbPath)
+  it('lève si la base est corrompue (pages de données écrasées)', async () => {
+    // Créer une base valide d'abord
+    const okPath = join(dir, 'valid.db')
+    const db = openDb(okPath)
     createBook(db, { title: 'Test' })
     db.close()
 
-    // Créer un répertoire à la place du fichier de sortie
-    const outPath = join(dir, 'readonly')
-    const { mkdirSync } = await import('fs')
-    mkdirSync(outPath)
+    // Maintenant corrompre la base en écrasant les pages de données avec 0xFF
+    // tout en gardant intact l'en-tête SQLite (100 premiers octets)
+    const raw = Buffer.from(readFileSync(okPath))
+    for (let i = 100; i < Math.min(raw.length, 4096); i++) {
+      raw[i] = 0xff
+    }
 
-    // La promesse devrait rejeter parce que le flux d'écriture va échouer
-    await expect(dumpDatabase(dbPath, outPath)).rejects.toThrow()
+    const corruptedPath = join(dir, 'corrupted.db')
+    writeFileSync(corruptedPath, raw)
+
+    // Le dump d'une base corrompue devrait rejeter (stderr contient l'erreur)
+    const out = join(dir, 'corrupted.sql')
+    await expect(dumpDatabase(corruptedPath, out)).rejects.toThrow(/malformed/)
+  })
+
+  it('lève si la base est illisible (permissions refusées)', async () => {
+    const dbPath = join(dir, 'unreadable.db')
+    const db = openDb(dbPath)
+    createBook(db, { title: 'Secret' })
+    db.close()
+
+    // Retirer les permissions de lecture
+    chmodSync(dbPath, 0o000)
+
+    const out = join(dir, 'unreadable.sql')
+    try {
+      await expect(dumpDatabase(dbPath, out)).rejects.toThrow()
+    } finally {
+      // Restaurer les permissions pour le nettoyage
+      chmodSync(dbPath, 0o644)
+    }
   })
 })
