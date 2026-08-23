@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onMounted, onBeforeUnmount, nextTick, ref } from 'vue'
+import { watch, onMounted, onBeforeUnmount, nextTick, ref, computed } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import type { JSONContent } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
@@ -48,6 +48,54 @@ let pendingChapterId: number | null = null
 // avec l'id du nouveau chapitre écraserait son contenu au prochain flush.
 let editorChapterId: number | null = null
 
+// Édition en place des quatre nœuds de mise en page (Task 7) : layoutDraft
+// pilote un unique popover pour l'insertion (menu ¶+, pos: null — voir plus
+// bas) ET l'édition d'un nœud déjà posé (clic dessus dans l'éditeur, pos: sa
+// position — voir editorProps.handleClickOn ci-dessous). Déclaré ici, avant
+// useEditor, car handleClickOn l'écrit directement.
+type LayoutDraft =
+  | { kind: 'chapterOpening'; enseigne: string; titre: string; recto: boolean }
+  | { kind: 'partOpening'; label: string; recto: boolean }
+  | { kind: 'tableOfContents'; titre: string }
+  | { kind: 'frontMatterPage'; genre: 'titre' | 'colophon' | 'dedicace' }
+
+const layoutDraft = ref<{ draft: LayoutDraft; pos: number | null } | null>(null)
+
+// Reconstruit un LayoutDraft à partir des attrs bruts d'un nœud existant (clic
+// dans l'éditeur) : ces attrs sont un Record<string, any> côté ProseMirror,
+// jamais fait confiance à leur type — chaque champ retombe sur le défaut du
+// nœud correspondant (voir layoutNodes.ts) s'il est absent/invalide, comme
+// parseRecto y traite déjà toute valeur autre que 'false' comme vraie.
+function draftFromLayoutNode(name: string, attrs: Record<string, unknown>): LayoutDraft | null {
+  switch (name) {
+    case 'chapterOpening':
+      return {
+        kind: 'chapterOpening',
+        enseigne: typeof attrs.enseigne === 'string' ? attrs.enseigne : '',
+        titre: typeof attrs.titre === 'string' ? attrs.titre : '',
+        recto: attrs.recto !== false
+      }
+    case 'partOpening':
+      return {
+        kind: 'partOpening',
+        label: typeof attrs.label === 'string' ? attrs.label : '',
+        recto: attrs.recto !== false
+      }
+    case 'tableOfContents':
+      return {
+        kind: 'tableOfContents',
+        titre: typeof attrs.titre === 'string' ? attrs.titre : 'SOMMAIRE'
+      }
+    case 'frontMatterPage':
+      return {
+        kind: 'frontMatterPage',
+        genre: attrs.genre === 'colophon' || attrs.genre === 'dedicace' ? attrs.genre : 'titre'
+      }
+    default:
+      return null
+  }
+}
+
 const editor = useEditor({
   // horizontalRule désactivé (Task 3) : sceneBreak possède sa propre règle de
   // saisie (***/---/* * * + Entrée) et son propre rendu — les deux extensions
@@ -76,16 +124,26 @@ const editor = useEditor({
     saveTimer = setTimeout(flush, 800)
   },
   // Clic sur une mention → ouvre le tiroir de la fiche visée (Task 11).
-  // `direct` distingue un clic pile sur le nœud d'un clic qui ne fait que le
-  // traverser (mention imbriquée dans un nœud parent plus large) ; la
-  // mention étant un nœud atomique sans enfant, ça correspond exactement au
-  // clic sur la mention elle-même.
+  // Clic sur un des quatre nœuds de mise en page (Task 7) → rouvre le
+  // popover d'édition en place, pré-rempli depuis ses attrs actuels (voir
+  // draftFromLayoutNode ci-dessus). `direct` distingue un clic pile sur le
+  // nœud d'un clic qui ne fait que le traverser (nœud parent plus large) ;
+  // les cinq nœuds concernés sont tous atomiques ou selectable, ça correspond
+  // exactement au clic sur le nœud lui-même.
   editorProps: {
-    handleClickOn(_view, _pos, node, _nodePos, _event, direct) {
-      if (!direct || node.type.name !== 'mention') return false
-      const id = node.attrs.id
-      if (typeof id === 'number') entitiesStore.openDrawer(id)
-      return true
+    handleClickOn(_view, _pos, node, nodePos, _event, direct) {
+      if (!direct) return false
+      if (node.type.name === 'mention') {
+        const id = node.attrs.id
+        if (typeof id === 'number') entitiesStore.openDrawer(id)
+        return true
+      }
+      const draft = draftFromLayoutNode(node.type.name, node.attrs)
+      if (draft) {
+        layoutDraft.value = { draft, pos: nodePos }
+        return true
+      }
+      return false
     }
   }
 })
@@ -881,6 +939,132 @@ watch(formatMenuOpen, (open) => {
 
 onBeforeUnmount(() => window.removeEventListener('mousedown', onWindowMousedownForFormatMenu))
 
+// Popover d'insertion/édition des quatre nœuds de mise en page (Task 7) :
+// layoutDraft (déclaré plus haut, avant useEditor) pilote un unique popover,
+// modelé sur celui du snapshot ci-dessus (fermeture au clic extérieur/Échap).
+// pos === null → insertion (une des quatre entrées ajoutées au menu ¶+ ci-
+// dessous) ; pos = position d'un nœud existant → édition, posée par
+// editorProps.handleClickOn plus haut au clic sur le nœud dans l'éditeur.
+// Le popover reste ancré au bouton ¶+ (même formatWrapEl) dans les deux cas,
+// plutôt qu'au point de clic dans le corps du texte — plus simple, cohérent
+// avec les autres popovers de cet en-tête, et le nœud édité reste visible à
+// l'écran (sélection posée dessus) pendant l'édition.
+const chapterOpeningDraft = computed(() => {
+  const d = layoutDraft.value?.draft
+  return d?.kind === 'chapterOpening' ? d : null
+})
+const partOpeningDraft = computed(() => {
+  const d = layoutDraft.value?.draft
+  return d?.kind === 'partOpening' ? d : null
+})
+const tableOfContentsDraft = computed(() => {
+  const d = layoutDraft.value?.draft
+  return d?.kind === 'tableOfContents' ? d : null
+})
+const frontMatterDraft = computed(() => {
+  const d = layoutDraft.value?.draft
+  return d?.kind === 'frontMatterPage' ? d : null
+})
+
+function openLayoutInsert(kind: LayoutDraft['kind']): void {
+  formatMenuOpen.value = false
+  if (kind === 'chapterOpening') {
+    // Pré-remplissage : le rang vient de store.currentChapter.position, une
+    // simple commodité de saisie — la base ne « sait » pas qu'un chapitre
+    // « Liminaires » posé en tête décale d'une unité le rang réel du premier
+    // vrai chapitre ; à l'auteur de corriger l'enseigne proposée si besoin.
+    layoutDraft.value = {
+      draft: {
+        kind: 'chapterOpening',
+        enseigne: `CHAPITRE ${store.currentChapter?.position ?? 0}`,
+        titre: store.currentChapter?.title ?? '',
+        recto: true
+      },
+      pos: null
+    }
+  } else if (kind === 'partOpening') {
+    layoutDraft.value = { draft: { kind: 'partOpening', label: '', recto: true }, pos: null }
+  } else if (kind === 'tableOfContents') {
+    layoutDraft.value = { draft: { kind: 'tableOfContents', titre: 'SOMMAIRE' }, pos: null }
+  } else {
+    layoutDraft.value = { draft: { kind: 'frontMatterPage', genre: 'titre' }, pos: null }
+  }
+}
+
+function closeLayoutDraft(): void {
+  layoutDraft.value = null
+}
+
+function confirmLayoutDraft(): void {
+  const state = layoutDraft.value
+  const ed = editor.value
+  if (!state || !ed) return
+  const { draft, pos } = state
+  if (pos === null) {
+    const chain = ed.chain().focus()
+    switch (draft.kind) {
+      case 'chapterOpening':
+        chain
+          .insertChapterOpening({
+            enseigne: draft.enseigne,
+            titre: draft.titre,
+            recto: draft.recto
+          })
+          .run()
+        break
+      case 'partOpening':
+        chain.insertPartOpening({ label: draft.label, recto: draft.recto }).run()
+        break
+      case 'tableOfContents':
+        chain.insertTableOfContents({ titre: draft.titre }).run()
+        break
+      case 'frontMatterPage':
+        chain.insertFrontMatterPage({ genre: draft.genre }).run()
+        break
+    }
+  } else {
+    const { kind, ...attrs } = draft
+    ed.chain().focus().setNodeSelection(pos).updateAttributes(kind, attrs).run()
+  }
+  layoutDraft.value = null
+}
+
+// Échap ferme sans valider (même geste que onSnapshotPromptKeydown) ; pas de
+// validation sur Entrée ici, contrairement au snapshot — ce popover porte
+// plusieurs champs (case à cocher, select) où Entrée n'a pas la même
+// évidence sémantique que sur un unique champ texte.
+function onLayoutDraftKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeLayoutDraft()
+  }
+}
+
+function onWindowMousedownForLayoutDraft(event: MouseEvent): void {
+  if (formatWrapEl.value?.contains(event.target as Node)) return
+  closeLayoutDraft()
+}
+
+const layoutPopoverEl = ref<HTMLElement | null>(null)
+
+watch(
+  () => layoutDraft.value,
+  async (state) => {
+    if (state) {
+      window.addEventListener('mousedown', onWindowMousedownForLayoutDraft)
+      // Même geste que snapshotLabelEl ci-dessus : focus le premier champ du
+      // popover, quel que soit le kind affiché (pas de ref dédiée par champ).
+      await nextTick()
+      layoutPopoverEl.value?.querySelector<HTMLElement>('input, select')?.focus()
+    } else {
+      window.removeEventListener('mousedown', onWindowMousedownForLayoutDraft)
+    }
+  }
+)
+
+onBeforeUnmount(() => window.removeEventListener('mousedown', onWindowMousedownForLayoutDraft))
+
 // Équivalent palette ⌘K (brief) : CommandPalette ne connaît pas l'éditeur
 // (monté par App.vue, hors de l'arbre de BookView/EditorPane) — même
 // situation que 'palette:focus-toggle' pour le mode focus (voir BookView),
@@ -1041,6 +1225,72 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
           <button type="button" role="menuitem" @click="chooseFormatNode('pageBreak')">
             Saut de page forcé
           </button>
+          <div class="format-menu-sep"></div>
+          <button type="button" role="menuitem" @click="openLayoutInsert('chapterOpening')">
+            Ouverture de chapitre
+          </button>
+          <button type="button" role="menuitem" @click="openLayoutInsert('partOpening')">
+            Page de partie
+          </button>
+          <button type="button" role="menuitem" @click="openLayoutInsert('tableOfContents')">
+            Sommaire
+          </button>
+          <button type="button" role="menuitem" @click="openLayoutInsert('frontMatterPage')">
+            Page liminaire
+          </button>
+        </div>
+        <div
+          v-if="layoutDraft"
+          ref="layoutPopoverEl"
+          class="layout-popover"
+          role="dialog"
+          aria-label="Nœud de mise en page"
+          @keydown="onLayoutDraftKeydown"
+        >
+          <template v-if="chapterOpeningDraft">
+            <label class="field">
+              <span class="field-label">Enseigne</span>
+              <input v-model="chapterOpeningDraft.enseigne" type="text" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span class="field-label">Titre du chapitre</span>
+              <input v-model="chapterOpeningDraft.titre" type="text" spellcheck="false" />
+            </label>
+            <label class="layout-checkbox">
+              <input v-model="chapterOpeningDraft.recto" type="checkbox" />
+              Commencer en page de droite
+            </label>
+          </template>
+          <template v-else-if="partOpeningDraft">
+            <label class="field">
+              <span class="field-label">Nom de la partie</span>
+              <input v-model="partOpeningDraft.label" type="text" spellcheck="false" />
+            </label>
+            <label class="layout-checkbox">
+              <input v-model="partOpeningDraft.recto" type="checkbox" />
+              Commencer en page de droite
+            </label>
+          </template>
+          <template v-else-if="tableOfContentsDraft">
+            <label class="field">
+              <span class="field-label">Titre du sommaire</span>
+              <input v-model="tableOfContentsDraft.titre" type="text" spellcheck="false" />
+            </label>
+          </template>
+          <template v-else-if="frontMatterDraft">
+            <label class="field">
+              <span class="field-label">Genre</span>
+              <select v-model="frontMatterDraft.genre">
+                <option value="titre">Page de titre</option>
+                <option value="colophon">Colophon</option>
+                <option value="dedicace">Dédicace</option>
+              </select>
+            </label>
+          </template>
+          <div class="layout-popover-actions">
+            <button type="button" @click="closeLayoutDraft">Annuler</button>
+            <button type="button" class="primary" @click="confirmLayoutDraft">Valider</button>
+          </div>
         </div>
       </div>
       <div ref="snapshotWrapEl" class="snapshot-wrap">
@@ -1394,6 +1644,56 @@ header {
 .format-menu button:hover {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.format-menu-sep {
+  border-top: 1px solid var(--border);
+  margin: 0.35em 0;
+}
+
+.layout-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px -14px color-mix(in srgb, var(--fg) 40%, transparent);
+}
+.layout-popover input[type='text'],
+.layout-popover select {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.layout-popover input[type='text']:focus,
+.layout-popover select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.layout-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+.layout-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.layout-popover-actions button {
+  font-size: 11.5px;
+  padding: 5px 10px;
 }
 
 .snapshot-wrap {
