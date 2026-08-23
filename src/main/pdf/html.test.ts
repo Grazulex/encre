@@ -122,6 +122,51 @@ describe('buildBookHtml', () => {
     expect(html).toContain('<p>© 2026</p>')
   })
 
+  it('rend le sous-titre entre le titre et le filet quand il est renseigné', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', sousTitre: '« La reconnaissance »', recto: true } },
+      para('Le cri.')
+    ), 'Le cri.')
+
+    const html = buildBookHtml(db, book.id, [])
+    expect(html).toContain('<p class="sous-titre">« La reconnaissance »</p>')
+    const titreIdx = html.indexOf('<h2 class="titre-chapitre">TROIS HEURES</h2>')
+    const sousTitreIdx = html.indexOf('<p class="sous-titre">')
+    const filetIdx = html.indexOf('<div class="filet">')
+    expect(titreIdx).toBeLessThan(sousTitreIdx)
+    expect(sousTitreIdx).toBeLessThan(filetIdx)
+  })
+
+  it('n’émet aucun élément sous-titre quand il est absent', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } },
+      para('Le cri.')
+    ), 'Le cri.')
+
+    const html = buildBookHtml(db, book.id, [])
+    // La feuille de style embarquée porte toujours le sélecteur .sous-titre ;
+    // seul le corps ne doit porter aucun élément portant cette classe.
+    const corps = html.slice(html.indexOf('<body>'))
+    expect(corps).not.toContain('sous-titre')
+  })
+
+  it('échappe le sous-titre', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      { type: 'chapterOpening', attrs: { enseigne: 'CH. 1', titre: 'Titre', sousTitre: 'Fer & <acier>', recto: true } },
+      para('Texte.')
+    ), 'Texte.')
+
+    const html = buildBookHtml(db, book.id, [])
+    expect(html).toContain('<p class="sous-titre">Fer &amp; &lt;acier&gt;</p>')
+    expect(html).not.toContain('<acier>')
+  })
+
   it('échappe les attributs XML issus de valeurs contrôlées par l’auteur', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')

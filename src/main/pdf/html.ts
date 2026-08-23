@@ -101,11 +101,15 @@ function makeLayoutRenderer(ancres: Ancre[]): NonNullable<ExportOptions['layout'
       chapitres += 1
       const enseigne = String(attrs.enseigne ?? '')
       const ligne = enseigne ? `<p class="enseigne">${escapeXml(enseigne)}</p>` : ''
+      // Sous-titre optionnel (la devise du chapitre) : rien n'est émis quand
+      // il est absent — pas d'élément vide entre le titre et le filet.
+      const sousTitre = String(attrs.sousTitre ?? '')
+      const sousTitreHtml = sousTitre ? `<p class="sous-titre">${escapeXml(sousTitre)}</p>` : ''
       return {
         md: '',
         xhtml: entourer(
           `<section class="ouverture" id="ouv-${chapitres}" data-recto="${recto}">${ligne}` +
-            `<h2 class="titre-chapitre">${escapeXml(String(attrs.titre ?? ''))}</h2>` +
+            `<h2 class="titre-chapitre">${escapeXml(String(attrs.titre ?? ''))}</h2>${sousTitreHtml}` +
             `<div class="filet"></div></section>`
         )
       }

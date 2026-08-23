@@ -287,6 +287,32 @@ describe('nœuds de mise en page', () => {
     expect(xhtml).toContain('<p>Le cri.</p>')
   })
 
+  it('rend le sous-titre du chapitre quand il est renseigné (XHTML et Markdown)', () => {
+    const d = JSON.stringify({
+      type: 'doc',
+      content: [
+        { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', sousTitre: '« La reconnaissance »', recto: true } }
+      ]
+    })
+    const xhtml = tiptapToXhtml(d)
+    expect(xhtml).toContain('<h1>TROIS HEURES</h1><p class="sous-titre">« La reconnaissance »</p>')
+    const md = tiptapToMarkdown(d)
+    expect(md).toContain('# TROIS HEURES\n\n*« La reconnaissance »*')
+  })
+
+  it('n’émet aucun sous-titre quand il est absent (XHTML et Markdown)', () => {
+    const d = JSON.stringify({
+      type: 'doc',
+      content: [
+        { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } }
+      ]
+    })
+    const xhtml = tiptapToXhtml(d)
+    expect(xhtml).not.toContain('sous-titre')
+    const md = tiptapToMarkdown(d)
+    expect(md.trim()).toBe('# TROIS HEURES')
+  })
+
   it('échappe le XML des attributs', () => {
     const d = JSON.stringify({ type: 'doc', content: [
       { type: 'partOpening', attrs: { label: 'Fer & <acier>', recto: false } }

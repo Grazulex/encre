@@ -210,7 +210,15 @@ function defaultLayoutRender(node: any, children: { md: string; xhtml: string })
     const enseigne = String(attrs.enseigne ?? '')
     const titre = String(attrs.titre ?? '')
     const enseigneHtml = enseigne ? `<p class="enseigne">${escapeXml(enseigne)}</p>` : ''
-    return { md: `# ${titre}`, xhtml: `<div class="ouverture">${enseigneHtml}<h1>${escapeXml(titre)}</h1></div>` }
+    // Sous-titre optionnel (la devise du chapitre) : omis quand absent, comme
+    // enseigne ci-dessus — pas d'élément/de ligne vide dans le rendu.
+    const sousTitre = String(attrs.sousTitre ?? '')
+    const sousTitreHtml = sousTitre ? `<p class="sous-titre">${escapeXml(sousTitre)}</p>` : ''
+    const md = sousTitre ? `# ${titre}\n\n*${sousTitre}*` : `# ${titre}`
+    return {
+      md,
+      xhtml: `<div class="ouverture">${enseigneHtml}<h1>${escapeXml(titre)}</h1>${sousTitreHtml}</div>`
+    }
   }
   if (node.type === 'partOpening') {
     const label = String(attrs.label ?? '')

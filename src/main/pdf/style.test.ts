@@ -58,6 +58,12 @@ describe('buildPrintCss', () => {
     expect(css).toMatch(/\.chapitre\[data-debut='true'\]\s*\{[^}]*break-before: right;/s)
   })
 
+  it('le sous-titre de chapitre est en italique', () => {
+    const css = buildPrintCss('broche', 'X')
+    expect(css).toContain('.ouverture .sous-titre')
+    expect(css).toMatch(/\.ouverture \.sous-titre\s*\{[^}]*font-style: italic;/s)
+  })
+
   it('pose les classes de mise en forme du corps à l’assemblage, pas de sélecteur positionnel', () => {
     const css = buildPrintCss('broche', 'X')
     expect(css).toContain('.chapitre p.premier')

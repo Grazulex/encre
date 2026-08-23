@@ -54,7 +54,7 @@ let editorChapterId: number | null = null
 // position — voir editorProps.handleClickOn ci-dessous). Déclaré ici, avant
 // useEditor, car handleClickOn l'écrit directement.
 type LayoutDraft =
-  | { kind: 'chapterOpening'; enseigne: string; titre: string; recto: boolean }
+  | { kind: 'chapterOpening'; enseigne: string; titre: string; sousTitre: string; recto: boolean }
   | { kind: 'partOpening'; label: string; recto: boolean }
   | { kind: 'tableOfContents'; titre: string }
   | { kind: 'frontMatterPage'; genre: 'titre' | 'colophon' | 'dedicace' }
@@ -73,6 +73,7 @@ function draftFromLayoutNode(name: string, attrs: Record<string, unknown>): Layo
         kind: 'chapterOpening',
         enseigne: typeof attrs.enseigne === 'string' ? attrs.enseigne : '',
         titre: typeof attrs.titre === 'string' ? attrs.titre : '',
+        sousTitre: typeof attrs.sousTitre === 'string' ? attrs.sousTitre : '',
         recto: attrs.recto !== false
       }
     case 'partOpening':
@@ -991,6 +992,7 @@ function openLayoutInsert(kind: LayoutDraft['kind']): void {
         kind: 'chapterOpening',
         enseigne: `CHAPITRE ${store.currentChapter?.position ?? 0}`,
         titre: store.currentChapter?.title ?? '',
+        sousTitre: '',
         recto: true
       },
       pos: null
@@ -1021,6 +1023,7 @@ function confirmLayoutDraft(): void {
           .insertChapterOpening({
             enseigne: draft.enseigne,
             titre: draft.titre,
+            sousTitre: draft.sousTitre,
             recto: draft.recto
           })
           .run()
@@ -1268,6 +1271,10 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
             <label class="field">
               <span class="field-label">Titre du chapitre</span>
               <input v-model="chapterOpeningDraft.titre" type="text" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span class="field-label">Sous-titre</span>
+              <input v-model="chapterOpeningDraft.sousTitre" type="text" spellcheck="false" />
             </label>
             <label class="layout-checkbox">
               <input v-model="chapterOpeningDraft.recto" type="checkbox" />

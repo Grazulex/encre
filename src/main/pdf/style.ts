@@ -146,6 +146,15 @@ hr.page-break { break-after: page; border: none; margin: 0; height: 0; }
   min-height: 2.4em;   /* réserve deux lignes : le filet tombe au même endroit d'un chapitre à l'autre */
   margin: 0;
 }
+/* Sous-titre optionnel : la devise du chapitre, quand l'auteur en use une.
+   Italique et nettement plus petit que le titre, avec un peu d'air au-dessus
+   pour ne pas coller à lui. */
+.ouverture .sous-titre {
+  font-size: 12pt;
+  font-style: italic;
+  text-indent: 0;
+  margin: 1.2em 0 0;
+}
 /* La chaîne du titre courant des rectos est prise ici et court jusqu'au chapitre
    suivant. Le titre de repli (chapitre sans nœud d'ouverture) la pose de la même
    façon, sinon ses pages n'auraient pas de titre courant. */

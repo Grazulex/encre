@@ -19,6 +19,9 @@ declare module '@tiptap/core' {
       insertChapterOpening: (attrs: {
         enseigne: string
         titre: string
+        // Optionnel (Task « sous-titre ») : la devise du chapitre, quand
+        // l'auteur en use une — absente pour la grande majorité des chapitres.
+        sousTitre?: string
         recto: boolean
       }) => ReturnType
     }
@@ -84,6 +87,16 @@ export const ChapterOpening = Node.create({
         parseHTML: (element: HTMLElement) => element.getAttribute('data-titre') ?? '',
         renderHTML: (attributes: Record<string, unknown>) => ({ 'data-titre': attributes.titre })
       },
+      // Sous-titre optionnel (la devise du chapitre, quand l'auteur en use
+      // une) : même round-trip via data- que enseigne/titre ci-dessus, défaut
+      // '' pour les chapitres qui n'en portent pas.
+      sousTitre: {
+        default: '',
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-sous-titre') ?? '',
+        renderHTML: (attributes: Record<string, unknown>) => ({
+          'data-sous-titre': attributes.sousTitre
+        })
+      },
       recto: {
         default: true,
         parseHTML: parseRecto,
@@ -98,15 +111,25 @@ export const ChapterOpening = Node.create({
     return [{ tag: 'div[data-ouverture]' }]
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-ouverture': '' })]
+  // enseigne et sous-titre restent de purs attributs, affichés côté éditeur
+  // par les pseudo-éléments ::before/::after de theme.css (attr(data-…)) —
+  // mais un élément n'a que DEUX pseudo-éléments, et l'ordre visuel voulu est
+  // à TROIS temps (enseigne, titre, sous-titre). Le titre devient donc ici un
+  // enfant réel (texte statique dérivé de node.attrs, pas de contenu
+  // éditable — le nœud reste un atome) : ::before garde l'enseigne, ::after
+  // récupère le sous-titre, et le titre — entre les deux dans le DOM — se
+  // repositionne visuellement en dernier via `order` en CSS (voir theme.css).
+  renderHTML({ node, HTMLAttributes }) {
+    const attrs = mergeAttributes(HTMLAttributes, { 'data-ouverture': '' })
+    const titre = String(node.attrs.titre ?? '')
+    return ['div', attrs, ['span', { class: 'ouverture-titre-editeur' }, titre]]
   },
 
   addCommands() {
     return {
       // Pas de cast nécessaire (comme illustration.ts) : la signature générique
       // `attrs?: Record<string, unknown>` de la fabrique reste structurellement
-      // compatible avec `{ enseigne; titre; recto }` déclaré ci-dessus.
+      // compatible avec `{ enseigne; titre; sousTitre; recto }` déclaré ci-dessus.
       insertChapterOpening: insertBlockAtomCommand(this.name)
     }
   }

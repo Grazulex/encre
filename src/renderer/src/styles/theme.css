@@ -239,6 +239,16 @@ textarea:focus {
   margin: 1.6em 0;
   text-align: center;
 }
+/* Ordre visuel enseigne / titre / sous-titre (Task « sous-titre ») : un
+   élément n'a que deux pseudo-éléments (::before, ::after), mais il en faut
+   trois. Le titre est donc un enfant réel — placé entre ::before et ::after
+   dans le DOM, donc normalement affiché AVANT ::after — repoussé en dernière
+   position via `order` en le passant en conteneur flex colonne (voir
+   layoutNodes.ts pour le rendu du span). */
+.tiptap [data-ouverture] {
+  display: flex;
+  flex-direction: column;
+}
 .tiptap [data-ouverture]::before {
   content: attr(data-enseigne);
   display: block;
@@ -247,11 +257,23 @@ textarea:focus {
   text-transform: uppercase;
   color: var(--fg-muted);
   margin-bottom: 0.5em;
+  order: 1;
 }
-.tiptap [data-ouverture]::after {
-  content: attr(data-titre);
+.tiptap [data-ouverture] .ouverture-titre-editeur {
   display: block;
   font-size: 1.4em;
+  order: 2;
+}
+/* Sous-titre : n'apparaît que si l'attribut est renseigné (:not sur la valeur
+   vide) — sinon la boîte générée resterait plantée là, vide, avec sa marge. */
+.tiptap [data-ouverture]:not([data-sous-titre=''])::after {
+  content: attr(data-sous-titre);
+  display: block;
+  font-style: italic;
+  font-size: 0.85em;
+  color: var(--fg-muted);
+  margin-top: 0.5em;
+  order: 3;
 }
 .tiptap [data-partie]::after {
   content: attr(data-label);

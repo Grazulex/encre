@@ -82,6 +82,12 @@ p {
   text-indent: 0;
   font-size: 0.85em;
 }
+.ouverture .sous-titre {
+  font-style: italic;
+  text-indent: 0;
+  font-size: 0.9em;
+  margin: 1em 0 0;
+}
 h1.partie {
   text-align: center;
   font-variant: small-caps;
