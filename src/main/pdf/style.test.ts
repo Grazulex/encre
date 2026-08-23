@@ -34,11 +34,16 @@ describe('buildPrintCss', () => {
 
   it('contient les trois éléments obligatoires et jamais leader()', () => {
     const css = buildPrintCss('broche', 'X')
-    expect(css).toContain("[data-align-last-split-element='justify']")
+    expect(css).toContain("[data-align-last-split-element='justify']:not(p)")
     expect(css).toContain('text-align-last: auto !important')
     expect(css).toContain('@page :blank')
     expect(css).toContain('.toc-fill')
     expect(css).not.toContain('leader(')
+  })
+
+  it('le sommaire ne justifie pas sa dernière ligne', () => {
+    const css = buildPrintCss('broche', 'X')
+    expect(css).toMatch(/\.sommaire\s*\{[^}]*text-align: left;/s)
   })
 
   it("pose le titre courant depuis l'ouverture ET depuis le titre de repli", () => {
@@ -62,5 +67,10 @@ describe('buildPrintCss', () => {
     // de paged.js (mesuré sur un export réel de 340 pages)
     expect(css).not.toContain(':first-of-type')
     expect(css).not.toContain('scene-break + p')
+  })
+
+  it('démaquille les titres de page liminaire (non gras, espacés)', () => {
+    const css = buildPrintCss('broche', 'X')
+    expect(css).toContain('.liminaire h1')
   })
 })

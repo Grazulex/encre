@@ -104,10 +104,10 @@ body { margin: 0; }
    quand la coupure tombe entre deux paragraphes c'est la <section> du chapitre, et
    text-align-last étant hérité, toutes les dernières lignes du chapitre restant
    sont justifiées de force. On ne neutralise PAS sur <p> : un paragraphe réellement
-   coupé en bas de page doit garder ce comportement. */
-section[data-align-last-split-element='justify'],
-header[data-align-last-split-element='justify'],
-div[data-align-last-split-element='justify'] {
+   coupé en bas de page doit garder ce comportement. La règle est écrite en
+   :not(p) plutôt qu'en liste d'éléments : n'importe quel élément peut être celui
+   que paged.js scinde, comme l'a prouvé un export réel avec le <ol> du sommaire. */
+[data-align-last-split-element='justify']:not(p) {
   text-align-last: auto !important;
 }
 
@@ -163,6 +163,17 @@ hr.page-break { break-after: page; border: none; margin: 0; height: 0; }
 /* Pages liminaires : le genre pilote l'alignement vertical dans la boîte de page. */
 .liminaire { display: flex; flex-direction: column; min-height: ${m.hauteurPlanche}; text-align: center; text-indent: 0; break-after: page; }
 .liminaire p { text-indent: 0; margin: 0 0 .6em; }
+/* Une page liminaire est du contenu libre : sa hiérarchie vient des titres que
+   l'auteur y place. La maquette du livre les veut non gras et espacés comme le
+   reste de la maquette, pas au gras par défaut du navigateur. */
+.liminaire h1,
+.liminaire h2 {
+  font-weight: normal;
+  letter-spacing: .08em;
+  margin: 0 0 1.2em;
+}
+.liminaire h1 { font-size: 20pt; }
+.liminaire h2 { font-size: 14pt; }
 .liminaire-titre { justify-content: center; }
 .liminaire-colophon { justify-content: flex-end; font-size: .85em; }
 .liminaire-dedicace { justify-content: flex-start; padding-top: 60mm; font-style: italic; }
@@ -170,7 +181,7 @@ hr.page-break { break-after: page; border: none; margin: 0; height: 0; }
 /* Sommaire — points de conduite en repli flex : la fonction leader n'existe pas dans
    paged.js et sa présence invalide toute la déclaration content, faisant
    disparaître le numéro de page avec les points. */
-.sommaire { break-after: page; text-indent: 0; }
+.sommaire { break-after: page; text-indent: 0; text-align: left; }
 .sommaire h2 { font-variant: small-caps; font-size: 13pt; font-weight: normal; letter-spacing: .16em; text-align: center; margin: 0 0 2.4em; }
 .sommaire ol { list-style: none; margin: 0; padding: 0; font-size: 10.5pt; }
 .sommaire li { margin: 0 0 .75em; text-indent: 0; }
