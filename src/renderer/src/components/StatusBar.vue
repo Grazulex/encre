@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useBookStore } from '../stores/book'
+import { useBackupStore } from '../stores/backup'
+import { useRouter } from 'vue-router'
 
 const store = useBookStore()
+const backup = useBackupStore()
+const router = useRouter()
 const sessionStart = ref<Map<number, number>>(new Map())
 
 const SAVE_LABELS: Record<'dirty' | 'saving' | 'saved', string> = {
@@ -29,6 +33,17 @@ const sessionWords = computed(() => {
   }
   return total
 })
+
+onMounted(() => backup.startPolling())
+onUnmounted(() => backup.stopPolling())
+
+const backupLabel = computed(() => {
+  const p = backup.status?.pending
+  if (!p) return null
+  const ch = p.chaptersChanged + p.chaptersAdded + p.chaptersRemoved
+  if (ch === 0 && p.mediaAdded === 0) return 'Sauvegardé'
+  return `${ch || p.mediaAdded} en attente`
+})
 </script>
 
 <template>
@@ -40,6 +55,10 @@ const sessionWords = computed(() => {
     <span class="session" :class="{ positive: sessionWords > 0 }">
       {{ sessionWords >= 0 ? '+' : '' }}{{ sessionWords.toLocaleString('fr-FR') }} cette session
     </span>
+    <span class="dot">·</span>
+    <button v-if="backupLabel" type="button" class="backup-link" @click="router.push('/')">
+      {{ backupLabel }}
+    </button>
     <span class="spacer" />
     <span class="save-state" :class="store.saveState">
       <span class="pulse" />
@@ -69,6 +88,14 @@ const sessionWords = computed(() => {
 }
 .spacer {
   flex: 1;
+}
+.backup-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--fg-muted);
+  cursor: pointer;
 }
 
 .save-state {
