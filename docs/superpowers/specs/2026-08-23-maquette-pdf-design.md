@@ -68,12 +68,15 @@ et §« Options printToPDF validées » du rapport) :
    deux `requestAnimationFrame`.
 4. `printToPDF({ preferCSSPageSize: true, printBackground: true, margins: 0 })`.
 
-Le polyfill est lu sur disque depuis le paquet npm et injecté par `executeJavaScript`.
-En application empaquetée, le fichier vit dans `app.asar` : la résolution se fait par
-`createRequire(import.meta.url).resolve('pagedjs/dist/paged.polyfill.js')` et
-`pagedjs` est déclaré externe dans `electron.vite.config.ts` pour que le bundler du
-process main ne tente pas de l'absorber. La lecture d'un fichier d'`app.asar` par
-`readFileSync` est supportée nativement par Electron.
+Le polyfill n'est jamais importé par le code : il est **lu sur disque** à
+`{app.getAppPath()}/node_modules/pagedjs/dist/paged.polyfill.js` puis **recopié à côté
+du HTML temporaire**, où la page le charge par un `<script src="paged.polyfill.js">`
+relatif. Aucun `import 'pagedjs'` n'apparaît donc dans le bundle du process main, ce qui
+supprime toute question d'externalisation côté `electron.vite.config.ts`, et le
+`<script src>` pointe sur un fichier ordinaire plutôt que dans `app.asar`. La lecture
+d'un fichier d'`app.asar` par `readFileSync`, elle, est supportée nativement par
+Electron. Polyfill absent au chemin attendu : erreur explicite, jamais de repli
+silencieux.
 
 Nouvelle dépendance : `pagedjs` ^0.4.3 (MIT). C'est la seule.
 
