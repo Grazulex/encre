@@ -1,23 +1,36 @@
-/* Encre — palette encre & papier.
-   L'accent est un bleu-noir d'encre de plume (classique en littérature),
-   plutôt qu'un terracotta générique : il ancre l'identité dans le nom
-   et le sujet de l'app (écrire à l'encre) sans jamais rivaliser avec le texte. */
+/* Encre — palette Catppuccin : Latte en clair, Frappé en sombre.
+   Les deux saveurs sont conçues ensemble, donc l'app reste cohérente quand
+   macOS bascule. L'accent est `lavender`, la plus proche du bleu d'encre qui
+   précédait — même famille, même retenue.
+
+   Trois valeurs de Latte s'écartent de la couleur canonique, et seulement
+   celles-là : les accents Catppuccin sont calibrés pour du REMPLISSAGE (un
+   bouton coloré, du texte clair dessus), alors qu'ici --accent sert 79 fois
+   comme couleur de texte contre 41 en fond. Chaque écart porte son ratio
+   mesuré ; `theme.test.ts` les vérifie et échoue sous 4,5:1. */
 :root {
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   --font-manuscript: 'Iowan Old Style', 'Charter', 'Georgia', serif;
 
-  --bg: #faf8f4;
-  --bg-panel: #f1ede4;
-  --fg: #211f1b;
-  /* #83796c contre --bg-panel #f1ede4 ne rendait que 3,66:1 (WCAG) — sous le
-     seuil AA de 4,5:1 pour du texte normal. Assombri en gardant la même
-     teinte (brun-gris chaud) jusqu'à #6e665a, qui rend 4,84:1. */
-  --fg-muted: #6e665a;
-  --accent: #3d4d78;
-  --border: #e3ddd0;
-  /* Signal d'erreur/danger (clé en double, etc.), dérivé en teinte plutôt que
-     figé en dur dans les composants — voir EntityCard.vue. */
-  --danger: #c0392b;
+  --bg: #eff1f5;        /* Latte base */
+  --bg-panel: #e6e9ef;  /* Latte mantle */
+  --fg: #4c4f69;        /* Latte text — 7,06:1 sur --bg */
+  /* Latte subtext0 (#6c6f85) ne rend que 4,06:1 sur --bg-panel, sous le seuil
+     AA de 4,5:1 pour du texte normal. Assombri à teinte constante jusqu'à
+     #64667b, qui rend 4,63:1. Même correction que celle déjà appliquée à
+     l'ancienne palette, pour la même raison. */
+  --fg-muted: #64667b;
+  /* Latte lavender brut (#7287fd) rend 2,81:1 sur --bg : inutilisable pour du
+     texte, et c'est l'usage majoritaire d'--accent ici. Désaturé de 45 % et
+     assombri jusqu'à #4c5ec9 — 4,95:1 sur --bg, 4,60:1 sur --bg-panel — ce qui
+     lui rend la retenue de l'ancien bleu d'encre sans quitter la famille. */
+  --accent: #4c5ec9;
+  --border: #ccd0da;    /* Latte surface0 */
+  /* Latte red (#d20f39) rend 4,46:1 sur --bg-panel, juste sous le seuil.
+     Assombri à #ce0f38 : 4,60:1. Signal d'erreur/danger (clé en double, etc.),
+     dérivé en teinte plutôt que figé en dur dans les composants — voir
+     EntityCard.vue. */
+  --danger: #ce0f38;
 
   /* Échelle de rayons (audit UI/UX, proposition #2) : les 7px/5px éparpillés
      dans plusieurs composants étaient des accidents de copie, pas une échelle
@@ -31,14 +44,16 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17181b;
-    --bg-panel: #1e1f23;
-    --fg: #e9e5db;
-    --fg-muted: #8b887f;
-    --accent: #8b9bd1;
-    --border: #2a2b30;
-    /* Éclairci depuis #c0392b pour garder un contraste lisible sur fond sombre. */
-    --danger: #e2695c;
+    /* Frappé passe AA partout sans retouche, contrairement à Latte : les
+       accents d'une palette sombre sont naturellement plus contrastés sur
+       leur fond. Aucune valeur n'est ajustée ici. */
+    --bg: #303446;        /* Frappé base */
+    --bg-panel: #292c3c;  /* Frappé mantle */
+    --fg: #c6d0f5;        /* Frappé text — 8,06:1 sur --bg */
+    --fg-muted: #a5adce;  /* Frappé subtext0 — 6,23:1 sur --bg-panel */
+    --accent: #babbf1;    /* Frappé lavender — 6,72:1 sur --bg */
+    --border: #414559;    /* Frappé surface0 */
+    --danger: #e78284;    /* Frappé red — 5,21:1 sur --bg-panel */
   }
 }
 
