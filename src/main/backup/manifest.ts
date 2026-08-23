@@ -51,7 +51,12 @@ export function buildManifest(db: Db, mediaDir: string, now: Date): Manifest {
   let media: string[] = []
   try {
     media = readdirSync(mediaDir).sort()
-  } catch {
+  } catch (err) {
+    // ENOENT est légitime : le dossier media n'existe pas tant qu'aucune image
+    // n'a été ajoutée. Toute autre erreur (permissions, E/S) doit remonter :
+    // annoncer « zéro média » sur un dossier illisible ferait afficher « tout est
+    // sauvegardé » alors que rien ne part.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
     media = []
   }
 

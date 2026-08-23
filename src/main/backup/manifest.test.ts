@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync } from 'fs'
+import { mkdtempSync, writeFileSync, mkdirSync, chmodSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { openDb, type Db } from '../db/connection'
@@ -54,6 +54,20 @@ describe('buildManifest', () => {
     const m = buildManifest(db, join(mediaDir, 'nexistepas'), NOW)
     expect(m.media).toEqual([])
     expect(m.counts.media).toBe(0)
+  })
+
+  it('relève une erreur de permission (non-ENOENT)', () => {
+    // Crée un dossier avec des permissions restrictives pour tester le rejet
+    // des erreurs autres que ENOENT. Sur macOS, chmod 000 fonctionne ;
+    // sur certains systèmes (par ex. root), ce test peut être instable.
+    const restrictedDir = join(mediaDir, 'restricted')
+    mkdirSync(restrictedDir)
+    chmodSync(restrictedDir, 0o000)
+
+    expect(() => buildManifest(db, restrictedDir, NOW)).toThrow()
+
+    // Restaure les permissions pour que le nettoyage en beforeEach réussisse
+    chmodSync(restrictedDir, 0o755)
   })
 })
 
