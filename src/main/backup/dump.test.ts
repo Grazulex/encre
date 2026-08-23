@@ -40,4 +40,19 @@ describe('dumpDatabase', () => {
   it('lève si la base source n\'existe pas', async () => {
     await expect(dumpDatabase(join(dir, 'nexistepas.db'), join(dir, 'o.sql'))).rejects.toThrow()
   })
+
+  it('lève si le fichier de sortie n\'est pas accessible en écriture', async () => {
+    const dbPath = join(dir, 'library.db')
+    const db = openDb(dbPath)
+    createBook(db, { title: 'Test' })
+    db.close()
+
+    // Créer un répertoire à la place du fichier de sortie
+    const outPath = join(dir, 'readonly')
+    const { mkdirSync } = await import('fs')
+    mkdirSync(outPath)
+
+    // La promesse devrait rejeter parce que le flux d'écriture va échouer
+    await expect(dumpDatabase(dbPath, outPath)).rejects.toThrow()
+  })
 })
