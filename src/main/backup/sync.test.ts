@@ -158,6 +158,30 @@ describe('createBackupService — chemins d\'échec', () => {
     expect(second.lastPushAt).toBe(first.lastPushAt)
   })
 
+  it('mesure le diff en attente sur ce qui est commité, pas sur ce qui est écrit', async () => {
+    const svc = createBackupService(db, paths)
+    await svc.runNow()
+
+    // `index.lock` resté d'un processus tué : `git add -A` échouera, donc rien
+    // ne sera commité — mais le manifeste, lui, sera écrit sur le disque.
+    writeFileSync(join(paths.repoDir, '.git', 'index.lock'), '')
+
+    const ch = createChapter(db, 1, 'Ch. 2')
+    db.prepare('UPDATE chapters SET content_json = ?, word_count = ? WHERE id = ?')
+      .run('{"cinq mille mots":1}', 5000, ch.id)
+
+    const second = await svc.runNow()
+    expect(second.lastError).not.toBeNull()
+
+    // Le chapitre n'est dans aucun commit : annoncer « tout est sauvegardé »
+    // ici, c'est perdre 5 000 mots en silence et définitivement.
+    expect(second.pending.chaptersAdded).toBe(1)
+    expect(second.pending.wordsDelta).toBe(5000)
+
+    const later = await svc.status()
+    expect(later.pending.chaptersAdded).toBe(1)
+  })
+
   it('refuse d\'élaguer le dépôt distant depuis un dossier de travail amputé', async () => {
     const svc = createBackupService(db, paths)
     await svc.runNow()

@@ -1,10 +1,10 @@
-import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs'
+import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { Db } from '../db/connection'
 import type { BackupDiff, BackupStatus } from '../../shared/types'
 import { backupDatabase } from './local'
 import { buildManifest, diffManifests, type Manifest } from './manifest'
-import { cloneRepo, commitAll, hasRepo, pushRepo, GIT_BIN } from './git'
+import { cloneRepo, commitAll, hasRepo, pushRepo, runGit, GIT_BIN } from './git'
 import { dumpDatabase, SQLITE_BIN } from './dump'
 import { readState, writeState, type BackupState } from './state'
 
@@ -43,10 +43,26 @@ export function commitMessage(now: Date, diff: BackupDiff): string {
   return parts.length > 0 ? `sauvegarde ${stamp} — ${parts.join(', ')}` : `sauvegarde ${stamp}`
 }
 
-/** Manifeste de la dernière sauvegarde, ou null si le dépôt n'en a pas encore. */
-function repoManifest(repoDir: string): Manifest | null {
+/**
+ * Manifeste de la dernière sauvegarde **commitée**, ou null si le dépôt n'en a
+ * pas encore.
+ *
+ * Lu dans HEAD et non sur le disque : le fichier posé dans le dossier de
+ * travail est écrit par la *tentative* de sauvegarde, pas par sa réussite. Un
+ * commit échoué (index.lock resté, disque plein, hook qui refuse) laisserait
+ * donc un manifeste à jour en face d'un dépôt inchangé, et « en attente »
+ * tomberait à zéro alors que rien n'est protégé. En lisant HEAD, « en attente »
+ * signifie « pas encore dans un commit » par construction.
+ *
+ * `git show` est local : la garantie « status() ne touche jamais au réseau »
+ * tient toujours. Un HEAD non né (dépôt fraîchement cloné, aucun commit) fait
+ * échouer la commande, donc rend null : tout est en attente, ce qui est exact.
+ */
+async function repoManifest(repoDir: string): Promise<Manifest | null> {
+  const shown = await runGit(['show', 'HEAD:manifest.json'], { cwd: repoDir })
+  if (!shown.ok) return null
   try {
-    return JSON.parse(readFileSync(join(repoDir, 'manifest.json'), 'utf8')) as Manifest
+    return JSON.parse(shown.stdout) as Manifest
   } catch {
     return null
   }
@@ -90,14 +106,16 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
     return null
   }
 
-  const buildStatus = (state: BackupState, now: Date): BackupStatus => ({
+  const buildStatus = async (state: BackupState, now: Date): Promise<BackupStatus> => ({
     configured: hasRepo(paths.repoDir) && existsSync(paths.keyPath),
     running,
     missingBinary: missingBinary(),
     lastCommitAt: state.lastCommitAt,
     lastPushAt: state.lastPushAt,
     lastError: state.lastError,
-    pending: diffManifests(repoManifest(paths.repoDir), currentManifest(now)),
+    // Manifeste commité contre base **vivante** : c'est bien l'état courant
+    // qu'on mesure ici, pas l'instantané d'un run.
+    pending: diffManifests(await repoManifest(paths.repoDir), currentManifest(now)),
     lastDiff: state.lastDiff
   })
 
@@ -131,7 +149,7 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
 
         syncMedia(paths.mediaDir, join(paths.repoDir, 'media'))
 
-        const previous = repoManifest(paths.repoDir)
+        const previous = await repoManifest(paths.repoDir)
         const next = currentManifest(now)
         const diff = diffManifests(previous, next)
         writeFileSync(join(paths.repoDir, 'manifest.json'), JSON.stringify(next, null, 2))
