@@ -147,5 +147,5 @@ export interface EncreApi {
 // `ai` mêle les deux : prepareWrite/startWrite/cancel sont des invoke normaux,
 // mais onChunk/onDone/onError sont préload-only (ipcRenderer.on), comme `app`.
 export const API_DOMAINS = [
-  'books', 'chapters', 'entities', 'illustrations', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots', 'series'
+  'books', 'chapters', 'entities', 'illustrations', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots', 'series', 'backup'
 ] as const

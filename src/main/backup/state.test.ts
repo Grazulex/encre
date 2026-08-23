@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdtempSync, writeFileSync } from 'fs'
+import { mkdtempSync, readdirSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { readState, writeState, EMPTY_STATE } from './state'
@@ -9,7 +9,22 @@ beforeEach(() => {
   path = join(mkdtempSync(join(tmpdir(), 'encre-state-')), 'backup-state.json')
 })
 
+describe('EMPTY_STATE', () => {
+  it('est gelé', () => {
+    // Défense permanente contre le bug d'aliasing qui a déjà frappé ici : les
+    // appelants mutent l'état reçu en place. Une fuite de la constante
+    // corromprait ce singleton pour tous les appels suivants — en silence.
+    expect(Object.isFrozen(EMPTY_STATE)).toBe(true)
+  })
+})
+
 describe('readState / writeState', () => {
+  it('ne laisse pas de fichier temporaire derrière une écriture réussie', () => {
+    writeState(path, { ...EMPTY_STATE, lastCommitAt: '2026-08-23T20:00:00.000Z' })
+    const dir = path.slice(0, path.lastIndexOf('/'))
+    expect(readdirSync(dir)).toEqual(['backup-state.json'])
+  })
+
   it('rend un état vide quand le fichier n\'existe pas', () => {
     expect(readState(path)).toEqual(EMPTY_STATE)
   })

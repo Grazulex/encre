@@ -112,18 +112,21 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
     return null
   }
 
-  const buildStatus = async (state: BackupState, now: Date): Promise<BackupStatus> => ({
+  const baseStatus = (state: BackupState, pending: BackupDiff): BackupStatus => ({
     configured: hasRepo(paths.repoDir) && existsSync(paths.keyPath),
     running,
     missingBinary: missingBinary(),
     lastCommitAt: state.lastCommitAt,
     lastPushAt: state.lastPushAt,
     lastError: state.lastError,
-    // Manifeste commité contre base **vivante** : c'est bien l'état courant
-    // qu'on mesure ici, pas l'instantané d'un run.
-    pending: diffManifests(await repoManifest(paths.repoDir), currentManifest(now)),
+    pending,
     lastDiff: state.lastDiff
   })
+
+  const buildStatus = async (state: BackupState, now: Date): Promise<BackupStatus> =>
+    // Manifeste commité contre base **vivante** : c'est bien l'état courant
+    // qu'on mesure ici, pas l'instantané d'un run.
+    baseStatus(state, diffManifests(await repoManifest(paths.repoDir), currentManifest(now)))
 
   return {
     async status() {
@@ -232,7 +235,32 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
         running = false
       }
 
-      return buildStatus(state, new Date())
+      // Sous garde : `buildStatus` reconstruit le manifeste depuis la base et
+      // le dossier media, et peut donc lever (dossier media illisible). Sans
+      // cette garde, un `runNow()` dont la sauvegarde a réussi et été poussée
+      // rejetterait quand même — l'appelant croirait la sauvegarde perdue.
+      //
+      // Volontairement ici et pas dans le `try` ci-dessus : le verrou `running`
+      // doit être relâché avant (sinon l'état rendu dirait « en cours »), et
+      // surtout un échec en amont doit continuer de rendre le vrai diff en
+      // attente — le remplacer par un diff vide rejouerait exactement le
+      // mensonge que corrige la lecture du manifeste dans HEAD.
+      try {
+        return await buildStatus(state, new Date())
+      } catch (err) {
+        console.error(err)
+        // Dernier recours : l'état sans le diff. `lastError` est renseigné
+        // (la garde ci-dessus l'a écrit), et c'est lui qui prime dans l'UI.
+        return baseStatus(state, {
+          chaptersChanged: 0,
+          chaptersAdded: 0,
+          chaptersRemoved: 0,
+          wordsDelta: 0,
+          mediaAdded: 0,
+          booksAdded: 0,
+          changedTitles: []
+        })
+      }
     }
   }
 }

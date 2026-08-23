@@ -7,6 +7,7 @@ import {
   readFileSync,
   readdirSync,
   existsSync,
+  rmSync,
   unlinkSync,
   utimesSync
 } from 'fs'
@@ -312,6 +313,22 @@ describe('createBackupService — chemins d\'échec', () => {
     // Le dépôt distant n'a rien perdu.
     const ls = await runGit(['ls-tree', '-r', '--name-only', 'HEAD'], { cwd: paths.remoteUrl })
     expect(ls.stdout).toContain('media/photo.png')
+  })
+
+  it('rend un état plutôt que de rejeter quand le manifeste ne peut pas se calculer', async () => {
+    // `mediaDir` n'est pas un dossier : `buildManifest` lève (ENOTDIR), comme
+    // il le ferait sur un dossier media illisible. Un runNow ne doit pas
+    // rejeter pour ça — en production ce calcul vient APRÈS le push, et une
+    // sauvegarde réussie serait rapportée comme un échec.
+    rmSync(paths.mediaDir, { recursive: true, force: true })
+    writeFileSync(paths.mediaDir, 'pas un dossier')
+
+    const svc = createBackupService(db, paths)
+    const status = await svc.runNow()
+
+    expect(status.lastError).not.toBeNull()
+    // Et l'erreur est bien persistée, pas seulement rendue.
+    expect(JSON.parse(readFileSync(paths.statePath, 'utf8')).lastError).not.toBeNull()
   })
 
   it('libère le verrou même si l\'écriture de l\'état échoue', async () => {

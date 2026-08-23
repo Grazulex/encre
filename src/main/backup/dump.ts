@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { createWriteStream, statSync, existsSync } from 'fs'
+import { createWriteStream, renameSync, rmSync, statSync, existsSync } from 'fs'
 
 export const SQLITE_BIN = '/usr/bin/sqlite3'
 
@@ -19,7 +19,12 @@ export function dumpDatabase(dbPath: string, outPath: string): Promise<void> {
       return
     }
 
-    const out = createWriteStream(outPath)
+    // On écrit à côté, pas par-dessus : `createWriteStream` tronque le fichier
+    // à l'ouverture, ce qui détruirait le dernier dump connu bon avant même de
+    // savoir si le nouveau tient debout. Le définitif n'est remplacé qu'au
+    // succès, par un rename atomique dans le même dossier.
+    const tmpPath = `${outPath}.tmp`
+    const out = createWriteStream(tmpPath)
     let settled = false
 
     // Centraliser la gestion des erreurs pour éviter double settling et
@@ -28,12 +33,20 @@ export function dumpDatabase(dbPath: string, outPath: string): Promise<void> {
       if (settled) return
       settled = true
       out.destroy()
+      rmSync(tmpPath, { force: true })
       reject(err)
     }
 
     const succeed = (): void => {
       if (settled) return
       settled = true
+      try {
+        renameSync(tmpPath, outPath)
+      } catch (err) {
+        rmSync(tmpPath, { force: true })
+        reject(err as Error)
+        return
+      }
       resolve()
     }
 
@@ -63,7 +76,7 @@ export function dumpDatabase(dbPath: string, outPath: string): Promise<void> {
       const check = (): void => {
         // sqlite3 sort en 0 même sur une base inexistante (il en créerait une
         // vide à la demande) : un dump vide est donc le vrai signal d'échec.
-        if (statSync(outPath).size === 0) {
+        if (statSync(tmpPath).size === 0) {
           fail(new Error(`Dump vide : ${dbPath} est illisible.`))
         } else {
           succeed()

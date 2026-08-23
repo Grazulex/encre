@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, readFileSync, writeFileSync, chmodSync } from 'fs'
+import { mkdtempSync, readFileSync, writeFileSync, chmodSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import Database from 'better-sqlite3'
@@ -70,6 +70,28 @@ describe('dumpDatabase', () => {
     // Le dump d'une base corrompue devrait rejeter (stderr contient l'erreur)
     const out = join(dir, 'corrupted.sql')
     await expect(dumpDatabase(corruptedPath, out)).rejects.toThrow(/malformed/)
+  })
+
+  it('ne détruit pas le dump précédent quand le nouveau échoue', async () => {
+    const okPath = join(dir, 'valid.db')
+    const db = openDb(okPath)
+    createBook(db, { title: 'Test' })
+    db.close()
+
+    const raw = Buffer.from(readFileSync(okPath))
+    for (let i = 100; i < Math.min(raw.length, 4096); i++) raw[i] = 0xff
+    const corruptedPath = join(dir, 'corrupted.db')
+    writeFileSync(corruptedPath, raw)
+
+    // Un dump valide est déjà en place : c'est la dernière sauvegarde connue
+    // bonne. La tronquer avant de savoir si le nouveau dump tient debout
+    // reviendrait à détruire la sauvegarde pour en tenter une autre.
+    const out = join(dir, 'library.sql')
+    writeFileSync(out, '-- dump précédent, valide')
+
+    await expect(dumpDatabase(corruptedPath, out)).rejects.toThrow(/malformed/)
+    expect(readFileSync(out, 'utf8')).toBe('-- dump précédent, valide')
+    expect(existsSync(`${out}.tmp`)).toBe(false)
   })
 
   it('lève si la base est illisible (permissions refusées)', async () => {
