@@ -123,6 +123,43 @@ describe('createBackupService — séquence nominale', () => {
   })
 })
 
+describe('createBackupService — instantané et manifeste', () => {
+  it('décrit le même instant que le dump, pas la base quelques ms plus tard', async () => {
+    // On simule le chapitre enregistré dans la fenêtre entre l'instantané et
+    // la construction du manifeste, en écrivant dans la base vivante juste
+    // après que `db.backup()` a rendu la main.
+    const realBackup = db.backup.bind(db)
+    let dejaFait = false
+    ;(db as unknown as { backup: (dest: string) => Promise<unknown> }).backup = async (dest) => {
+      const r = await realBackup(dest)
+      if (!dejaFait) {
+        dejaFait = true
+        createChapter(db, 1, 'Écrit pendant la sauvegarde')
+      }
+      return r
+    }
+
+    const svc = createBackupService(db, paths)
+    await svc.runNow()
+
+    // Le dump vient de l'instantané : il ignore ce chapitre.
+    expect(readFileSync(join(paths.repoDir, 'library.sql'), 'utf8'))
+      .not.toContain('Écrit pendant la sauvegarde')
+
+    // Le manifeste doit dire la même chose que le dump. S'il le mentionne, le
+    // run suivant ne verra plus aucun changement pour lui et le déclarera
+    // sauvegardé alors que le dépôt contient l'ancien texte.
+    const manifest = JSON.parse(readFileSync(join(paths.repoDir, 'manifest.json'), 'utf8'))
+    expect(manifest.chapters.map((c: { title: string }) => c.title))
+      .not.toContain('Écrit pendant la sauvegarde')
+
+    // Et il reste donc en attente, ce qui est la vérité.
+    const status = await svc.status()
+    expect(status.pending.chaptersAdded).toBe(1)
+    expect(status.pending.changedTitles).toEqual(['Écrit pendant la sauvegarde'])
+  })
+})
+
 describe('createBackupService — chemins d\'échec', () => {
   it('garde le commit local quand le push échoue', async () => {
     const svc = createBackupService(db, paths)

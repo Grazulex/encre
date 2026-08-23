@@ -1,5 +1,6 @@
 import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import Database from 'better-sqlite3'
 import type { Db } from '../db/connection'
 import type { BackupDiff, BackupStatus } from '../../shared/types'
 import { backupDatabase } from './local'
@@ -150,7 +151,22 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
         syncMedia(paths.mediaDir, join(paths.repoDir, 'media'))
 
         const previous = await repoManifest(paths.repoDir)
-        const next = currentManifest(now)
+
+        // Manifeste construit sur l'instantané figé, et non sur la base
+        // vivante : le dump vient de cet instantané, et un chapitre enregistré
+        // entre les deux (quelques centaines de millisecondes) figurerait au
+        // manifeste sans être dans `library.sql`. Le run suivant ne verrait
+        // alors plus aucun changement pour lui — son hash est déjà à jour dans
+        // `prev` — et le déclarerait sauvegardé alors que le dépôt contient
+        // l'ancien texte. Manifeste et dump doivent décrire le même instant.
+        const snapshotDb = new Database(snapshot, { readonly: true })
+        let next: Manifest
+        try {
+          next = buildManifest(snapshotDb, paths.mediaDir, now)
+        } finally {
+          snapshotDb.close()
+        }
+
         const diff = diffManifests(previous, next)
         writeFileSync(join(paths.repoDir, 'manifest.json'), JSON.stringify(next, null, 2))
 
