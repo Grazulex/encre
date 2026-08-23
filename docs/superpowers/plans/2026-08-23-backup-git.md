@@ -912,7 +912,7 @@ Assemble la séquence complète et expose le service que l'IPC consommera.
 - Test: `src/main/backup/sync.test.ts`
 
 **Interfaces:**
-- Consumes: `buildManifest`, `diffManifests`, `isEmptyDiff`, `type Manifest`, `type BackupDiff` (Task 2) ; `cloneRepo`, `hasRepo`, `commitAll`, `pushRepo` (Task 3) ; `dumpDatabase` (Task 4) ; `readState`, `writeState`, `type BackupState` (Task 4) ; `backupDatabase` (Task 1)
+- Consumes: `buildManifest`, `diffManifests`, `type Manifest`, `type BackupDiff` (Task 2) ; `cloneRepo`, `hasRepo`, `commitAll`, `pushRepo` (Task 3) ; `dumpDatabase` (Task 4) ; `readState`, `writeState`, `type BackupState` (Task 4) ; `backupDatabase` (Task 1)
 - Produces:
   - `interface BackupPaths { repoDir: string; mediaDir: string; backupsDir: string; keyPath: string; statePath: string; remoteUrl: string }`
   - `interface BackupService { status(): Promise<BackupStatus>; runNow(): Promise<BackupStatus> }`

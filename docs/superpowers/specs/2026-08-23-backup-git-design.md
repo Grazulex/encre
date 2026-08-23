@@ -127,6 +127,11 @@ limitée à ce seul dépôt et elle est révocable en un clic depuis GitHub.
 
 ## 4. Gestion d'erreurs
 
+- **Push qui traîne** : les commandes git tournent en `spawn` asynchrone, jamais
+  en `spawnSync` — un `spawnSync` gèlerait le process main, donc toute l'UI,
+  le temps d'un aller-retour réseau. Le push porte en plus un délai de garde de
+  120 s, pour qu'un réseau qui pend ne laisse pas l'état bloqué sur
+  « sauvegarde en cours » indéfiniment.
 - **Push échoué** (réseau absent, GitHub injoignable) : le commit local a déjà
   réussi. L'état distingue donc `lastCommitAt` et `lastPushAt` — le travail est
   figé localement et partira à la prochaine occasion. C'est une demi-victoire
@@ -147,12 +152,20 @@ limitée à ce seul dépôt et elle est révocable en un clic depuis GitHub.
   "generatedAt": "2026-08-23T20:15:00.000Z",
   "counts": { "books": 12, "chapters": 234, "entities": 248,
               "illustrations": 14, "media": 279 },
+  "books": [1, 2, 3],
+  "media": ["entity-12-1787410607875.png", "ill-3-1787…-0.png"],
   "chapters": [
     { "id": 12, "bookId": 3, "title": "La maison basse",
       "words": 2481, "hash": "b1946ac9…" }
   ]
 }
 ```
+
+`books` et `media` listent des **identités**, pas des compteurs. Une
+différence de compteurs donnerait un résultat faux dès qu'un ajout et une
+suppression surviennent entre deux sauvegardes : 3 images ajoutées et 3
+supprimées afficheraient « 0 image ajoutée », alors qu'il y a bien trois
+fichiers neufs à sauvegarder. Coût : ~8 Ko de noms de fichiers.
 
 Le `hash` (SHA-1 du `content_json`) n'est pas redondant avec `words` : une
 réécriture à nombre de mots constant serait invisible sans lui — et c'est
