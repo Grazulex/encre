@@ -713,6 +713,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mkdtempSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import Database from 'better-sqlite3'
 import { openDb } from '../db/connection'
 import { createBook } from '../db/books'
 import { dumpDatabase } from './dump'
@@ -736,13 +737,13 @@ describe('dumpDatabase', () => {
     expect(sql).toContain('CREATE TABLE')
     expect(sql).toContain('Le Livre')
 
-    // Preuve de l'aller-retour : on rejoue le dump dans une base neuve.
+    // Preuve de l'aller-retour : sqlite3 crée lui-même la base en rejouant le
+    // dump. Surtout ne pas la pré-créer avec openDb — les migrations auraient
+    // déjà posé les tables, et le CREATE TABLE du dump échouerait.
     const restored = join(dir, 'restored.db')
-    const target = openDb(restored)
-    target.close()
     const { execFileSync } = await import('child_process')
     execFileSync('/usr/bin/sqlite3', [restored], { input: sql })
-    const check = openDb(restored)
+    const check = new Database(restored, { readonly: true })
     expect((check.prepare('SELECT title FROM books').get() as { title: string }).title).toBe('Le Livre')
     check.close()
   })
@@ -1321,8 +1322,7 @@ describe('domaine backup', () => {
 })
 ```
 
-Vérifier que `vi` est bien dans l'import vitest en tête du fichier ; l'ajouter
-sinon (`import { describe, it, expect, vi } from 'vitest'`).
+`vi` et `openDb` sont déjà importés en tête d'`api.test.ts` — rien à ajouter.
 
 - [ ] **Step 2: Lancer le test pour le voir échouer**
 
@@ -1636,10 +1636,12 @@ git commit -m "feat: bloc d'état de sauvegarde sur la Bibliothèque"
 
 - [ ] **Step 1: Ajouter le voyant**
 
-Dans `src/renderer/src/components/StatusBar.vue`, ajouter au `<script setup>` :
+Dans `src/renderer/src/components/StatusBar.vue`, **étendre** l'import vue
+existant (ligne 2, `import { computed, ref, watch } from 'vue'`) plutôt que
+d'en ajouter un second, et ajouter les deux autres imports :
 
 ```ts
-import { onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useBackupStore } from '../stores/backup'
 import { useRouter } from 'vue-router'
 
