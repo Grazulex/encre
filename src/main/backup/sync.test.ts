@@ -126,17 +126,48 @@ describe('createBackupService — séquence nominale', () => {
 describe('createBackupService — chemins d\'échec', () => {
   it('garde le commit local quand le push échoue', async () => {
     const svc = createBackupService(db, paths)
-    await svc.runNow()
+    const first = await svc.runNow()
     await runGit(['remote', 'set-url', 'origin', join(dir, 'disparu.git')], { cwd: paths.repoDir })
 
     createChapter(db, 1, 'Ch. 2')
-    const status = await svc.runNow()
+    const second = await svc.runNow()
 
-    expect(status.lastCommitAt).not.toBeNull()
-    expect(status.lastError).not.toBeNull()
-    // lastPushAt reste sur la date du push réussi précédent, il ne recule pas.
-    const log = await runGit(['log', '-1', '--format=%s'], { cwd: paths.repoDir })
-    expect(log.stdout).toContain('sauvegarde')
+    expect(second.lastCommitAt).not.toBe(first.lastCommitAt) // le run 2 a bien commité
+    expect(second.lastPushAt).toBe(first.lastPushAt) // et lastPushAt n'a pas bougé
+    expect(second.lastError).not.toBeNull()
+    // Deux commits, pas un : la sauvegarde du run 2 a bien été enregistrée
+    // localement même si l'envoi a échoué.
+    const count = await runGit(['rev-list', '--count', 'HEAD'], { cwd: paths.repoDir })
+    expect(count.stdout.trim()).toBe('2')
+  })
+
+  it('un `git add` en échec n\'est pas rapporté comme une sauvegarde réussie', async () => {
+    const svc = createBackupService(db, paths)
+    const first = await svc.runNow()
+
+    // Un `index.lock` resté d'un processus tué (ou ENOSPC/EACCES/un hook qui
+    // refuse) fait échouer `git add -A` sans toucher HEAD.
+    writeFileSync(join(paths.repoDir, '.git', 'index.lock'), '')
+
+    createChapter(db, 1, 'Ch. 2')
+    const second = await svc.runNow()
+
+    expect(second.lastError).not.toBeNull()
+    // Rien n'a été commité : pousser un HEAD inchangé ne doit pas faire
+    // avancer lastPushAt ni être confondu avec une sauvegarde réussie.
+    expect(second.lastPushAt).toBe(first.lastPushAt)
+  })
+
+  it('libère le verrou même si l\'écriture de l\'état échoue', async () => {
+    // Le chemin d'état est un dossier plutôt qu'un fichier : writeFileSync y
+    // échoue systématiquement (EISDIR).
+    mkdirSync(paths.statePath)
+    const svc = createBackupService(db, paths)
+
+    await svc.runNow().catch(() => {}) // peu importe l'issue de ce premier appel
+    // Ce qui compte : le verrou `running` doit être relâché malgré l'échec
+    // d'écriture, sinon plus aucune sauvegarde n'est possible avant redémarrage.
+    await expect(svc.runNow()).resolves.toBeDefined()
   })
 
   it('rejette un second runNow pendant qu\'une sauvegarde tourne', async () => {

@@ -136,10 +136,16 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
         const diff = diffManifests(previous, next)
         writeFileSync(join(paths.repoDir, 'manifest.json'), JSON.stringify(next, null, 2))
 
-        const { committed } = await commitAll(paths.repoDir, commitMessage(now, diff))
+        const { committed, result } = await commitAll(paths.repoDir, commitMessage(now, diff))
         if (committed) {
           state.lastCommitAt = now.toISOString()
           state.lastDiff = diff
+        } else if (!result.ok) {
+          // `committed: false` recouvre trois cas : `add` échoué, arbre propre,
+          // `commit` échoué. Seul l'arbre propre (result.ok) est un non-événement
+          // légitime. Confondre les trois pousserait un HEAD inchangé et
+          // annoncerait « sauvegardé » alors que rien n'a été enregistré.
+          throw new Error(`Commit impossible : ${result.stderr.trim().split('\n').pop() ?? 'erreur inconnue'}`)
         }
 
         const pushed = await pushRepo(paths.repoDir, paths.keyPath)
@@ -154,7 +160,15 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
       } catch (err) {
         state.lastError = err instanceof Error ? err.message : String(err)
       } finally {
-        writeState(paths.statePath, state)
+        // L'état est un confort, pas la sauvegarde : perdre la date du dernier
+        // backup est acceptable, perdre la capacité à en refaire un ne l'est
+        // pas. Une erreur d'écriture ici (disque plein, permissions) ne doit
+        // donc jamais empêcher de relâcher le verrou.
+        try {
+          writeState(paths.statePath, state)
+        } catch (err) {
+          console.error(err)
+        }
         running = false
       }
 
