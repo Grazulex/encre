@@ -13,11 +13,17 @@ import { Illustration } from '../editor/illustration'
 import AutolinkDialog, { type AutolinkMatch } from './AutolinkDialog.vue'
 import SnapshotManager from './SnapshotManager.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import IllustrationsPanel from './IllustrationsPanel.vue'
 import { findNameMatches, type AutolinkTarget } from '../../../shared/autolink'
 import { stripCodeBlocks } from '../../../shared/stripCodeBlocks'
 import { locateQuote, type DocNode } from '../../../shared/quoteLocator'
 import { CHAPTER_STATUS_LABELS } from '../../../shared/labels'
-import type { ChapterStatus, Entity, OutlineNote } from '../../../shared/types'
+import type {
+  ChapterStatus,
+  Entity,
+  Illustration as IllustrationRecord,
+  OutlineNote
+} from '../../../shared/types'
 import { autoGrowClamped } from '../utils/autoGrow'
 
 const store = useBookStore()
@@ -886,6 +892,23 @@ function rename(event: Event): void {
   if (title && store.currentChapter) store.renameChapter(store.currentChapter.id, title)
 }
 
+// Panneau Illustrations (Task 7) : ref locale (contrairement à
+// ai.snapshotManagerOpen, ce panneau n'a qu'un seul point d'ouverture — le
+// bouton ci-dessous — pas besoin d'un état partagé côté store). L'insertion
+// est une opération synchrone sur l'éditeur déjà affiché, même famille
+// qu'insertFormatNode ci-dessus : pas d'await IPC entre le clic sur
+// « Insérer » et l'appel à la commande, donc aucune garde de péremption
+// chapterId nécessaire.
+const illustrationsPanelOpen = ref(false)
+
+function insertIllustrationFromPanel(ill: IllustrationRecord): void {
+  editor.value
+    ?.chain()
+    .focus()
+    .insertIllustration({ fileName: ill.fileName, displayName: ill.displayName })
+    .run()
+}
+
 const STATUSES: { value: ChapterStatus; label: string }[] = (
   Object.keys(CHAPTER_STATUS_LABELS) as ChapterStatus[]
 ).map((value) => ({ value, label: CHAPTER_STATUS_LABELS[value] }))
@@ -958,6 +981,30 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
           <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z" />
           <line x1="16" y1="8" x2="2" y2="22" />
           <line x1="17.5" y1="15" x2="9" y2="15" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="illustrations-btn"
+        title="Illustrations du livre"
+        aria-label="Illustrations du livre"
+        :aria-expanded="illustrationsPanelOpen"
+        @click="illustrationsPanelOpen = !illustrationsPanelOpen"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="m21 15-5-5L5 21" />
         </svg>
       </button>
       <div ref="formatWrapEl" class="format-wrap">
@@ -1136,6 +1183,12 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
       @apply="applyAutolink"
     />
     <SnapshotManager v-if="ai.snapshotManagerOpen" />
+    <IllustrationsPanel
+      v-if="illustrationsPanelOpen && store.book"
+      :book-id="store.book.id"
+      @close="illustrationsPanelOpen = false"
+      @insert="insertIllustrationFromPanel"
+    />
     <ConfirmDialog
       v-if="pendingNoteRemoval"
       message="Supprimer cette note ?"
@@ -1257,7 +1310,8 @@ header {
    découvrabilité — le tooltip (title) porte désormais tout le texte
    explicatif. */
 .autolink-btn,
-.claude-btn {
+.claude-btn,
+.illustrations-btn {
   flex-shrink: 0;
   width: 30px;
   height: 30px;
@@ -1269,7 +1323,8 @@ header {
   color: var(--fg-muted);
 }
 .autolink-btn:hover,
-.claude-btn:hover {
+.claude-btn:hover,
+.illustrations-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
