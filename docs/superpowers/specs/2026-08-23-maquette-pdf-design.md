@@ -105,8 +105,12 @@ WeasyPrint aujourd'hui.
 
 Corps de texte : justifié, `hyphens: auto`, `orphans: 2`, `widows: 2`, retrait d'alinéa
 1,3 em. Le retrait est supprimé sur le premier paragraphe du chapitre et sur le
-paragraphe qui suit un séparateur de scène (sélecteur d'adjacence, pas de classe posée
-à l'assemblage). La **première ligne** du premier paragraphe du chapitre est en petites
+paragraphe qui suit un séparateur de scène. Ces deux cas sont marqués par des classes
+(`p.premier`, `p.apres-scene`) posées à l'assemblage du document (`html.ts`), pas par des
+sélecteurs positionnels (`:first-of-type`, l'adjacence `+`) : la fragmentation de paged.js
+recompose le DOM à chaque coupure de page et casse ces sélecteurs, comme mesuré sur un
+export réel de 340 pages (premier paragraphe et paragraphe après scène restaient
+indentés). La **première ligne** du premier paragraphe du chapitre est en petites
 capitales (`::first-line { font-variant: small-caps }`).
 
 Titres courants : titre du livre en petites capitales en haut à **gauche des versos**

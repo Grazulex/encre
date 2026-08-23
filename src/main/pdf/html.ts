@@ -150,6 +150,23 @@ function makeIllustrationRenderer(mediaDir?: string): NonNullable<ExportOptions[
   }
 }
 
+// Pose la classe du premier paragraphe (repli text-indent + petites capitales,
+// cf. style.ts) : une classe posée ici plutôt qu'un sélecteur positionnel
+// (:first-of-type), qui ne survit pas à la fragmentation de paged.js — un
+// export réel de 340 pages a montré la coupure de page recomposant le DOM
+// et perdant ces sélecteurs. Ne touche que la toute première occurrence de
+// `<p>` littéral dans ce segment.
+function poserPremier(contenu: string): string {
+  return contenu.replace('<p>', '<p class="premier">')
+}
+
+// Même raison que poserPremier : `.scene-break + p` ne survit pas non plus à la
+// fragmentation. Le paragraphe qui suit immédiatement un séparateur de scène
+// reçoit sa classe à l'assemblage.
+function poserApresScene(contenu: string): string {
+  return contenu.replace(/(<div class="scene-break">[\s\S]*?<\/div>\s*)<p>/g, '$1<p class="apres-scene">')
+}
+
 // Découpe le rendu d'un chapitre sur le marqueur : les tronçons déjà sectionnés
 // sortent tels quels, les autres deviennent des segments de corps. Un chapitre
 // entièrement composé de nœuds de mise en page n'a aucun segment de corps — le
@@ -157,6 +174,9 @@ function makeIllustrationRenderer(mediaDir?: string): NonNullable<ExportOptions[
 function segmenter(xhtml: string, titreRepli: string | null): string {
   const sorties: string[] = []
   let repliPose = false
+  // Premier segment de corps du chapitre (indépendamment d'une ouverture ou
+  // d'un repli de titre) : seul celui-là reçoit p.premier.
+  let premierSegmentCorps = true
   for (const morceau of xhtml.split(COUPURE)) {
     const contenu = morceau.trim()
     if (contenu === '') continue
@@ -166,8 +186,21 @@ function segmenter(xhtml: string, titreRepli: string | null): string {
     }
     const tete =
       titreRepli !== null && !repliPose ? `<h1 class="titre-chapitre">${escapeXml(titreRepli)}</h1>\n` : ''
+    // data-debut : seul le repli de titre a besoin de sa propre coupure de page
+    // (.chapitre[data-debut='true'] en CSS) — quand une ouverture est posée,
+    // elle porte déjà le break-before recto et son break-after: page, une
+    // seconde coupure sur le corps romprait la page juste composée.
+    const debut = titreRepli !== null && !repliPose ? ' data-debut="true"' : ''
     repliPose = true
-    sorties.push(`<section class="chapitre">\n${tete}${contenu}\n</section>`)
+
+    let corpsSegment = contenu
+    if (premierSegmentCorps) {
+      corpsSegment = poserPremier(corpsSegment)
+      premierSegmentCorps = false
+    }
+    corpsSegment = poserApresScene(corpsSegment)
+
+    sorties.push(`<section class="chapitre"${debut}>\n${tete}${corpsSegment}\n</section>`)
   }
   return sorties.join('\n')
 }

@@ -108,10 +108,19 @@ div[data-align-last-split-element='justify'] {
 
 /* Corps de chapitre */
 .chapitre p { margin: 0; text-indent: 1.3em; }
-.chapitre > p:first-of-type { text-indent: 0; }
-.chapitre > p:first-of-type::first-line { font-variant: small-caps; letter-spacing: .04em; }
-.scene-break + p, hr.page-break + p { text-indent: 0; }
+/* Classes posées à l'assemblage (html.ts), pas de sélecteur positionnel : la
+   fragmentation de paged.js recompose le DOM à chaque coupure de page et casse
+   les sélecteurs qui reposent sur la position (premier enfant, adjacence),
+   comme mesuré sur un export réel de 340 pages (le premier paragraphe restait
+   indenté, l'après-scène aussi). */
+.chapitre p.premier { text-indent: 0; }
+.chapitre p.premier::first-line { font-variant: small-caps; letter-spacing: .04em; }
+.chapitre p.apres-scene { text-indent: 0; }
 .chapitre h1 { font-size: 1.4em; font-weight: normal; text-align: center; text-indent: 0; margin: 0 0 1.4em; }
+/* Repli de titre (chapitre sans nœud d'ouverture) : lui seul a besoin de sa
+   propre coupure de page — une ouverture porte déjà break-after: page sur
+   elle-même, la reproduire ici romprait la page qu'elle vient de composer. */
+.chapitre[data-debut='true'] { break-before: right; }
 
 /* Séparateur de scène : rendu en trois astérisques comme la chaîne atelier, sans
    toucher au ⁂ que l'éditeur et l'EPUB continuent d'afficher. */

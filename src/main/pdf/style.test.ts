@@ -42,4 +42,20 @@ describe('buildPrintCss', () => {
     expect(css).toContain('.chapitre h1.titre-chapitre')
     expect(css).toContain('string-set: entete content(text)')
   })
+
+  it('coupe la page devant un chapitre en repli de titre', () => {
+    const css = buildPrintCss('broche', 'X')
+    expect(css).toMatch(/\.chapitre\[data-debut='true'\]\s*\{[^}]*break-before: right;/s)
+  })
+
+  it('pose les classes de mise en forme du corps à l’assemblage, pas de sélecteur positionnel', () => {
+    const css = buildPrintCss('broche', 'X')
+    expect(css).toContain('.chapitre p.premier')
+    expect(css).toContain('.chapitre p.premier::first-line')
+    expect(css).toContain('.chapitre p.apres-scene')
+    // sélecteurs positionnels bannis : ils ne survivent pas à la fragmentation
+    // de paged.js (mesuré sur un export réel de 340 pages)
+    expect(css).not.toContain(':first-of-type')
+    expect(css).not.toContain('scene-break + p')
+  })
 })

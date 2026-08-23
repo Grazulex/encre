@@ -30,7 +30,9 @@ describe('buildBookHtml', () => {
     expect(html).toContain('<p class="enseigne">CHAPITRE 1</p>')
     expect(html).toContain('<h2 class="titre-chapitre">TROIS HEURES</h2>')
     expect(html).toContain('<section class="chapitre">')
-    expect(html).toContain('<p>Le cri.</p>')
+    // « Le cri. » est le premier paragraphe du corps du chapitre : il porte la
+    // classe posée à l'assemblage (defect 2, round 3 de revue).
+    expect(html).toContain('<p class="premier">Le cri.</p>')
     // l'ouverture n'est pas imbriquée dans le segment de corps
     expect(html.indexOf('<section class="ouverture"')).toBeLessThan(html.indexOf('<section class="chapitre">'))
     expect(html).not.toMatch(/<section class="chapitre">[\s\S]*<section class="ouverture"/)
@@ -134,5 +136,45 @@ describe('buildBookHtml', () => {
     // ni le & ni le < ne doivent survivre bruts dans le HTML produit
     expect(html).not.toMatch(/&(?!amp;|lt;|gt;|quot;|#)/)
     expect(html).not.toContain('<acier>')
+  })
+
+  it('un chapitre en repli de titre porte sa propre coupure de page et son premier paragraphe', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Sans ouverture')
+    await api.chapters.saveContent(ch.id, doc(para('Premier.'), para('Second.')), 'Premier. Second.')
+
+    const html = buildBookHtml(db, book.id, [])
+    expect(html).toContain('<section class="chapitre" data-debut="true">')
+    expect(html).toContain('<p class="premier">Premier.</p>')
+    expect(html).toContain('<p>Second.</p>')
+  })
+
+  it('un chapitre avec ouverture ne porte pas data-debut : la coupure de page est déjà sur l’ouverture', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      { type: 'chapterOpening', attrs: { enseigne: 'CH. 1', titre: 'Titre', recto: true } },
+      para('Le cri.')
+    ), 'Le cri.')
+
+    const html = buildBookHtml(db, book.id, [])
+    // La feuille embarquée référence data-debut dans son sélecteur CSS (guillemets
+    // simples) : on ne cherche donc que l'attribut HTML posé sur une section
+    // (guillemets doubles), pas la sous-chaîne nue.
+    expect(html).not.toContain('data-debut="true"')
+  })
+
+  it('pose la classe du paragraphe qui suit un séparateur de scène, pas de celui qui le précède', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      para('Avant.'),
+      { type: 'sceneBreak' },
+      para('Après.')
+    ), 'Avant. Après.')
+
+    const html = buildBookHtml(db, book.id, [])
+    expect(html).toContain('<p class="apres-scene">Après.</p>')
+    expect(html).not.toContain('<p class="apres-scene">Avant.</p>')
   })
 })
