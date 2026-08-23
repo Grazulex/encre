@@ -5,6 +5,10 @@ export type ChapterStatus = 'brouillon' | 'premier_jet' | 'relu' | 'final'
 // tant que ces tâches ne sont pas implémentées.
 export type BookSection = 'chapitres' | 'personnages' | 'lieux' | 'chronologie' | 'plan'
 
+// Format de fabrication du livre : pilote la maquette de l'export PDF (taille de
+// page, marges alternées, corps et interligne) — cf. pdf/style.ts.
+export type BookPageFormat = 'broche' | 'relie'
+
 export interface Book {
   id: number
   title: string
@@ -13,6 +17,7 @@ export interface Book {
   language: string
   synopsis: string
   status: BookStatus
+  pageFormat: BookPageFormat
   coverPath: string | null
   wordGoal: number | null
   wordCount: number      // somme des chapitres (calculée)
@@ -39,6 +44,7 @@ export type BookPatch = Partial<{
   language: string
   synopsis: string
   status: BookStatus
+  pageFormat: BookPageFormat
   coverPath: string | null
   wordGoal: number | null
   seriesId: number | null

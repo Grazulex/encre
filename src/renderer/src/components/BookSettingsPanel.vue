@@ -12,7 +12,7 @@ import { useUiStore } from '../stores/ui'
 import { BOOK_STATUS_LABELS } from '../../../shared/labels'
 import { normalizeForSearch } from '../../../shared/textNormalize'
 import { mediaUrl } from '../utils/media'
-import type { BookStatus, Series } from '../../../shared/types'
+import type { BookStatus, BookPageFormat, Series } from '../../../shared/types'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -56,6 +56,11 @@ function onGenreInput(): void {
   debounced('genre', () => {
     if (store.book) store.update({ genre: store.book.genre })
   })
+}
+function onPageFormatChange(event: Event): void {
+  const pageFormat = (event.target as HTMLSelectElement).value as BookPageFormat
+  if (store.book) store.book.pageFormat = pageFormat
+  store.update({ pageFormat })
 }
 function onSynopsisInput(): void {
   debounced('synopsis', () => {
@@ -222,6 +227,14 @@ onBeforeUnmount(flushAll)
             <input v-model="store.book.genre" type="text" @input="onGenreInput" />
           </label>
         </div>
+
+        <label class="field">
+          <span class="field-label">Format</span>
+          <select :value="store.book.pageFormat" @change="onPageFormatChange">
+            <option value="broche">Broché — 139,7 × 215,9 mm</option>
+            <option value="relie">Relié — 6,14 × 9,21 in</option>
+          </select>
+        </label>
 
         <label class="field series-field">
           <span class="field-label">Série</span>

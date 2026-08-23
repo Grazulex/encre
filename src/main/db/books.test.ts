@@ -35,4 +35,10 @@ describe('repository books', () => {
     expect(listBooks(db)).toHaveLength(0)
     expect(() => getBook(db, book.id)).toThrow()
   })
+
+  it('expose et met à jour le format de page', () => {
+    const book = createBook(db, { title: 'Broché par défaut' })
+    expect(book.pageFormat).toBe('broche')
+    expect(updateBook(db, book.id, { pageFormat: 'relie' }).pageFormat).toBe('relie')
+  })
 })

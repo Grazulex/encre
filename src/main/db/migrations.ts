@@ -133,5 +133,8 @@ export const MIGRATIONS: string[] = [
     created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX idx_illustrations_book ON illustrations(book_id, position);
+  `,
+  `
+  ALTER TABLE books ADD COLUMN page_format TEXT NOT NULL DEFAULT 'broche';
   `
 ]

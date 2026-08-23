@@ -20,6 +20,7 @@ function rowToBook(row: any): Book {
     language: row.language,
     synopsis: row.synopsis,
     status: row.status,
+    pageFormat: row.page_format,
     coverPath: row.cover_path,
     wordGoal: row.word_goal,
     wordCount: row.agg_word_count,
@@ -68,6 +69,7 @@ const PATCH_COLUMNS: Record<string, string> = {
   language: 'language',
   synopsis: 'synopsis',
   status: 'status',
+  pageFormat: 'page_format',
   coverPath: 'cover_path',
   wordGoal: 'word_goal',
   seriesId: 'series_id'
