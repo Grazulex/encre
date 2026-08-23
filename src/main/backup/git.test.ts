@@ -36,8 +36,25 @@ describe('cloneRepo / hasRepo', () => {
 
   // Le dépôt fait ~710 Mo (spec §1) : un clone initial dépasse largement le
   // délai de garde du push. S'il l'héritait, il serait tué à chaque tentative.
-  it('ne se laisse pas borner par le délai de garde du push', () => {
-    expect(CLONE_TIMEOUT_MS).toBeGreaterThan(PUSH_TIMEOUT_MS)
+  //
+  // Comparer CLONE_TIMEOUT_MS et PUSH_TIMEOUT_MS ne suffit pas : ça reste vert
+  // même si `cloneRepo` oublie de transmettre `timeoutMs` à `runGit` (le
+  // défaut originel de ce bug). La preuve qui compte porte sur le câblage :
+  // la valeur réellement reçue par `runGit`. `cloneRepo` accepte pour ça un
+  // `run` injectable — jamais fourni par un appelant réel — qui rend cette
+  // valeur observable sans mock de module.
+  it('passe le délai de clone à runGit, pas le délai par défaut', async () => {
+    const received: Array<{ timeoutMs?: number }> = []
+    const fakeRunGit: typeof runGit = async (_args, opts) => {
+      received.push(opts)
+      return { ok: true, stdout: '', stderr: '' }
+    }
+
+    await cloneRepo(remote, work, undefined, fakeRunGit)
+
+    expect(received).toHaveLength(1)
+    expect(received[0].timeoutMs).toBe(CLONE_TIMEOUT_MS)
+    expect(received[0].timeoutMs).not.toBe(PUSH_TIMEOUT_MS)
   })
 
   it('efface un dossier de travail partiel laissé par un clone raté', async () => {
@@ -136,6 +153,29 @@ describe('pushRepo', () => {
     const r = await pushRepo(work)
     expect(r.ok).toBe(false)
     expect(r.stderr).not.toBe('')
+  })
+})
+
+describe('runGit / encodage UTF-8', () => {
+  it('ne corrompt pas les caractères accentués à cheval sur une frontière de morceau', async () => {
+    await cloneRepo(remote, work)
+
+    // Recette du contrôleur : ~1,8 Mo dense en accents (2000 entrées portant
+    // chacune 400 fois « é »), assez pour être livré en plusieurs dizaines de
+    // morceaux par le tube stdout et donc faire tomber au moins une frontière
+    // en plein milieu d'un « é » (2 octets en UTF-8) si le décodage se fait
+    // morceau par morceau au lieu d'être tenu par un StringDecoder continu.
+    const entries = Array.from({ length: 2000 }, (_, i) => ({
+      titre: `chapitre ${i} : ${'é'.repeat(400)}`
+    }))
+    const content = JSON.stringify(entries)
+    writeFileSync(join(work, 'manifest.json'), content)
+    await commitAll(work, 'manifeste dense en accents')
+
+    const shown = await runGit(['show', 'HEAD:manifest.json'], { cwd: work })
+    expect(shown.ok).toBe(true)
+    expect(shown.stdout).not.toContain('�')
+    expect(shown.stdout).toBe(content)
   })
 })
 

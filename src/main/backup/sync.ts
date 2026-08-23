@@ -249,8 +249,18 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
         return await buildStatus(state, new Date())
       } catch (err) {
         console.error(err)
-        // Dernier recours : l'état sans le diff. `lastError` est renseigné
-        // (la garde ci-dessus l'a écrit), et c'est lui qui prime dans l'UI.
+        // Dernier recours : l'état sans le diff. `lastError` n'est PAS
+        // garanti renseigné ici : si le `try` principal ci-dessus est allé
+        // jusqu'au bout avec un push réussi (`lastError = null`), et que
+        // c'est seulement `buildStatus` qui lève à son tour (dossier media
+        // devenu illisible, handle de base disparu entre-temps), l'UI
+        // recevrait sinon un « Sauvegardé » vert avec un diff à zéro — la
+        // sauvegarde a bien eu lieu, mais l'état rendu la tairait. On pose
+        // donc ici un message synthétique quand aucun n'est déjà là, sans le
+        // persister sur disque (le sondage suivant se rattrape via
+        // `buildStatus`, qui repart de zéro).
+        state.lastError ??=
+          `État indisponible après la sauvegarde : ${err instanceof Error ? err.message : String(err)}`
         return baseStatus(state, {
           chaptersChanged: 0,
           chaptersAdded: 0,

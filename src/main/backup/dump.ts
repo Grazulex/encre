@@ -74,6 +74,13 @@ export function dumpDatabase(dbPath: string, outPath: string): Promise<void> {
       // gagner la course contre 'close', et un dump partiel suivi d'un échec se
       // résoudrait comme un succès — le pire cas pour une sauvegarde.
       const check = (): void => {
+        // `fail()` peut déjà être passé par ici et avoir supprimé `tmpPath`
+        // (ex. `out.on('error', fail)` déclenché entre-temps) : sans cette
+        // garde, `statSync` lèverait ENOENT de façon synchrone dans cet
+        // écouteur 'close', donc comme exception non rattrapée dans le
+        // process main d'Electron.
+        if (settled) return
+
         // sqlite3 sort en 0 même sur une base inexistante (il en créerait une
         // vide à la demande) : un dump vide est donc le vrai signal d'échec.
         if (statSync(tmpPath).size === 0) {

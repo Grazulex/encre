@@ -86,8 +86,17 @@ export function runGit(
       finish(false)
     }, timeoutMs)
 
-    child.stdout.on('data', (d) => (stdout += d.toString()))
-    child.stderr.on('data', (d) => (stderr += d.toString()))
+    // `setEncoding` fait passer chaque morceau par le `StringDecoder` interne
+    // du flux, qui retient l'octet de tête d'une séquence multi-octets coupée
+    // par la frontière et la recolle au morceau suivant. Sans ça, décoder
+    // chaque morceau isolément (`d.toString()`) casse tout caractère accentué
+    // à cheval sur une frontière de morceau — silencieusement, en U+FFFD.
+    // stderr aussi : les messages d'erreur de git sont localisés et peuvent
+    // contenir des accents.
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (d) => (stdout += d))
+    child.stderr.on('data', (d) => (stderr += d))
     child.on('error', (err) => {
       stderr += err.message
       finish(false)
@@ -100,9 +109,20 @@ export function hasRepo(dir: string): boolean {
   return existsSync(join(dir, '.git'))
 }
 
-export async function cloneRepo(remoteUrl: string, dir: string, keyPath?: string): Promise<GitResult> {
+/**
+ * `run` n'est un paramètre que pour les tests : les appelants réels ne le
+ * passent jamais et héritent du vrai `runGit`. Il donne un point d'observation
+ * direct sur le délai effectivement transmis, sans quoi rien ne distingue un
+ * `cloneRepo` qui câble bien `CLONE_TIMEOUT_MS` de l'ancien défaut oublié.
+ */
+export async function cloneRepo(
+  remoteUrl: string,
+  dir: string,
+  keyPath?: string,
+  run: typeof runGit = runGit
+): Promise<GitResult> {
   // cwd = parent : le dossier cible ne doit pas exister avant le clone.
-  const result = await runGit(['clone', '-q', remoteUrl, dir], {
+  const result = await run(['clone', '-q', remoteUrl, dir], {
     cwd: join(dir, '..'),
     keyPath,
     timeoutMs: CLONE_TIMEOUT_MS
