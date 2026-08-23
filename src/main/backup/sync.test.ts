@@ -350,6 +350,28 @@ describe('createBackupService — chemins d\'échec', () => {
     await first
   })
 
+  it('reconstruit lastCommitAt depuis HEAD quand l\'état a été perdu', async () => {
+    // Régression observée en production : l'app avait été quittée pendant un
+    // push de 700 Mo, donc `runNow` n'était jamais revenu et son état n'avait
+    // jamais été écrit. Au lancement suivant il n'y avait plus rien à commiter,
+    // donc plus aucune occasion de poser `lastCommitAt` : l'app annonçait
+    // « Jamais sauvegardé » sur une bibliothèque intégralement sauvegardée, et
+    // ne s'en serait jamais remise.
+    const svc = createBackupService(db, paths)
+    await svc.runNow()
+
+    rmSync(paths.statePath)                       // l'état est perdu
+    const apres = await svc.runNow()              // rien de neuf à commiter
+
+    expect(apres.lastCommitAt).not.toBeNull()
+    expect(apres.lastError).toBeNull()
+    // et c'est bien la date de HEAD, pas une date inventée
+    const head = await runGit(['log', '-1', '--format=%cI'], { cwd: paths.repoDir })
+    expect(apres.lastCommitAt).toBe(new Date(head.stdout.trim()).toISOString())
+    // et le format reste celui du reste de l'état : `pendingPush` compare des chaînes
+    expect(apres.lastCommitAt).toMatch(/Z$/)
+  })
+
   it('status() sans dépôt ni sauvegarde rend configured=false sans lever', async () => {
     const svc = createBackupService(db, paths)
     const status = await svc.status()

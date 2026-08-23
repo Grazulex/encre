@@ -98,6 +98,21 @@ function syncMedia(mediaDir: string, repoMediaDir: string): void {
   }
 }
 
+/**
+ * Date ISO du commit HEAD, ou null si le dépôt n'a pas encore de commit.
+ * Sert à reconstruire `lastCommitAt` quand un run ne commite rien : c'est HEAD
+ * qui dit ce qui est sauvegardé, pas la mémoire d'un run précédent.
+ */
+async function headCommittedAt(repoDir: string): Promise<string | null> {
+  const r = await runGit(['log', '-1', '--format=%cI'], { cwd: repoDir })
+  if (!r.ok || r.stdout.trim() === '') return null
+  // Normalisé en UTC : git rend un décalage local (« +02:00 ») alors que tout le
+  // reste de l'état est en « Z ». `pendingPush` compare ces dates comme des
+  // CHAÎNES — mélanger les deux formats ferait passer un dépôt à jour pour
+  // « non envoyé ».
+  return new Date(r.stdout.trim()).toISOString()
+}
+
 export function createBackupService(db: Db, paths: BackupPaths): BackupService {
   let running = false
 
@@ -203,7 +218,18 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
         if (committed) {
           state.lastCommitAt = now.toISOString()
           state.lastDiff = diff
-        } else if (!result.ok) {
+        } else if (result.ok) {
+          // Arbre propre : ce run n'a rien commité, mais HEAD l'est. Sans cette
+          // branche, un état perdu (fichier effacé, app quittée avant son
+          // écriture) laisserait `lastCommitAt` nul À VIE : il n'y a plus rien
+          // de neuf à commiter, donc plus jamais d'occasion de le poser, et
+          // l'app afficherait « Jamais sauvegardé » sur une bibliothèque
+          // intégralement sauvegardée. On le reconstruit depuis HEAD, qui est
+          // la vérité sur ce qui est enregistré.
+          // Uniquement en réparation : on ne réécrit jamais une date connue,
+          // git ne garde les commits qu'à la seconde et on perdrait la précision.
+          state.lastCommitAt = state.lastCommitAt ?? (await headCommittedAt(paths.repoDir))
+        } else {
           // `committed: false` recouvre trois cas : `add` échoué, arbre propre,
           // `commit` échoué. Seul l'arbre propre (result.ok) est un non-événement
           // légitime. Confondre les trois pousserait un HEAD inchangé et
