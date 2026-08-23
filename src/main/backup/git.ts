@@ -1,11 +1,27 @@
 import { spawn } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, rmSync } from 'fs'
 import { join } from 'path'
 
 export const GIT_BIN = '/usr/bin/git'
 
+/**
+ * Délai de garde par défaut, dimensionné pour les commandes **locales**
+ * (`add`, `status`, `commit`, `show`) : aucune d'elles ne dure deux minutes.
+ * Ne porte pas le mot « push » : un nom de constante réseau appliqué par
+ * défaut à tout ferait tuer le clone initial (voir CLONE_TIMEOUT_MS).
+ */
+export const LOCAL_TIMEOUT_MS = 120_000
+
 /** Délai de garde du push : un réseau qui pend ne doit pas bloquer l'état. */
 export const PUSH_TIMEOUT_MS = 120_000
+
+/**
+ * Le clone initial rapatrie ~710 Mo de médias (spec §1) : sur une liaison
+ * ordinaire il dépasse de loin les deux minutes du push. Il lui faut donc son
+ * propre délai, assez large pour ne jamais couper un clone qui progresse, et
+ * assez fini pour qu'une liaison morte finisse par rendre la main.
+ */
+export const CLONE_TIMEOUT_MS = 4 * 60 * 60 * 1000
 
 /**
  * Identité imposée à chaque commande. La config globale de la machine porte
@@ -63,7 +79,7 @@ export function runGit(
       resolve({ ok, stdout, stderr })
     }
 
-    const timeoutMs = opts.timeoutMs ?? PUSH_TIMEOUT_MS
+    const timeoutMs = opts.timeoutMs ?? LOCAL_TIMEOUT_MS
     const timer = setTimeout(() => {
       stderr += `\nDélai dépassé après ${timeoutMs} ms.`
       child.kill('SIGKILL')
@@ -86,17 +102,66 @@ export function hasRepo(dir: string): boolean {
 
 export async function cloneRepo(remoteUrl: string, dir: string, keyPath?: string): Promise<GitResult> {
   // cwd = parent : le dossier cible ne doit pas exister avant le clone.
-  return runGit(['clone', '-q', remoteUrl, dir], { cwd: join(dir, '..'), keyPath })
+  const result = await runGit(['clone', '-q', remoteUrl, dir], {
+    cwd: join(dir, '..'),
+    keyPath,
+    timeoutMs: CLONE_TIMEOUT_MS
+  })
+
+  // git nettoie derrière lui quand il échoue de lui-même, mais pas quand on le
+  // tue (SIGKILL du délai dépassé, arrêt de la machine) : le dossier survit
+  // avec un `.git` et un HEAD non né. `hasRepo()` rendrait vrai à jamais, plus
+  // aucun clone ne serait retenté, et chaque sauvegarde suivante commiterait un
+  // commit racine que le distant refuserait — définitivement.
+  if (!result.ok) rmSync(dir, { recursive: true, force: true })
+
+  return result
+}
+
+/**
+ * Lignes de `git status --porcelain` qui décrivent une suppression, en scène
+ * (colonne 1) ou dans l'arbre de travail (colonne 2).
+ */
+function deletedPaths(porcelain: string): string[] {
+  return porcelain
+    .split('\n')
+    .filter((l) => l.length > 3 && (l[0] === 'D' || l[1] === 'D'))
+    .map((l) => l.slice(3))
 }
 
 /**
  * `committed: false` quand l'arbre est propre — ce n'est pas une erreur, c'est
  * le cas normal d'une sauvegarde déclenchée sans qu'on ait rien écrit depuis.
+ *
+ * Refuse en revanche de commiter la moindre suppression. C'est l'invariant de
+ * la sauvegarde : rien n'en sort jamais. Un arbre de travail amputé (clone
+ * interrompu, dossier vidé à la main pour récupérer de l'espace) ferait sinon
+ * mettre en scène des suppressions par `git add -A`, qui se commiteraient et se
+ * pousseraient proprement — élaguant le dépôt distant en silence, c'est-à-dire
+ * détruisant la sauvegarde au nom de la sauvegarde.
  */
 export async function commitAll(
   dir: string,
   message: string
 ): Promise<{ committed: boolean; result: GitResult }> {
+  // Avant `add -A`, pour ne pas laisser d'index empoisonné derrière un refus.
+  const before = await runGit(['status', '--porcelain'], { cwd: dir })
+  if (before.ok) {
+    const deleted = deletedPaths(before.stdout)
+    if (deleted.length > 0) {
+      const shown = deleted.slice(0, 5).join(', ')
+      const reste = deleted.length > 5 ? ` (et ${deleted.length - 5} autres)` : ''
+      return {
+        committed: false,
+        result: {
+          ok: false,
+          stdout: before.stdout,
+          stderr: `Suppressions détectées dans le dépôt de sauvegarde, commit refusé : ${shown}${reste}`
+        }
+      }
+    }
+  }
+
   const add = await runGit(['add', '-A'], { cwd: dir })
   if (!add.ok) return { committed: false, result: add }
 

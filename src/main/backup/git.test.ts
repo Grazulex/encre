@@ -1,9 +1,18 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { execFileSync } from 'child_process'
-import { mkdtempSync, writeFileSync, existsSync } from 'fs'
+import { mkdirSync, mkdtempSync, unlinkSync, writeFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { runGit, cloneRepo, hasRepo, commitAll, pushRepo, GIT_BIN } from './git'
+import {
+  runGit,
+  cloneRepo,
+  hasRepo,
+  commitAll,
+  pushRepo,
+  GIT_BIN,
+  CLONE_TIMEOUT_MS,
+  PUSH_TIMEOUT_MS
+} from './git'
 
 let dir: string
 let remote: string
@@ -24,6 +33,24 @@ describe('cloneRepo / hasRepo', () => {
     expect(r.ok).toBe(true)
     expect(hasRepo(work)).toBe(true)
   })
+
+  // Le dépôt fait ~710 Mo (spec §1) : un clone initial dépasse largement le
+  // délai de garde du push. S'il l'héritait, il serait tué à chaque tentative.
+  it('ne se laisse pas borner par le délai de garde du push', () => {
+    expect(CLONE_TIMEOUT_MS).toBeGreaterThan(PUSH_TIMEOUT_MS)
+  })
+
+  it('efface un dossier de travail partiel laissé par un clone raté', async () => {
+    // Un clone tué par SIGKILL (délai dépassé, arrêt de l'app) ne laisse pas
+    // git nettoyer : le dossier survit. Sans effacement, `hasRepo` peut rendre
+    // vrai à jamais et plus aucun clone ne sera retenté.
+    mkdirSync(join(work, '.git'), { recursive: true })
+    writeFileSync(join(work, 'reste.txt'), 'débris')
+
+    const r = await cloneRepo(remote, work)
+    expect(r.ok).toBe(false)
+    expect(existsSync(work)).toBe(false)
+  })
 })
 
 describe('commitAll', () => {
@@ -41,6 +68,42 @@ describe('commitAll', () => {
     // commit.gpgsign=true global a bien été désarmé.
     const sig = await runGit(['log', '-1', '--format=%G?'], { cwd: work })
     expect(sig.stdout.trim()).toBe('N')
+  })
+
+  it('refuse de commiter quand des fichiers ont disparu du dossier de travail', async () => {
+    await cloneRepo(remote, work)
+    writeFileSync(join(work, 'library.sql'), 'CREATE TABLE t(a);')
+    writeFileSync(join(work, 'media.png'), 'octets')
+    await commitAll(work, 'initial')
+    const head = await runGit(['rev-parse', 'HEAD'], { cwd: work })
+
+    // Arbre de travail amputé : clone interrompu, ou dossier vidé à la main
+    // pour récupérer de l'espace. `git add -A` mettrait la suppression en
+    // scène et la pousserait, élaguant le dépôt distant en silence.
+    unlinkSync(join(work, 'media.png'))
+
+    const { committed, result } = await commitAll(work, 'après amputation')
+    expect(committed).toBe(false)
+    expect(result.ok).toBe(false)
+    expect(result.stderr).toMatch(/[Ss]uppression/)
+    expect(result.stderr).toContain('media.png')
+
+    // HEAD n'a pas bougé : rien n'a été enregistré.
+    const after = await runGit(['rev-parse', 'HEAD'], { cwd: work })
+    expect(after.stdout.trim()).toBe(head.stdout.trim())
+  })
+
+  it('refuse aussi quand la suppression est déjà en scène dans l\'index', async () => {
+    await cloneRepo(remote, work)
+    writeFileSync(join(work, 'a.txt'), 'x')
+    writeFileSync(join(work, 'b.txt'), 'y')
+    await commitAll(work, 'initial')
+    await runGit(['rm', '-q', '--cached', 'b.txt'], { cwd: work })
+
+    const { committed, result } = await commitAll(work, 'après rm --cached')
+    expect(committed).toBe(false)
+    expect(result.ok).toBe(false)
+    expect(result.stderr).toMatch(/[Ss]uppression/)
   })
 
   it('renvoie committed=false quand il n\'y a rien à commiter', async () => {

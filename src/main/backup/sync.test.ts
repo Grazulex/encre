@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { execFileSync } from 'child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { openDb, type Db } from '../db/connection'
@@ -156,6 +156,26 @@ describe('createBackupService — chemins d\'échec', () => {
     // Rien n'a été commité : pousser un HEAD inchangé ne doit pas faire
     // avancer lastPushAt ni être confondu avec une sauvegarde réussie.
     expect(second.lastPushAt).toBe(first.lastPushAt)
+  })
+
+  it('refuse d\'élaguer le dépôt distant depuis un dossier de travail amputé', async () => {
+    const svc = createBackupService(db, paths)
+    await svc.runNow()
+
+    // L'image est retirée de la bibliothèque : le dépôt doit la garder.
+    unlinkSync(join(paths.mediaDir, 'photo.png'))
+    // Puis le dossier de travail est amputé — clone interrompu, ou espace
+    // disque récupéré à la main. `git add -A` mettrait la suppression en scène
+    // et la pousserait, élaguant le dépôt distant en silence.
+    unlinkSync(join(paths.repoDir, 'media', 'photo.png'))
+    createChapter(db, 1, 'Ch. 2')
+
+    const status = await svc.runNow()
+    expect(status.lastError).toMatch(/[Ss]uppression/)
+
+    // Le dépôt distant n'a rien perdu.
+    const ls = await runGit(['ls-tree', '-r', '--name-only', 'HEAD'], { cwd: paths.remoteUrl })
+    expect(ls.stdout).toContain('media/photo.png')
   })
 
   it('libère le verrou même si l\'écriture de l\'état échoue', async () => {
