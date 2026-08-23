@@ -47,11 +47,15 @@ const lastLabel = computed(() => {
   return s.lastDiff ? `${base} · ${summarize(s.lastDiff)}` : base
 })
 
-// Un commit local sans push n'est pas un échec : le travail est figé, il n'est
-// simplement pas encore parti. On le distingue visuellement d'une vraie panne.
-const pendingPush = computed(
-  () => store.status != null && store.status.lastError != null && store.status.lastCommitAt != null
-)
+// Un commit non poussé se reconnaît au retard de lastPushAt sur lastCommitAt.
+// Tester `lastCommitAt != null` ne marche pas : sync.ts n'avance pas
+// lastCommitAt quand le commit échoue, il garde la valeur du dernier succès —
+// le test serait donc vrai à jamais et déguiserait toute panne en demi-victoire.
+const pendingPush = computed(() => {
+  const s = store.status
+  if (!s || s.lastCommitAt == null) return false
+  return s.lastPushAt == null || s.lastPushAt < s.lastCommitAt
+})
 </script>
 
 <template>
@@ -71,8 +75,8 @@ const pendingPush = computed(
       <p class="muted">{{ pendingLabel }}</p>
       <p v-if="store.status.lastError" class="warn-text">{{ store.status.lastError }}</p>
       <p v-if="store.error" class="warn-text">{{ store.error }}</p>
-      <button type="button" :disabled="store.busy" @click="store.runNow()">
-        {{ store.busy ? 'Sauvegarde en cours…' : 'Sauvegarder maintenant' }}
+      <button type="button" :disabled="store.busy || store.status.running" @click="store.runNow()">
+        {{ store.busy || store.status.running ? 'Sauvegarde en cours…' : 'Sauvegarder maintenant' }}
       </button>
     </template>
   </section>
@@ -104,7 +108,8 @@ const pendingPush = computed(
   flex-shrink: 0;
 }
 .pastille.warn {
-  background: var(--danger);
+  /* Push en attente : cas bénin, pas une panne — pas de var(--danger) ici. */
+  background: var(--fg-muted);
 }
 .pastille.off {
   background: var(--fg-muted);
