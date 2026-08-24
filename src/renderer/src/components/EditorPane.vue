@@ -7,6 +7,7 @@ import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
 import { useEntitiesStore } from '../stores/entities'
 import { useAiStore } from '../stores/ai'
+import { useSettingsStore } from '../stores/settings'
 import { EntityMention } from '../editor/mention'
 import { SceneBreak, PageBreak } from '../editor/formatNodes'
 import { Illustration } from '../editor/illustration'
@@ -36,6 +37,40 @@ const store = useBookStore()
 const ui = useUiStore()
 const entitiesStore = useEntitiesStore()
 const ai = useAiStore()
+const settings = useSettingsStore()
+
+// Confort d'écriture (réglage du texte de l'éditeur) : popover léger "Àa"
+// modelé sur les autres popovers de l'en-tête (fermeture clic extérieur).
+const confortWrapEl = ref<HTMLElement | null>(null)
+const confortOpen = ref(false)
+const FONT_SIZE_RANGE = { min: 14, max: 22, step: 1 }
+const LINE_HEIGHT_RANGE = { min: 1.4, max: 2.2, step: 0.05 }
+const COL_WIDTH_RANGE = { min: 30, max: 48, step: 2 }
+
+function toggleConfort(): void {
+  confortOpen.value = !confortOpen.value
+}
+function onWindowMousedownForConfort(event: MouseEvent): void {
+  if (confortWrapEl.value?.contains(event.target as Node)) return
+  confortOpen.value = false
+}
+watch(confortOpen, (open) => {
+  if (open) window.addEventListener('mousedown', onWindowMousedownForConfort)
+  else window.removeEventListener('mousedown', onWindowMousedownForConfort)
+})
+onBeforeUnmount(() => window.removeEventListener('mousedown', onWindowMousedownForConfort))
+
+// Ouverture de la recherche plein texte (⌘F) : même mécanisme CustomEvent que
+// 'palette:…' — EditorPane n'a pas de référence vers BookView (frères), et
+// c'est BookView qui monte le panneau de recherche (BookSearch.vue).
+function openSearch(): void {
+  window.dispatchEvent(new CustomEvent('book:open-search'))
+}
+
+// Reprise de lecture : la div qui défile (wrapper de l'éditeur), pour
+// sauvegarder/restaurer sa position de scroll (voir watch de chargement et
+// sauverReprise plus bas).
+const pageScrollEl = ref<HTMLElement | null>(null)
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingChapterId: number | null = null
@@ -185,12 +220,18 @@ let watchGeneration = 0
 
 watch(
   () => store.currentChapter?.id,
-  async (_newId, _oldId) => {
+  async (_newId, oldId) => {
     const generation = ++watchGeneration
     // Un changement de chapitre via la palette ⌘K ne déclenche aucun
     // mousedown extérieur (voir onWindowMousedownForLayoutDraft) : sans ce
     // reset, le popover garderait une `pos` qui vise le document quitté.
     layoutDraft.value = null
+    // Reprise : mémorise le scroll du chapitre QUITTÉ avant de charger le
+    // suivant (la div qui défile contient encore l'ancien document jusqu'à
+    // setContent plus bas) — oldId est le chapitre quitté (currentChapter
+    // pointe déjà vers le nouveau ici), et le premier chargement (oldId
+    // null, immediate) n'a rien à sauvegarder.
+    if (oldId != null) store.sauverReprise(oldId, pageScrollEl.value?.scrollTop ?? 0)
     // Le flush du chapitre précédent doit partir avant de charger le nouveau,
     // sans quoi setContent écraserait un éditeur qui a encore des frappes
     // non enregistrées.
@@ -207,7 +248,18 @@ watch(
     // prochaine frappe persistera la conversion naturellement.
     const { json } = stripCodeBlocks(store.currentChapter.contentJson)
     ed.commands.setContent(JSON.parse(json), { emitUpdate: false })
-    ed.commands.focus('start')
+    // Reprise de lecture : au premier chargement après une ouverture du livre,
+    // store.open a posé repriseScrollTop (ou null) — le restaurant au lieu de
+    // partir du sommet, curseur posé en début sans défilement (scrollIntoView:
+    // false), puis la garde est consommée.
+    const scrollTop = store.repriseScrollTop
+    if (scrollTop != null && pageScrollEl.value) {
+      pageScrollEl.value.scrollTop = scrollTop
+      store.clearRepriseScroll()
+      ed.commands.focus('start', { scrollIntoView: false })
+    } else {
+      ed.commands.focus('start')
+    }
   },
   { immediate: true }
 )
@@ -556,11 +608,20 @@ watch(
 let unsubscribeBodyFlusher: (() => void) | null = null
 let unsubscribeSummaryFlusher: (() => void) | null = null
 let unsubscribeNotesFlusher: (() => void) | null = null
+let unsubscribeRepriseFlusher: (() => void) | null = null
 
 onMounted(() => {
   unsubscribeBodyFlusher = ui.addQuitFlusher(() => flush())
   unsubscribeSummaryFlusher = ui.addQuitFlusher(() => flushSummary())
   unsubscribeNotesFlusher = ui.addQuitFlusher(() => flushChapterNotesQuit())
+  // Reprise de lecture : avant de laisser la fenêtre se fermer, on mémorise
+  // le chapitre courant et sa position de scroll (store.sauverReprise) pour
+  // rouvrir pile où on s'était arrêté.
+  unsubscribeRepriseFlusher = ui.addQuitFlusher(() => {
+    const chapterId = store.currentChapter?.id
+    if (chapterId != null) store.sauverReprise(chapterId, pageScrollEl.value?.scrollTop ?? 0)
+    return Promise.resolve()
+  })
 })
 
 // Le flush ici est fire-and-forget (onBeforeUnmount ne peut pas attendre une
@@ -574,7 +635,6 @@ onBeforeUnmount(() => {
   flush()
   unsubscribeBodyFlusher?.()
 })
-
 // Hook séparé (pas fusionné au précédent) pour ne pas toucher au flush du
 // corps ci-dessus : démontage du composant (fermeture du livre, navigation
 // hors de BookView) déclenche aussi la sauvegarde d'un résumé en attente
@@ -587,6 +647,7 @@ onBeforeUnmount(() => {
   flushSummary()
   unsubscribeSummaryFlusher?.()
   unsubscribeNotesFlusher?.()
+  unsubscribeRepriseFlusher?.()
 })
 
 // Insertion contrôlée du brouillon IA + restauration de snapshot (Task 7) :
@@ -639,7 +700,7 @@ async function insertDraftIntoEditor(chapterId: number, draft: string): Promise<
       'avant insertion IA'
     )
   } catch (err) {
-    console.error("Échec du snapshot avant insertion IA", err)
+    console.error('Échec du snapshot avant insertion IA', err)
     ui.toast('Impossible de créer un point de restauration — insertion annulée.')
     return false
   }
@@ -658,10 +719,7 @@ async function insertDraftIntoEditor(chapterId: number, draft: string): Promise<
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
   if (paragraphs.length === 0) return false
-  ed.chain()
-    .focus('end')
-    .insertContent(paragraphs.map(buildParagraphNode))
-    .run()
+  ed.chain().focus('end').insertContent(paragraphs.map(buildParagraphNode)).run()
   ui.toast('Brouillon inséré — snapshot créé.')
   return true
 }
@@ -1125,7 +1183,15 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
 </script>
 
 <template>
-  <div v-if="store.currentChapter" class="editor-pane">
+  <div
+    v-if="store.currentChapter"
+    class="editor-pane"
+    :style="{
+      '--editor-font-size': settings.editorFontSize + 'px',
+      '--editor-line-height': String(settings.editorLineHeight),
+      '--editor-col-width': settings.editorColWidth + 'rem'
+    }"
+  >
     <header>
       <input
         class="chapter-title"
@@ -1217,6 +1283,92 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
           <path d="m21 15-5-5L5 21" />
         </svg>
       </button>
+      <button
+        type="button"
+        class="search-btn"
+        title="Rechercher dans le livre (⌘F)"
+        aria-label="Rechercher dans le livre"
+        @click="openSearch"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <line x1="21" y1="21" x2="16.5" y2="16.5" />
+        </svg>
+      </button>
+      <div ref="confortWrapEl" class="confort-wrap">
+        <button
+          type="button"
+          class="confort-btn"
+          :class="{ active: confortOpen }"
+          title="Confort d'écriture — taille, interligne, largeur"
+          aria-label="Confort d'écriture"
+          :aria-expanded="confortOpen"
+          @click="toggleConfort"
+        >
+          Aa
+        </button>
+        <div
+          v-if="confortOpen"
+          class="confort-popover"
+          role="dialog"
+          aria-label="Confort d'écriture"
+        >
+          <p class="field-label">Confort d'écriture</p>
+          <label class="field">
+            <span class="range-row">
+              <span class="field-label">Taille</span>
+              <output>{{ settings.editorFontSize }} px</output>
+            </span>
+            <input
+              v-model.number="settings.editorFontSize"
+              type="range"
+              :min="FONT_SIZE_RANGE.min"
+              :max="FONT_SIZE_RANGE.max"
+              :step="FONT_SIZE_RANGE.step"
+              @input="settings.setFontSize(settings.editorFontSize)"
+            />
+          </label>
+          <label class="field">
+            <span class="range-row">
+              <span class="field-label">Interligne</span>
+              <output>{{ settings.editorLineHeight.toFixed(2) }}</output>
+            </span>
+            <input
+              v-model.number="settings.editorLineHeight"
+              type="range"
+              :min="LINE_HEIGHT_RANGE.min"
+              :max="LINE_HEIGHT_RANGE.max"
+              :step="LINE_HEIGHT_RANGE.step"
+              @input="settings.setLineHeight(settings.editorLineHeight)"
+            />
+          </label>
+          <label class="field">
+            <span class="range-row">
+              <span class="field-label">Largeur</span>
+              <output>{{ settings.editorColWidth }} rem</output>
+            </span>
+            <input
+              v-model.number="settings.editorColWidth"
+              type="range"
+              :min="COL_WIDTH_RANGE.min"
+              :max="COL_WIDTH_RANGE.max"
+              :step="COL_WIDTH_RANGE.step"
+              @input="settings.setColWidth(settings.editorColWidth)"
+            />
+          </label>
+          <button type="button" class="reset" @click="settings.reset()">Rétablir</button>
+        </div>
+      </div>
       <div ref="formatWrapEl" class="format-wrap">
         <button
           type="button"
@@ -1455,7 +1607,9 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
         {{ entity.name }}
       </button>
     </div>
-    <EditorContent :editor="editor" class="page" />
+    <div ref="pageScrollEl" class="page">
+      <EditorContent :editor="editor" />
+    </div>
     <AutolinkDialog
       v-if="autolinkOpen"
       :matches="autolinkMatches"
@@ -1503,7 +1657,7 @@ header {
      réduit à 0 et titre/statut/bouton viennent buter sur les bords (retour
      utilisateur : colonne rognée à gauche, en-tête écrasé à droite). */
   padding: 28px 24px 10px;
-  max-width: 40rem;
+  max-width: var(--editor-col-width, 40rem);
   width: 100%;
   margin: 0 auto;
   flex-shrink: 0;
@@ -1591,7 +1745,9 @@ header {
    explicatif. */
 .autolink-btn,
 .claude-btn,
-.illustrations-btn {
+.illustrations-btn,
+.search-btn,
+.confort-btn {
   flex-shrink: 0;
   width: 30px;
   height: 30px;
@@ -1604,14 +1760,69 @@ header {
 }
 .autolink-btn:hover,
 .claude-btn:hover,
-.illustrations-btn:hover {
+.illustrations-btn:hover,
+.search-btn:hover,
+.confort-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
-.claude-btn.active {
+.claude-btn.active,
+.confort-btn.active {
   color: var(--accent);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.confort-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.confort-btn {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: var(--font-manuscript);
+}
+.confort-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px -14px color-mix(in srgb, var(--fg) 40%, transparent);
+}
+.confort-popover .field > span.range-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.confort-popover output {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+}
+.confort-popover input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+  padding: 0;
+  border: none;
+  background: none;
+}
+.confort-popover .reset {
+  align-self: flex-end;
+  font-size: 11.5px;
+  padding: 4px 10px;
+  color: var(--fg-muted);
+}
+.confort-popover .reset:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .format-wrap {
@@ -1770,7 +1981,7 @@ header {
 }
 
 .summary-zone {
-  max-width: 40rem;
+  max-width: var(--editor-col-width, 40rem);
   width: 100%;
   margin: 0 auto;
   padding: 0 24px 10px;
@@ -1933,7 +2144,7 @@ header {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-width: 40rem;
+  max-width: var(--editor-col-width, 40rem);
   width: 100%;
   margin: 0 auto;
   padding: 0 24px 12px;
@@ -1982,12 +2193,14 @@ header {
 }
 .page :deep(.tiptap) {
   width: 100%;
-  max-width: 40rem;
+  max-width: var(--editor-col-width, 40rem);
   margin: 0 auto;
   padding: 12px 0 45vh;
   font-family: var(--font-manuscript);
-  font-size: 18px;
-  line-height: 1.75;
+  /* Confort d'écriture : piloté par le popover Aa (store settings), posées
+     via :style sur .editor-pane — valeurs historiques en fallback. */
+  font-size: var(--editor-font-size, 18px);
+  line-height: var(--editor-line-height, 1.75);
   color: var(--fg);
   caret-color: var(--accent);
   outline: none;

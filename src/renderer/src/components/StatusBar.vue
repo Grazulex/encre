@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useBookStore } from '../stores/book'
 import { useBackupStore } from '../stores/backup'
 import { backupIndicator } from '../../../shared/backupIndicator'
+import { parseWordGoal } from '../../../shared/wordGoal'
 import { useRouter } from 'vue-router'
 
 const store = useBookStore()
@@ -43,12 +44,97 @@ onUnmounted(() => backup.stopPolling())
 // dégradés ne vivant que sur la route Bibliothèque. `refreshFailed` y entre
 // aussi, pour ne pas faire passer un état périmé pour l'état courant.
 const backupState = computed(() => backupIndicator(backup.status, backup.refreshFailed))
+
+// Objectif de mots du chapitre courant : une cible modifiable INLINE dans la
+// barre (retour au plus simple après le popover « Enregistrer » qui perdait
+// son clic — édition inline = aucun élément flottant à intercepter : on clique
+// le %, on tape, Entrée ou perte de focus valide, Échap annule).
+const currentChapterId = computed(() => store.currentChapter?.id ?? null)
+const goal = computed(() => store.currentChapter?.wordGoal ?? null)
+const goalLabel = computed(() => {
+  if (goal.value == null || goal.value <= 0) return 'objectif'
+  const pct = Math.round((store.currentChapter!.wordCount / goal.value) * 100)
+  return `${pct} %`
+})
+const editingGoal = ref(false)
+// string | number : Vue caste le v-model en nombre sur un input type=number,
+// et le repasse à la chaîne vide quand le champ est vidé.
+const goalDraft = ref<string | number>('')
+const goalInputEl = ref<HTMLInputElement | null>(null)
+
+function startEditGoal(): void {
+  goalDraft.value = goal.value == null ? '' : String(goal.value)
+  editingGoal.value = true
+  nextTick(() => {
+    goalInputEl.value?.focus()
+    goalInputEl.value?.select()
+  })
+}
+
+function commitGoal(): void {
+  const id = currentChapterId.value
+  editingGoal.value = false
+  if (id == null) return
+  store.setChapterGoal(id, parseWordGoal(goalDraft.value))
+}
+
+function cancelGoal(): void {
+  editingGoal.value = false
+}
+
+function onGoalKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    cancelGoal()
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    commitGoal()
+  }
+}
+
+// Perte de focus = validation. La double exécution Entrée+blur est inoffensive
+// (editingGoal est déjà reporté à false par commitGoal).
+function onGoalBlur(): void {
+  if (editingGoal.value) commitGoal()
+}
 </script>
 
 <template>
   <footer class="status-bar">
     <span v-if="store.currentChapter" class="words">
-      {{ store.currentChapter.wordCount.toLocaleString('fr-FR') }} mots
+      {{ store.currentChapter.wordCount.toLocaleString('fr-FR') }}
+      <template v-if="goal"> / {{ goal.toLocaleString('fr-FR') }}</template>
+      mots
+    </span>
+    <span v-if="store.currentChapter" class="goal-wrap">
+      <button
+        v-if="!editingGoal"
+        type="button"
+        class="goal-btn"
+        :title="
+          goal != null
+            ? 'Objectif du chapitre — modifier'
+            : 'Fixer un objectif de mots pour ce chapitre'
+        "
+        :aria-label="goal != null ? 'Objectif du chapitre' : 'Fixer un objectif de mots'"
+        @click="startEditGoal"
+      >
+        {{ goalLabel }}
+      </button>
+      <input
+        v-else
+        ref="goalInputEl"
+        v-model="goalDraft"
+        type="number"
+        min="1"
+        step="100"
+        class="goal-input"
+        placeholder="ex. 5000"
+        @keydown="onGoalKeydown"
+        @blur="onGoalBlur"
+      />
     </span>
     <span class="dot">·</span>
     <span class="session" :class="{ positive: sessionWords > 0 }">
@@ -138,6 +224,39 @@ const backupState = computed(() => backupIndicator(backup.status, backup.refresh
 .save-state.saving .pulse {
   background: var(--accent);
   animation: breathe 1s ease-in-out infinite;
+}
+
+.goal-wrap {
+  position: relative;
+}
+.goal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  padding: 1px 7px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+.goal-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.goal-input {
+  width: 78px;
+  flex-shrink: 0;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 @keyframes breathe {

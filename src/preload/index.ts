@@ -20,7 +20,9 @@ const api: EncreApi = {
     setStatus: (id, status) => ipcRenderer.invoke('chapters:setStatus', id, status),
     reorder: (bookId, orderedIds) => ipcRenderer.invoke('chapters:reorder', bookId, orderedIds),
     remove: (id) => ipcRenderer.invoke('chapters:remove', id),
-    saveSummary: (id, summary) => ipcRenderer.invoke('chapters:saveSummary', id, summary)
+    saveSummary: (id, summary) => ipcRenderer.invoke('chapters:saveSummary', id, summary),
+    setGoal: (id, wordGoal) => ipcRenderer.invoke('chapters:setGoal', id, wordGoal),
+    search: (bookId, query) => ipcRenderer.invoke('chapters:search', bookId, query)
   },
   entities: {
     listByBook: (bookId, kind) => ipcRenderer.invoke('entities:listByBook', bookId, kind),

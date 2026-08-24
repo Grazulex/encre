@@ -30,6 +30,24 @@ describe('createApi', () => {
     expect(refreshed.chapterCount).toBe(1)
   })
 
+  it('expose l’objectif de chapitre et la recherche plein texte via l’API', async () => {
+    const api = createApi(openDb(':memory:'))
+    const book = await api.books.create({ title: 'Via API' })
+    const c1 = await api.chapters.create(book.id, 'Ouverture')
+    const c2 = await api.chapters.create(book.id, 'Suite')
+    await api.chapters.saveContent(c1.id, '{}', 'Bonne année.')
+    await api.chapters.saveContent(c2.id, '{}', 'Rendez-vous à Bréhaigne.')
+    await api.chapters.setGoal(c2.id, 5000)
+    expect((await api.chapters.get(c2.id)).wordGoal).toBe(5000)
+
+    const hits = await api.chapters.search(book.id, 'BRÉhAIGNE')
+    expect(hits).toHaveLength(1)
+    expect(hits[0].chapterId).toBe(c2.id)
+    expect(hits[0].snippet.match).toBe('Bréhaigne')
+    await api.chapters.setGoal(c2.id, null)
+    expect((await api.chapters.get(c2.id)).wordGoal).toBeNull()
+  })
+
   it('expose entités, plan, chronologie et résumé', async () => {
     const api = createApi(openDb(':memory:'))
     const book = await api.books.create({ title: 'Via API v2' })

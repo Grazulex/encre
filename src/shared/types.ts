@@ -1,4 +1,4 @@
-export type BookStatus = 'en_cours' | 'termine' | 'archive'
+export type BookStatus = 'reserve' | 'en_cours' | 'termine' | 'archive'
 export type ChapterStatus = 'brouillon' | 'premier_jet' | 'relu' | 'final'
 // Sections de navigation de l'espace livre (Task 8). Personnages/Lieux
 // (Task 10), Chronologie (Task 14) et Plan (Task 13) sont des placeholders
@@ -147,6 +147,7 @@ export interface ChapterMeta {
   title: string
   status: ChapterStatus
   wordCount: number
+  wordGoal: number | null
   updatedAt: string
 }
 
@@ -156,8 +157,24 @@ export interface Chapter extends ChapterMeta {
   summary: string
 }
 
-export type EntityKind = 'character' | 'place'
+// Résultat de la recherche plein texte dans un livre (Task « recherche ») :
+// `start` est l'index de la première occurrence (d'origine) dans contentText,
+// et le snippet est découpé autour d'elle en trois morceaux
+// (avant / correspondance / après) pour un surlignage sans parsing client.
+export interface SearchSnippet {
+  before: string
+  match: string
+  after: string
+}
+export interface SearchHit {
+  chapterId: number
+  chapterTitle: string
+  chapterPosition: number
+  start: number
+  snippet: SearchSnippet
+}
 
+export type EntityKind = 'character' | 'place'
 export interface Entity {
   id: number
   bookId: number

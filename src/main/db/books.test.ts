@@ -29,6 +29,13 @@ describe('repository books', () => {
     expect(updated.wordGoal).toBe(80000)
   })
 
+  it('accepte le statut réservé (tome de série en attente)', () => {
+    const book = createBook(db, { title: 'Tome 2' })
+    const updated = updateBook(db, book.id, { status: 'reserve' })
+    expect(updated.status).toBe('reserve')
+    expect(getBook(db, book.id).status).toBe('reserve')
+  })
+
   it('supprime un livre', () => {
     const book = createBook(db, { title: 'À jeter' })
     deleteBook(db, book.id)

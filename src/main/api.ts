@@ -176,7 +176,9 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
       setStatus: async (id, status) => chapters.setChapterStatus(db, id, status),
       reorder: async (bookId, ids) => chapters.reorderChapters(db, bookId, ids),
       remove: async (id) => chapters.deleteChapter(db, id),
-      saveSummary: async (id, summary) => chapters.saveChapterSummary(db, id, summary)
+      saveSummary: async (id, summary) => chapters.saveChapterSummary(db, id, summary),
+      setGoal: async (id, wordGoal) => chapters.setChapterGoal(db, id, wordGoal),
+      search: async (bookId, query) => chapters.searchInBook(db, bookId, query)
     },
     entities: {
       listByBook: async (bookId, kind) => entities.listEntities(db, bookId, kind),

@@ -32,6 +32,15 @@
      EntityCard.vue. */
   --danger: #ce0f38;
 
+  /* Couleurs de statut (pastilles de la bibliothèque) : valeur Latte du store
+     de thème (palettes.ts) — même accent que l'homonyme, Archive = fgMuted.
+     Surchargées au runtime par le store quand une sauveur/accent différent est
+     choisi ; en défaut ici pour le cas où le store ne s'exécuterait pas. */
+  --status-reserve: #8738ed;   /* mauve */
+  --status-en-cours: #1c5fe4;  /* blue */
+  --status-termine: #307820;   /* green */
+  --status-archive: #64667b;   /* fg-muted */
+
   /* Échelle de rayons (audit UI/UX, proposition #2) : les 7px/5px éparpillés
      dans plusieurs composants étaient des accidents de copie, pas une échelle
      voulue — --radius-s les absorbe. 4px et 10px restent des valeurs à part
@@ -54,6 +63,12 @@
     --accent: #babbf1;    /* Frappé lavender — 6,72:1 sur --bg */
     --border: #414559;    /* Frappé surface0 */
     --danger: #e78284;    /* Frappé red — 5,21:1 sur --bg-panel */
+    /* Même rôle que le bloc clair : fallback Frappé tant que le store de
+       thème n'a pas posé ses variables runtime. */
+    --status-reserve: #ca9ee6;   /* mauve */
+    --status-en-cours: #8caaee;  /* blue */
+    --status-termine: #a6d189;   /* green */
+    --status-archive: #a5adce;   /* subtext0 */
   }
 }
 

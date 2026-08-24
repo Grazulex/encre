@@ -1,6 +1,14 @@
 import type { Db } from './connection'
-import type { Chapter, ChapterMeta, ChapterStatus, Entity, EntityOccurrence } from '../../shared/types'
+import type {
+  Chapter,
+  ChapterMeta,
+  ChapterStatus,
+  Entity,
+  EntityOccurrence,
+  SearchHit
+} from '../../shared/types'
 import { extractMentionIds } from '../../shared/mentions'
+import { foldWithMap } from '../../shared/autolink'
 import { entityRowToEntity } from './entities'
 
 export function countWords(text: string): number {
@@ -16,6 +24,7 @@ function rowToMeta(row: any): ChapterMeta {
     title: row.title,
     status: row.status,
     wordCount: row.word_count,
+    wordGoal: row.word_goal ?? null,
     updatedAt: row.updated_at
   }
 }
@@ -23,7 +32,7 @@ function rowToMeta(row: any): ChapterMeta {
 export function listChapters(db: Db, bookId: number): ChapterMeta[] {
   return db
     .prepare(
-      `SELECT id, book_id, position, title, status, word_count, updated_at
+      `SELECT id, book_id, position, title, status, word_count, word_goal, updated_at
        FROM chapters WHERE book_id = ? ORDER BY position`
     )
     .all(bookId)
@@ -69,7 +78,7 @@ export function createChapter(db: Db, bookId: number, title: string): ChapterMet
   const meta = getChapter(db, Number(result.lastInsertRowid))
   return rowToMeta({
     id: meta.id, book_id: meta.bookId, position: meta.position, title: meta.title,
-    status: meta.status, word_count: meta.wordCount, updated_at: meta.updatedAt
+    status: meta.status, word_count: meta.wordCount, word_goal: meta.wordGoal, updated_at: meta.updatedAt
   })
 }
 
@@ -109,6 +118,12 @@ export function setChapterStatus(db: Db, id: number, status: ChapterStatus): voi
   db.prepare("UPDATE chapters SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, id)
 }
 
+export function setChapterGoal(db: Db, id: number, wordGoal: number | null): void {
+  db.prepare(
+    "UPDATE chapters SET word_goal = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(wordGoal, id)
+}
+
 export function reorderChapters(db: Db, bookId: number, orderedIds: number[]): void {
   const stmt = db.prepare('UPDATE chapters SET position = ? WHERE id = ? AND book_id = ?')
   db.transaction(() => {
@@ -138,4 +153,49 @@ export function entitiesInChapter(db: Db, chapterId: number): Entity[] {
     )
     .all(chapterId)
   return rows.map(entityRowToEntity)
+}
+
+// Recherche plein texte dans le livre : insensible à la casse ET aux accents
+// (même repliement que l'autolink, via foldWithMap — la map reconvertit la
+// position de la première occurrence repliée en position d'origine, dont on
+// découpe le snippet sans jamais altérer le texte source).
+interface ChapterSearchRow {
+  id: number
+  position: number
+  title: string
+  content_text: string
+}
+export function searchInBook(db: Db, bookId: number, query: string): SearchHit[] {
+  const needle = query.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
+  if (!needle) return []
+  const rows = db
+    .prepare(
+      `SELECT id, position, title, content_text
+       FROM chapters WHERE book_id = ? ORDER BY position`
+    )
+    .all(bookId) as ChapterSearchRow[]
+  const RADIUS = 70
+  const hits: SearchHit[] = []
+  for (const row of rows) {
+    const text = row.content_text ?? ''
+    const { folded: foldedText, map } = foldWithMap(text)
+    const idx = foldedText.indexOf(needle)
+    if (idx === -1) continue
+    const start = map[idx]
+    const end = map[idx + needle.length - 1] + 1
+    const beforeStart = Math.max(0, start - RADIUS)
+    const afterEnd = Math.min(text.length, end + RADIUS)
+    hits.push({
+      chapterId: row.id,
+      chapterTitle: row.title,
+      chapterPosition: row.position,
+      start,
+      snippet: {
+        before: (beforeStart > 0 ? '…' : '') + text.slice(beforeStart, start),
+        match: text.slice(start, end),
+        after: text.slice(end, afterEnd) + (afterEnd < text.length ? '…' : '')
+      }
+    })
+  }
+  return hits
 }

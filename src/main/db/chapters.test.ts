@@ -5,7 +5,7 @@ import { getBook } from './books'
 import { createEntity } from './entities'
 import {
   countWords, listChapters, listChapterSummaries, getChapter, createChapter,
-  saveChapterContent, renameChapter, setChapterStatus,
+  saveChapterContent, renameChapter, setChapterStatus, setChapterGoal, searchInBook,
   reorderChapters, deleteChapter, entityOccurrences, entitiesInChapter, saveChapterSummary
 } from './chapters'
 
@@ -63,10 +63,45 @@ describe('repository chapters', () => {
     expect(listChapters(db, bookId)).toHaveLength(0)
   })
 
+  it('recherche plein texte, insensible à la casse et aux accents', () => {
+    const c1 = createChapter(db, bookId, 'Ouverture')
+    saveChapterContent(db, c1.id, 'Ia', "Il était une fois Brest.")
+    const c2 = createChapter(db, bookId, 'Suite')
+    saveChapterContent(db, c2.id, 'Ib', 'Une île lointaine où brétonnaient les Échos.')
+    const c3 = createChapter(db, bookId, 'Autre')
+    saveChapterContent(db, c3.id, 'Ic', 'Sans rapport.')
+
+    const hits = searchInBook(db, bookId, 'brETONNAient')
+    expect(hits).toHaveLength(1)
+    expect(hits[0].chapterId).toBe(c2.id)
+    expect(hits[0].snippet.match).toBe('brétonnaient')
+    // la requête vide ne renvoie rien
+    expect(searchInBook(db, bookId, '  ')).toEqual([])
+  })
+
+  it('searchInBook : retourne un snippet autour de la première occurrence', () => {
+    const c = createChapter(db, bookId, 'Ch. 1')
+    saveChapterContent(db, c.id, '{}', 'xxxxx AAA yyyyy')
+    const hits = searchInBook(db, bookId, 'aaa')
+    expect(hits[0].snippet.match).toBe('AAA')
+    expect(hits[0].snippet.before.endsWith('xxxxx ')).toBe(true)
+    expect(hits[0].snippet.after.startsWith(' yyyyy')).toBe(true)
+  })
+
   it('enregistre le résumé manuel', () => {
     const c = createChapter(db, bookId, 'Ch. 1')
     saveChapterSummary(db, c.id, 'Mara découvre la lettre.')
     expect(getChapter(db, c.id).summary).toBe('Mara découvre la lettre.')
+  })
+
+  it('met à jour l’objectif de mots du chapitre', () => {
+    const c = createChapter(db, bookId, 'Ch. 1')
+    expect(getChapter(db, c.id).wordGoal).toBeNull()
+    setChapterGoal(db, c.id, 5000)
+    expect(getChapter(db, c.id).wordGoal).toBe(5000)
+    expect(listChapters(db, bookId)[0].wordGoal).toBe(5000)
+    setChapterGoal(db, c.id, null)
+    expect(getChapter(db, c.id).wordGoal).toBeNull()
   })
 
   it('listChapterSummaries : id, position, titre, résumé, dans l’ordre, sans le contenu', () => {

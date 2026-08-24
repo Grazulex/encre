@@ -45,7 +45,19 @@ function fold(s: string): string {
 // la plage d'origine correspondante via `map[i]` (début) et `map[j - 1] + 1`
 // (fin, puisque chaque caractère d'origine occupe exactement une unité de
 // code dans `text`).
-function foldWithMap(text: string): { folded: string; map: number[] } {
+// Repliement du texte source avec table d'index : `map[i]` est l'index (dans
+// `text`, en unités de code UTF-16) du caractère d'origine dont provient
+// `folded[i]`. Un caractère d'origine peut produire 0, 1 ou plusieurs
+// caractères repliés (accents composés, casse spéciale) : on replie chaque
+// caractère d'origine indépendamment et on pousse une entrée de map par
+// caractère replié produit, ce qui garde `map.length === folded.length` et
+// permet de retrouver, pour n'importe quelle plage `[i, j)` dans `folded`,
+// la plage d'origine correspondante via `map[i]` (début) et `map[j - 1] + 1`
+// (fin, puisque chaque caractère d'origine occupe exactement une unité de
+// code dans `text`). Exportée (en plus de findNameMatches) pour la recherche
+// plein texte des chapitres (db/chapters.ts), qui a le même besoin de
+// reconvertir des positions repliées en positions d'origine.
+export function foldWithMap(text: string): { folded: string; map: number[] } {
   let folded = ''
   const map: number[] = []
   for (let i = 0; i < text.length; i++) {

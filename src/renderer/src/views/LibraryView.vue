@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { BookStatus } from '../../../shared/types'
 import { BOOK_STATUS_LABELS } from '../../../shared/labels'
@@ -8,6 +8,7 @@ import BookCard from '../components/BookCard.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import ImportWizard from '../components/ImportWizard.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import ThemeMenu from '../components/ThemeMenu.vue'
 
 const store = useLibraryStore()
 const router = useRouter()
@@ -20,6 +21,32 @@ const importing = ref(false)
 onMounted(() => store.load())
 
 const statusFilter = ref<BookStatus | null>(null)
+
+// Même idiome que ClaudePanel : le filtre choisi reste mémorisé tant que la
+// session vit (l'utilisateur ne veut pas le re-sélectionner à chaque retour
+// sur la bibliothèque), sessionStorage plutôt que le store Pinia — on écarte
+// les valeurs inconnues à la lecture (statut renommé/supprimé ultérieurement).
+const STATUS_FILTER_KEY = 'encre.library.statusFilter'
+
+function readStatusFilter(): BookStatus | null {
+  try {
+    const value = sessionStorage.getItem(STATUS_FILTER_KEY)
+    return value && (Object.keys(BOOK_STATUS_LABELS) as string[]).includes(value)
+      ? (value as BookStatus)
+      : null
+  } catch {
+    return null
+  }
+}
+statusFilter.value = readStatusFilter()
+watch(statusFilter, (value) => {
+  try {
+    sessionStorage.setItem(STATUS_FILTER_KEY, value ?? '')
+  } catch {
+    // sessionStorage indisponible : le filtre reste actif en mémoire, seule
+    // la mémorisation entre visites de la page est perdue.
+  }
+})
 
 const filteredBooks = computed(() =>
   statusFilter.value === null
@@ -82,6 +109,7 @@ function cancelRemoval(): void {
         <p v-if="bookCountLabel" class="count">{{ bookCountLabel }}</p>
       </div>
       <div class="header-actions">
+        <ThemeMenu />
         <button type="button" @click="importing = true">Importer un livre</button>
         <button class="primary" type="button" @click="openCreateForm">
           <span class="plus">+</span> Nouveau livre

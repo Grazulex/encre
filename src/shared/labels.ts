@@ -7,6 +7,7 @@ export const CHAPTER_STATUS_LABELS: Record<ChapterStatus, string> = {
   final: 'Final'
 }
 export const BOOK_STATUS_LABELS: Record<BookStatus, string> = {
+  reserve: 'Réservé',
   en_cours: 'En cours',
   termine: 'Terminé',
   archive: 'Archivé'

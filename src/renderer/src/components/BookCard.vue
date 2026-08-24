@@ -162,13 +162,36 @@ h3 {
   color: var(--fg-muted);
   font-size: 12px;
 }
+/* Pastille de statut (Idée thème) : une puce qui reprend la couleur du
+   statut --status-* posée par le store theme — un coup d'œil suffit à voir
+   où en est le livre. La puce hérite de currentColor pour rester assortie au
+   libellé ; Archive reprend fg-muted (le gris, « ranger »), cohérent avec
+   l'usage précédent. */
 .status {
   font-weight: 600;
   color: var(--fg);
 }
+.status::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: 1px;
+  background: currentColor;
+}
+.status.reserve {
+  color: var(--status-reserve);
+}
+.status.en_cours {
+  color: var(--status-en-cours);
+}
+.status.termine {
+  color: var(--status-termine);
+}
 .status.archive {
-  color: var(--fg-muted);
-  font-weight: 500;
+  color: var(--status-archive);
 }
 .dot {
   margin: 0 4px;

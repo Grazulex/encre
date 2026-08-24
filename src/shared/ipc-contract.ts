@@ -1,7 +1,7 @@
 import type {
   BackupStatus, Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
   Entity, EntityCreate, EntityKind, EntityOccurrence, EntityPatch,
-  FormatConventions, Illustration, OutlineNote, Series, Snapshot, TimelineEvent, TimelineEventPatch
+  FormatConventions, Illustration, OutlineNote, SearchHit, Series, Snapshot, TimelineEvent, TimelineEventPatch
 } from './types'
 
 export interface EncreApi {
@@ -23,6 +23,8 @@ export interface EncreApi {
     reorder(bookId: number, orderedIds: number[]): Promise<void>
     remove(id: number): Promise<void>
     saveSummary(id: number, summary: string): Promise<void>
+    setGoal(id: number, wordGoal: number | null): Promise<void>
+    search(bookId: number, query: string): Promise<SearchHit[]>
   }
   entities: {
     listByBook(bookId: number, kind?: EntityKind): Promise<Entity[]>

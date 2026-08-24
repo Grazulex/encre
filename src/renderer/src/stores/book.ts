@@ -31,7 +31,11 @@ export const useBookStore = defineStore('book', {
     // Message d'échec de la dernière tentative de sauvegarde, affiché dans la
     // StatusBar tant qu'aucune sauvegarde n'a réussi depuis. null si la
     // dernière tentative (ou aucune tentative) n'a pas échoué.
-    saveError: null as string | null
+    saveError: null as string | null,
+    // Reprise automatique (rouvrir le livre où on l'a laissé) : le scrollTop
+    // à restaurer dans l'éditeur au chargement du chapitre de reprise, lu en
+    // localStorage par `open` puis consommé (et remis à null) par EditorPane.
+    repriseScrollTop: null as number | null
   }),
   actions: {
     markDirty() {
@@ -46,7 +50,28 @@ export const useBookStore = defineStore('book', {
         this.chapters = await window.encre.chapters.listByBook(bookId)
         this.currentChapter = null
         this.section = 'chapitres'
-        if (this.chapters.length > 0) await this.openChapter(this.chapters[0].id)
+        // Reprise : rouvrir le dernier chapitre édité (et sa position de
+        // scroll, consommée par EditorPane) si le livre a déjà été ouvert
+        // cette fois-ci ou les fois précédentes — sinon premier chapitre,
+        // comme avant. La position est stockée par EditorPane (sauverReprise).
+        let reprise: { chapterId: number; scrollTop: number } | null = null
+        try {
+          const raw = localStorage.getItem(`encre.reprise.${bookId}`)
+          reprise = raw ? (JSON.parse(raw) as { chapterId: number; scrollTop: number }) : null
+        } catch {
+          reprise = null
+        }
+        this.repriseScrollTop = null
+        const repriseValide =
+          reprise &&
+          typeof reprise.chapterId === 'number' &&
+          this.chapters.some((c) => c.id === reprise.chapterId)
+        if (repriseValide && reprise) {
+          await this.openChapter(reprise.chapterId)
+          this.repriseScrollTop = typeof reprise.scrollTop === 'number' ? reprise.scrollTop : null
+        } else if (this.chapters.length > 0) {
+          await this.openChapter(this.chapters[0].id)
+        }
       } catch (err) {
         console.error('Échec du chargement du livre', err)
         useUiStore().toast('Impossible de charger — élément introuvable.')
@@ -196,6 +221,39 @@ export const useBookStore = defineStore('book', {
         console.error('Échec de la sauvegarde du résumé', err)
         useUiStore().toast("Échec de l'enregistrement du résumé.")
       }
+    },
+    async setChapterGoal(id: number, wordGoal: number | null) {
+      try {
+        await window.encre.chapters.setGoal(id, wordGoal)
+        await this.refreshChapters()
+        if (this.currentChapter?.id === id) this.currentChapter.wordGoal = wordGoal
+        useUiStore().toast(
+          wordGoal == null ? 'Objectif du chapitre effacé.' : 'Objectif enregistré.'
+        )
+      } catch (err) {
+        console.error("Échec de la sauvegarde de l'objectif", err)
+        useUiStore().toast("Échec de l'enregistrement de l'objectif.")
+      }
+    },
+    // Reprise : mémorise durablement [chapitre, position de scroll] pour le
+    // livre en cours — le store ne perd ainsi rien quand l'app se ferme, et
+    // `open` la relit. Sauvée par EditorPane aux changements de chapitre
+    // (avec l'id du chapitre QUITTÉ — au moment du watcher, currentChapter
+    // pointe déjà vers le nouveau) et au flush de fermeture.
+    sauverReprise(chapterId: number, scrollTop: number) {
+      if (!this.book) return
+      try {
+        localStorage.setItem(
+          `encre.reprise.${this.book.id}`,
+          JSON.stringify({ chapterId, scrollTop })
+        )
+      } catch {
+        // stockage indisponible : la reprise est simplement perdue pour la
+        // prochaine ouverture.
+      }
+    },
+    clearRepriseScroll() {
+      this.repriseScrollTop = null
     }
   }
 })

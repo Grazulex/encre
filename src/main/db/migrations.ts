@@ -136,5 +136,8 @@ export const MIGRATIONS: string[] = [
   `,
   `
   ALTER TABLE books ADD COLUMN page_format TEXT NOT NULL DEFAULT 'broche';
+  `,
+  `
+  ALTER TABLE chapters ADD COLUMN word_goal INTEGER;
   `
 ]

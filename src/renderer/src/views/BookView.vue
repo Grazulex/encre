@@ -18,6 +18,8 @@ import EntityDrawer from '../components/EntityDrawer.vue'
 import BookSettingsPanel from '../components/BookSettingsPanel.vue'
 import ExportDialog from '../components/ExportDialog.vue'
 import ClaudePanel from '../components/ClaudePanel.vue'
+import ThemeMenu from '../components/ThemeMenu.vue'
+import BookSearch from '../components/BookSearch.vue'
 
 const props = defineProps<{ bookId: number }>()
 const store = useBookStore()
@@ -67,6 +69,14 @@ const exportOpen = ref(false)
 const showAiPanel = computed(
   () => store.section === 'chapitres' && ai.open && !!store.currentChapter
 )
+
+// Recherche plein texte du livre (Task « recherche ») : ouverte par l'icône
+// loupe de l'en-tête de l'éditeur (qui émet 'book:open-search', voir
+// EditorPane.openSearch) ou par ⌘F (useShortcuts plus bas).
+const searchOpen = ref(false)
+function onPaletteOpenSearch(): void {
+  searchOpen.value = true
+}
 
 // Piloté en JS plutôt que par une classe .focus figeant deux valeurs : la
 // grille doit absorber une troisième piste (le panneau Claude) sans casser le
@@ -118,7 +128,10 @@ useShortcuts([
   // ici quand le mode focus est éteint ; c'est sans conséquence aujourd'hui
   // (aucun autre consommateur d'Échap dans cette vue) mais à surveiller si un
   // futur plan (palette ⌘K, modales) ajoute un usage concurrent d'Échap.
-  { combo: 'escape', handler: () => focusMode.value && (focusMode.value = false) }
+  { combo: 'escape', handler: () => focusMode.value && (focusMode.value = false) },
+  // Recherche plein texte du livre — fonctionne quelle que soit la section
+  // (le livre est toujours ouvert), contrairement au mode focus.
+  { combo: 'meta+f', handler: () => (searchOpen.value = true) }
 ])
 
 // Bascule du mode focus depuis la palette de commandes (⌘K). Même garde que
@@ -130,10 +143,16 @@ function onPaletteFocusToggle(): void {
 }
 onMounted(() => window.addEventListener('palette:focus-toggle', onPaletteFocusToggle))
 onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPaletteFocusToggle))
+onMounted(() => window.addEventListener('book:open-search', onPaletteOpenSearch))
+onBeforeUnmount(() => window.removeEventListener('book:open-search', onPaletteOpenSearch))
 </script>
 
 <template>
-  <div class="book-space" :class="{ focus: focusMode }" :style="{ gridTemplateColumns: gridColumns }">
+  <div
+    class="book-space"
+    :class="{ focus: focusMode }"
+    :style="{ gridTemplateColumns: gridColumns }"
+  >
     <aside :aria-hidden="focusMode" :inert="focusMode">
       <!-- Bande de fenêtre (audit UI/UX, proposition #5) : titleBarStyle
            'hiddenInset' (src/main/index.ts) fond les feux tricolores dans
@@ -172,13 +191,16 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
               />
             </svg>
           </button>
+          <ThemeMenu align="left" />
         </div>
         <button class="export-book" type="button" @click="exportOpen = true">Exporter…</button>
         <p class="meta">
           <span v-if="store.book.author">{{ store.book.author }}</span>
           <span v-if="store.book.author && store.book.genre" class="dot">·</span>
           <span v-if="store.book.genre">{{ store.book.genre }}</span>
-          <span v-if="(store.book.author || store.book.genre) && store.book.seriesName" class="dot">·</span>
+          <span v-if="(store.book.author || store.book.genre) && store.book.seriesName" class="dot"
+            >·</span
+          >
           <span v-if="store.book.seriesName">{{ store.book.seriesName }}</span>
         </p>
         <p class="progress">{{ progress }}</p>
@@ -220,6 +242,7 @@ onBeforeUnmount(() => window.removeEventListener('palette:focus-toggle', onPalet
     </main>
     <ClaudePanel v-if="showAiPanel" />
     <EntityDrawer />
+    <BookSearch v-if="searchOpen" @close="searchOpen = false" />
     <BookSettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
     <ExportDialog v-if="exportOpen" @close="exportOpen = false" />
   </div>
