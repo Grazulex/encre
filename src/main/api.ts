@@ -7,6 +7,8 @@ import * as books from './db/books'
 import * as chapters from './db/chapters'
 import * as entities from './db/entities'
 import * as dbIllustrations from './db/illustrations'
+import * as dbBookMedia from './db/bookMedia'
+import { addBookMediaFiles, removeBookMedia } from './bookMedia'
 import * as outline from './db/outline'
 import * as timeline from './db/timeline'
 import * as snapshots from './db/snapshots'
@@ -109,7 +111,10 @@ export function importChapterFromFile(db: Db, bookId: number, filePath: string):
 // createApi n'implémente pas EncreApi['app'] — registerIpc ignore ce domaine.
 // `ai` : createApi ne fournit que la part invoke (MainAi, voir plus haut) ; les
 // on* restent préload-only, comme pour `app`.
-export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi, 'app' | 'ai'> & { ai: MainAi } {
+export function createApi(
+  db: Db,
+  options: CreateApiOptions = {}
+): Omit<EncreApi, 'app' | 'ai'> & { ai: MainAi } {
   const baseRunner = options.runner ?? createSdkRunner()
   const emit = options.emitAiEvent ?? defaultEmit
   // AiService.start() appelle runner.run(...) de façon synchrone (avant de retourner
@@ -122,7 +127,8 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
   // invocation d'un callback — `createSdkRunner` a de toute façon un `await` avant
   // tout `onChunk`, donc ce report est sans effet perceptible en production.
   const runner: AiRunner = {
-    run: (params, onChunk, signal) => Promise.resolve().then(() => baseRunner.run(params, onChunk, signal))
+    run: (params, onChunk, signal) =>
+      Promise.resolve().then(() => baseRunner.run(params, onChunk, signal))
   }
   const service = new AiService(runner)
 
@@ -214,6 +220,56 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
           }
         }
         return updated
+      }
+    },
+    // Magasin de médias du livre. Volontairement séparé d'`illustrations` :
+    // ces fichiers ne sont jamais insérables dans le manuscrit. Ils vivent dans
+    // le même dossier userData/media (donc couverts par la sauvegarde git) mais
+    // sous un préfixe de nom distinct, cf. src/main/bookMedia.ts.
+    bookMedia: {
+      listByBook: async (bookId) => dbBookMedia.listBookMedia(db, bookId),
+      add: async (bookId, role) => {
+        const { app, dialog } = await import('electron')
+        const res = await dialog.showOpenDialog({
+          title: 'Ajouter des médias',
+          filters: [{ name: 'Images et PDF', extensions: ['png', 'jpg', 'jpeg', 'webp', 'pdf'] }],
+          properties: ['openFile', 'multiSelections']
+        })
+        if (res.canceled || res.filePaths.length === 0) return []
+        const mediaDir = join(app.getPath('userData'), 'media')
+        return addBookMediaFiles(db, bookId, role, res.filePaths, mediaDir)
+      },
+      update: async (id, patch) => dbBookMedia.updateBookMedia(db, id, patch),
+      remove: async (id) => {
+        const { app } = await import('electron')
+        removeBookMedia(db, id, join(app.getPath('userData'), 'media'))
+      },
+      reveal: async (id) => {
+        const { app, shell } = await import('electron')
+        const media = dbBookMedia.getBookMedia(db, id)
+        shell.showItemInFolder(join(app.getPath('userData'), 'media', media.fileName))
+      },
+      // Sortir une copie du magasin : c'est ce qu'on fait d'une couverture le
+      // jour où on la dépose chez un imprimeur ou un distributeur.
+      saveAs: async (id) => {
+        const { app, dialog } = await import('electron')
+        const media = dbBookMedia.getBookMedia(db, id)
+        const source = join(app.getPath('userData'), 'media', media.fileName)
+        // Le nom lisible est libre et a pu être renommé sans extension ; on
+        // recolle celle du fichier réel, sinon la copie sort sans extension et
+        // le système ne sait plus l'ouvrir.
+        const extReelle = extname(media.fileName)
+        const propose =
+          extname(media.displayName).toLowerCase() === extReelle.toLowerCase()
+            ? media.displayName
+            : `${media.displayName}${extReelle}`
+        const res = await dialog.showSaveDialog({
+          title: 'Enregistrer une copie',
+          defaultPath: propose
+        })
+        if (res.canceled || !res.filePath) return null
+        copyFileSync(source, res.filePath)
+        return res.filePath
       }
     },
     illustrations: {
@@ -569,16 +625,26 @@ export function createApi(db: Db, options: CreateApiOptions = {}): Omit<EncreApi
       status: async () =>
         options.backup?.status() ??
         ({
-          configured: false, running: false, missingBinary: null,
-          lastCommitAt: null, lastPushAt: null, lastError: null,
+          configured: false,
+          running: false,
+          missingBinary: null,
+          lastCommitAt: null,
+          lastPushAt: null,
+          lastError: null,
           pending: {
-            chaptersChanged: 0, chaptersAdded: 0, chaptersRemoved: 0,
-            wordsDelta: 0, mediaAdded: 0, booksAdded: 0, changedTitles: []
+            chaptersChanged: 0,
+            chaptersAdded: 0,
+            chaptersRemoved: 0,
+            wordsDelta: 0,
+            mediaAdded: 0,
+            booksAdded: 0,
+            changedTitles: []
           },
           lastDiff: null
         } as BackupStatus),
       runNow: async () => {
-        if (!options.backup) throw new Error('La sauvegarde n\'est pas configurée sur cette machine.')
+        if (!options.backup)
+          throw new Error("La sauvegarde n'est pas configurée sur cette machine.")
         return options.backup.runNow()
       }
     }

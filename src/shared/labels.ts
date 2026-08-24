@@ -1,4 +1,4 @@
-import type { BookSection, BookStatus, ChapterStatus } from './types'
+import type { BookMediaRole, BookSection, BookStatus, ChapterStatus } from './types'
 
 export const CHAPTER_STATUS_LABELS: Record<ChapterStatus, string> = {
   brouillon: 'Brouillon',
@@ -18,4 +18,18 @@ export const SECTION_LABELS: Record<BookSection, string> = {
   lieux: 'Lieux',
   chronologie: 'Chronologie',
   plan: 'Plan'
+}
+
+// Le rôle « couverture broché » est rangé mais n'entre JAMAIS dans le PDF
+// exporté : la couverture d'un livre papier part séparément à l'imprimeur.
+// Seul « couverture EPUB » est branché sur un export (cf. src/main/epub/index.ts).
+export const BOOK_MEDIA_ROLE_LABELS: Record<BookMediaRole, string> = {
+  'couverture-epub': 'Couverture EPUB',
+  'couverture-broche': 'Couverture brochée',
+  'couverture-relie': 'Couverture reliée',
+  quatrieme: 'Quatrième de couverture',
+  banniere: 'Bannière',
+  vignette: 'Vignette',
+  'portrait-auteur': "Portrait d'auteur",
+  autre: 'Autre'
 }

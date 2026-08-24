@@ -1,7 +1,26 @@
 import type {
-  BackupStatus, Book, BookCreate, BookPatch, Chapter, ChapterMeta, ChapterStatus,
-  Entity, EntityCreate, EntityKind, EntityOccurrence, EntityPatch,
-  FormatConventions, Illustration, OutlineNote, SearchHit, Series, Snapshot, TimelineEvent, TimelineEventPatch
+  BackupStatus,
+  Book,
+  BookCreate,
+  BookPatch,
+  Chapter,
+  ChapterMeta,
+  ChapterStatus,
+  BookMedia,
+  BookMediaRole,
+  Entity,
+  EntityCreate,
+  EntityKind,
+  EntityOccurrence,
+  EntityPatch,
+  FormatConventions,
+  Illustration,
+  OutlineNote,
+  SearchHit,
+  Series,
+  Snapshot,
+  TimelineEvent,
+  TimelineEventPatch
 } from './types'
 
 export interface EncreApi {
@@ -17,7 +36,11 @@ export interface EncreApi {
     listByBook(bookId: number): Promise<ChapterMeta[]>
     get(id: number): Promise<Chapter>
     create(bookId: number, title: string): Promise<ChapterMeta>
-    saveContent(id: number, contentJson: string, contentText: string): Promise<{ wordCount: number }>
+    saveContent(
+      id: number,
+      contentJson: string,
+      contentText: string
+    ): Promise<{ wordCount: number }>
     rename(id: number, title: string): Promise<void>
     setStatus(id: number, status: ChapterStatus): Promise<void>
     reorder(bookId: number, orderedIds: number[]): Promise<void>
@@ -36,12 +59,26 @@ export interface EncreApi {
     inChapter(chapterId: number): Promise<Entity[]>
     pickImage(id: number): Promise<Entity>
   }
+  // Magasin de médias du livre : les livrables qui entourent le texte
+  // (couvertures, promo). À ne pas confondre avec `illustrations`, qui sont des
+  // planches insérables DANS le manuscrit — voir BookMedia dans types.ts.
+  bookMedia: {
+    listByBook(bookId: number): Promise<BookMedia[]>
+    add(bookId: number, role: BookMediaRole): Promise<BookMedia[]> // showOpenDialog ; [] si annulé
+    update(
+      id: number,
+      patch: { role?: BookMediaRole; displayName?: string; note?: string }
+    ): Promise<BookMedia>
+    remove(id: number): Promise<void> // supprime ligne + fichier
+    reveal(id: number): Promise<void> // montre le fichier dans le Finder
+    saveAs(id: number): Promise<string | null> // copie ailleurs ; null si annulé
+  }
   illustrations: {
     listByBook(bookId: number): Promise<Illustration[]>
-    add(bookId: number): Promise<Illustration[]>       // showOpenDialog multiSelections ; [] si annulé
+    add(bookId: number): Promise<Illustration[]> // showOpenDialog multiSelections ; [] si annulé
     rename(id: number, displayName: string): Promise<Illustration>
-    remove(id: number): Promise<void>                  // supprime ligne + fichier media ; orphelin toléré
-    usage(id: number): Promise<number>                 // nb de chapitres référençant le fichier
+    remove(id: number): Promise<void> // supprime ligne + fichier media ; orphelin toléré
+    usage(id: number): Promise<number> // nb de chapitres référençant le fichier
   }
   outline: {
     listByBook(bookId: number): Promise<OutlineNote[]>
@@ -59,35 +96,46 @@ export interface EncreApi {
     remove(id: number): Promise<void>
   }
   importer: {
-    scanFolder(): Promise<{ folder: string; files: { file: string; title: string }[] } | null>  // showOpenDialog (dossier) + scanChapterFiles ; null si annulé
-    importBook(folder: string, orderedFiles: string[], bookTitle: string): Promise<Book>       // création livre + chapitres dans l'ordre donné
-    importChapter(bookId: number): Promise<ChapterMeta | null>                                 // showOpenDialog (fichier .md) ; ajoute un chapitre au livre existant ; null si annulé
+    scanFolder(): Promise<{ folder: string; files: { file: string; title: string }[] } | null> // showOpenDialog (dossier) + scanChapterFiles ; null si annulé
+    importBook(folder: string, orderedFiles: string[], bookTitle: string): Promise<Book> // création livre + chapitres dans l'ordre donné
+    importChapter(bookId: number): Promise<ChapterMeta | null> // showOpenDialog (fichier .md) ; ajoute un chapitre au livre existant ; null si annulé
   }
   exporter: {
-    markdown(bookId: number): Promise<string | null>                     // showOpenDialog (dossier cible) ; écrit NN-titre.md par chapitre ; retourne le dossier ; null si annulé
-    epub(bookId: number, chapterIds: number[]): Promise<string | null>   // showSaveDialog ; construit un .epub (OPF/NCX/XHTML) à partir des chapitres sélectionnés
-    pdf(bookId: number, chapterIds: number[]): Promise<string | null>    // showSaveDialog ; fenêtre cachée + printToPDF (A5)
+    markdown(bookId: number): Promise<string | null> // showOpenDialog (dossier cible) ; écrit NN-titre.md par chapitre ; retourne le dossier ; null si annulé
+    epub(bookId: number, chapterIds: number[]): Promise<string | null> // showSaveDialog ; construit un .epub (OPF/NCX/XHTML) à partir des chapitres sélectionnés
+    pdf(bookId: number, chapterIds: number[]): Promise<string | null> // showSaveDialog ; fenêtre cachée + printToPDF (A5)
   }
   app: {
-    onFlushRequest(cb: () => void): void   // ipcRenderer.on('app:request-flush', cb) — hors invoke
-    flushDone(): void                       // ipcRenderer.send('app:flush-done')
+    onFlushRequest(cb: () => void): void // ipcRenderer.on('app:request-flush', cb) — hors invoke
+    flushDone(): void // ipcRenderer.send('app:flush-done')
   }
   ai: {
-    prepareWrite(chapterId: number, entityIds?: number[]): Promise<{ hasSummary: boolean; defaultEntityIds: number[] }>
+    prepareWrite(
+      chapterId: number,
+      entityIds?: number[]
+    ): Promise<{ hasSummary: boolean; defaultEntityIds: number[] }>
     // CONTRAT D'ORDONNANCEMENT : rien ne garantit que la résolution de cet invoke (qui
     // porte le requestId) arrive au renderer AVANT le premier événement ai:chunk/ai:done/
     // ai:error portant ce même requestId — invoke (requête/réponse) et webContents.send
     // (événement) sont deux transports IPC indépendants. Le consommateur DOIT tamponner
     // les événements dont le requestId est encore inconnu et les réconcilier une fois que
     // startWrite() résout (voir src/main/api.ts, commentaire au site d'appel).
-    startWrite(chapterId: number, options: { instructions?: string; entityIds?: number[]; model: string; continueFromText: boolean }): Promise<string>  // requestId ; enregistre ai_session + messages
+    startWrite(
+      chapterId: number,
+      options: {
+        instructions?: string
+        entityIds?: number[]
+        model: string
+        continueFromText: boolean
+      }
+    ): Promise<string> // requestId ; enregistre ai_session + messages
     // Harmonisation de mise en forme (Task 6) : même contrat d'ordonnancement que
     // startWrite ci-dessus (ai:chunk/ai:done/ai:error partagent les mêmes canaux,
     // tamponnage/réconciliation identiques côté renderer) ; session enregistrée avec
     // task='format'. Refuse (rejette) un chapitre dont le contenu texte est vide —
     // rien à harmoniser. Pas de choix de modèle exposé ici (contrairement à
     // startWrite) : le modèle utilisé pour cette tâche ciblée est fixé côté main.
-    startFormat(chapterId: number, conventions: FormatConventions): Promise<string>  // requestId ; enregistre ai_session (task='format') + messages
+    startFormat(chapterId: number, conventions: FormatConventions): Promise<string> // requestId ; enregistre ai_session (task='format') + messages
     // Relecture (Task 2, plan 3c) : même contrat d'ordonnancement et mêmes canaux
     // ai:chunk/ai:done/ai:error que startWrite/startFormat ci-dessus ; session
     // enregistrée avec task='review'. La sortie attendue côté renderer (Task 3) est
@@ -95,7 +143,7 @@ export interface EncreApi {
     // fait après ai:done, pas ici. Refuse (rejette) un chapitre dont le contenu
     // texte est vide — rien à relire. Modèle choisi par l'appelant (contrairement à
     // startFormat) : la relecture bénéficie du même choix de modèle que l'écriture.
-    startReview(chapterId: number, options: { model: string }): Promise<string>  // requestId ; enregistre ai_session (task='review') + messages
+    startReview(chapterId: number, options: { model: string }): Promise<string> // requestId ; enregistre ai_session (task='review') + messages
     // Extraction de fiches (Task 4, plan 3c) : même contrat d'ordonnancement et
     // mêmes canaux ai:chunk/ai:done/ai:error que startWrite/startFormat/startReview
     // ci-dessus ; session enregistrée avec task='extract'. La sortie attendue côté
@@ -103,7 +151,7 @@ export interface EncreApi {
     // src/shared/types.ts) — le parsing se fait après ai:done, pas ici. Refuse
     // (rejette) un chapitre dont le contenu texte est vide — rien à extraire. Pas
     // de choix de modèle exposé ici (comme startFormat) : modèle fixé côté main.
-    startExtract(chapterId: number): Promise<string>  // requestId ; enregistre ai_session (task='extract') + messages
+    startExtract(chapterId: number): Promise<string> // requestId ; enregistre ai_session (task='extract') + messages
     // Vérification de chronologie (Task 6, plan 3c) : même contrat d'ordonnancement
     // et mêmes canaux ai:chunk/ai:done/ai:error que les autres startX ci-dessus ;
     // session enregistrée avec task='chrono' et chapterId NULL (session NIVEAU
@@ -113,7 +161,7 @@ export interface EncreApi {
     // pas ici. Refuse (rejette) un livre sans aucun chapitre — rien à vérifier.
     // Modèle choisi par l'appelant (comme startReview) : cette tâche suit le
     // sélecteur de modèle du panneau, comme la relecture.
-    startChrono(bookId: number, options: { model: string }): Promise<string>  // requestId ; enregistre ai_session (task='chrono', chapterId null) + messages
+    startChrono(bookId: number, options: { model: string }): Promise<string> // requestId ; enregistre ai_session (task='chrono', chapterId null) + messages
     // Conversion pure Markdown → JSON TipTap (Task 6), réutilisant mdToTiptapJson
     // (déjà utilisé par l'import de fichier) : ne touche à aucun chapitre en base,
     // sert uniquement à préparer le contenu proposé par startFormat avant de
@@ -121,8 +169,8 @@ export interface EncreApi {
     // EditorPane.applyFormat / stores/ai.ts).
     formatToJson(markdown: string): Promise<{ contentJson: string; contentText: string }>
     cancel(requestId: string): Promise<void>
-    onChunk(cb: (p: { requestId: string; text: string }) => void): void   // ipcRenderer.on('ai:chunk') — hors invoke
-    onDone(cb: (p: { requestId: string; text: string }) => void): void    // 'ai:done' (texte complet) — hors invoke
+    onChunk(cb: (p: { requestId: string; text: string }) => void): void // ipcRenderer.on('ai:chunk') — hors invoke
+    onDone(cb: (p: { requestId: string; text: string }) => void): void // 'ai:done' (texte complet) — hors invoke
     onError(cb: (p: { requestId: string; message: string }) => void): void // 'ai:error' — hors invoke
   }
   snapshots: {
@@ -149,5 +197,17 @@ export interface EncreApi {
 // `ai` mêle les deux : prepareWrite/startWrite/cancel sont des invoke normaux,
 // mais onChunk/onDone/onError sont préload-only (ipcRenderer.on), comme `app`.
 export const API_DOMAINS = [
-  'books', 'chapters', 'entities', 'illustrations', 'outline', 'timeline', 'importer', 'exporter', 'ai', 'snapshots', 'series', 'backup'
+  'books',
+  'chapters',
+  'entities',
+  'illustrations',
+  'bookMedia',
+  'outline',
+  'timeline',
+  'importer',
+  'exporter',
+  'ai',
+  'snapshots',
+  'series',
+  'backup'
 ] as const

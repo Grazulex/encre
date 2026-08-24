@@ -34,6 +34,14 @@ const api: EncreApi = {
     inChapter: (chapterId) => ipcRenderer.invoke('entities:inChapter', chapterId),
     pickImage: (id) => ipcRenderer.invoke('entities:pickImage', id)
   },
+  bookMedia: {
+    listByBook: (bookId) => ipcRenderer.invoke('bookMedia:listByBook', bookId),
+    add: (bookId, role) => ipcRenderer.invoke('bookMedia:add', bookId, role),
+    update: (id, patch) => ipcRenderer.invoke('bookMedia:update', id, patch),
+    remove: (id) => ipcRenderer.invoke('bookMedia:remove', id),
+    reveal: (id) => ipcRenderer.invoke('bookMedia:reveal', id),
+    saveAs: (id) => ipcRenderer.invoke('bookMedia:saveAs', id)
+  },
   illustrations: {
     listByBook: (bookId) => ipcRenderer.invoke('illustrations:listByBook', bookId),
     add: (bookId) => ipcRenderer.invoke('illustrations:add', bookId),
@@ -78,9 +86,11 @@ const api: EncreApi = {
     }
   },
   ai: {
-    prepareWrite: (chapterId, entityIds) => ipcRenderer.invoke('ai:prepareWrite', chapterId, entityIds),
+    prepareWrite: (chapterId, entityIds) =>
+      ipcRenderer.invoke('ai:prepareWrite', chapterId, entityIds),
     startWrite: (chapterId, options) => ipcRenderer.invoke('ai:startWrite', chapterId, options),
-    startFormat: (chapterId, conventions) => ipcRenderer.invoke('ai:startFormat', chapterId, conventions),
+    startFormat: (chapterId, conventions) =>
+      ipcRenderer.invoke('ai:startFormat', chapterId, conventions),
     startReview: (chapterId, options) => ipcRenderer.invoke('ai:startReview', chapterId, options),
     startExtract: (chapterId) => ipcRenderer.invoke('ai:startExtract', chapterId),
     startChrono: (bookId, options) => ipcRenderer.invoke('ai:startChrono', bookId, options),

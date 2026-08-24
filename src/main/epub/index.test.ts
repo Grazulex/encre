@@ -6,6 +6,7 @@ import JSZip from 'jszip'
 import { openDb } from '../db/connection'
 import { createApi } from '../api'
 import { buildEpub, uuidV5 } from './index'
+import { createBookMedia } from '../db/bookMedia'
 
 const doc = (...content: unknown[]): string => JSON.stringify({ type: 'doc', content })
 const para = (texte: string): unknown => ({
@@ -196,5 +197,50 @@ describe('buildEpub — archive', () => {
     expect(nav).not.toContain('Sommaire')
     const opf = await zip.file('OEBPS/content.opf')!.async('string')
     expect(opf).toContain('<dc:language>en</dc:language>')
+  })
+})
+
+describe('buildEpub — couverture depuis le magasin de médias', () => {
+  it('préfère le média de rôle « couverture-epub » à book.coverPath', async () => {
+    const { db, api, book } = await livreSimple()
+    const dir = mkdtempSync(join(tmpdir(), 'encre-epub-media-'))
+    // La couverture « écran » du livre, celle qu'affiche la bibliothèque.
+    const ecran = join(dir, 'ecran.jpg')
+    writeFileSync(ecran, 'couverture-ecran')
+    await api.books.update(book.id, { coverPath: ecran })
+    // La couverture destinée à l'ebook, rangée dans le magasin.
+    writeFileSync(join(dir, 'bm-1-1-0.jpg'), 'couverture-ebook')
+    createBookMedia(db, book.id, 'couverture-epub', 'bm-1-1-0.jpg', 'Couverture ebook')
+
+    const zip = await JSZip.loadAsync(await buildEpub(db, book.id, [], dir))
+    expect(await zip.file('OEBPS/images/couverture.jpg')!.async('string')).toBe('couverture-ebook')
+  })
+
+  it('ignore un PDF rangé sous ce rôle et retombe sur book.coverPath', async () => {
+    const { db, api, book } = await livreSimple()
+    const dir = mkdtempSync(join(tmpdir(), 'encre-epub-media-'))
+    const ecran = join(dir, 'ecran.jpg')
+    writeFileSync(ecran, 'couverture-ecran')
+    await api.books.update(book.id, { coverPath: ecran })
+    // Un PDF n'est pas une image d'EPUB valide : l'archive serait refusée par
+    // les liseuses. On retombe sur la couverture du livre plutôt que de la produire.
+    writeFileSync(join(dir, 'bm-1-1-0.pdf'), '%PDF-1.4')
+    createBookMedia(db, book.id, 'couverture-epub', 'bm-1-1-0.pdf', 'Couverture brochée')
+
+    const zip = await JSZip.loadAsync(await buildEpub(db, book.id, [], dir))
+    expect(zip.file('OEBPS/images/couverture.pdf')).toBeNull()
+    expect(await zip.file('OEBPS/images/couverture.jpg')!.async('string')).toBe('couverture-ecran')
+  })
+
+  it("n'utilise pas un média dont le fichier a disparu du disque", async () => {
+    const { db, api, book } = await livreSimple()
+    const dir = mkdtempSync(join(tmpdir(), 'encre-epub-media-'))
+    const ecran = join(dir, 'ecran.jpg')
+    writeFileSync(ecran, 'couverture-ecran')
+    await api.books.update(book.id, { coverPath: ecran })
+    createBookMedia(db, book.id, 'couverture-epub', 'bm-1-1-0.jpg', 'Fantôme')
+
+    const zip = await JSZip.loadAsync(await buildEpub(db, book.id, [], dir))
+    expect(await zip.file('OEBPS/images/couverture.jpg')!.async('string')).toBe('couverture-ecran')
   })
 })

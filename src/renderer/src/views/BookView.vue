@@ -16,6 +16,7 @@ import OutlineSection from '../components/OutlineSection.vue'
 import TimelineSection from '../components/TimelineSection.vue'
 import EntityDrawer from '../components/EntityDrawer.vue'
 import BookSettingsPanel from '../components/BookSettingsPanel.vue'
+import BookMediaPanel from '../components/BookMediaPanel.vue'
 import ExportDialog from '../components/ExportDialog.vue'
 import ClaudePanel from '../components/ClaudePanel.vue'
 import ThemeMenu from '../components/ThemeMenu.vue'
@@ -59,6 +60,13 @@ const focusMode = ref(false)
 // Panneau d'édition du livre (Task 15) : ouvert par le bouton discret ⚙ de
 // l'aside, fermé par son propre bouton « Fermer » ou Échap (BookSettingsPanel).
 const settingsOpen = ref(false)
+// Magasin de médias du livre : ouvert par le bouton discret voisin du ⚙ de
+// l'aside, même facture visuelle et même cycle de vie que settingsOpen
+// ci-dessus. Il range les livrables qui ENTOURENT le texte (couvertures,
+// quatrième, bannières, portrait d'auteur) — rien à voir avec les
+// illustrations, qui s'insèrent dans un chapitre depuis l'éditeur ; d'où son
+// point d'entrée ici, dans l'aside du livre, et non dans EditorPane.
+const mediaOpen = ref(false)
 // Dialogue d'export (Task 9) : ouvert par le bouton « Exporter… » de l'aside,
 // près du bouton d'édition ⚙ — fermé par Annuler/Échap/clic hors carte ou
 // automatiquement après un export réussi (ExportDialog).
@@ -191,6 +199,33 @@ onBeforeUnmount(() => window.removeEventListener('book:open-search', onPaletteOp
               />
             </svg>
           </button>
+          <!-- Voisin du ⚙, même classe donc même facture (pastille ronde
+               révélée au survol de l'en-tête) : ouvre le magasin de médias du
+               livre. Icône « image » pour la distinguer nettement de
+               l'engrenage. -->
+          <button
+            class="edit-book"
+            type="button"
+            title="Médias du livre"
+            aria-label="Médias du livre"
+            @click="mediaOpen = true"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <circle cx="8.5" cy="9.5" r="1.5" />
+              <path d="m3 16 5-4 4 3 3-2 6 5" />
+            </svg>
+          </button>
           <ThemeMenu align="left" />
         </div>
         <button class="export-book" type="button" @click="exportOpen = true">Exporter…</button>
@@ -244,6 +279,7 @@ onBeforeUnmount(() => window.removeEventListener('book:open-search', onPaletteOp
     <EntityDrawer />
     <BookSearch v-if="searchOpen" @close="searchOpen = false" />
     <BookSettingsPanel v-if="settingsOpen" @close="settingsOpen = false" />
+    <BookMediaPanel v-if="mediaOpen" :book-id="bookId" @close="mediaOpen = false" />
     <ExportDialog v-if="exportOpen" @close="exportOpen = false" />
   </div>
 </template>

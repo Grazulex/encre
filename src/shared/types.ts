@@ -20,8 +20,8 @@ export interface Book {
   pageFormat: BookPageFormat
   coverPath: string | null
   wordGoal: number | null
-  wordCount: number      // somme des chapitres (calculée)
-  chapterCount: number   // calculé
+  wordCount: number // somme des chapitres (calculée)
+  chapterCount: number // calculé
   seriesId: number | null
   seriesName: string | null
   createdAt: string
@@ -61,9 +61,36 @@ export interface Series {
 export interface Illustration {
   id: number
   bookId: number
-  fileName: string      // nom dans userData/media — unique, généré côté main
-  displayName: string   // nom lisible, initialisé au nom du fichier source
-  position: number      // ordre dans la bibliothèque du livre
+  fileName: string // nom dans userData/media — unique, généré côté main
+  displayName: string // nom lisible, initialisé au nom du fichier source
+  position: number // ordre dans la bibliothèque du livre
+  createdAt: string
+}
+
+// Média de production d'un livre : les livrables qui entourent le texte —
+// couvertures (ebook, broché, relié), quatrième, bannières et vignettes de
+// promotion, portrait d'auteur. RIEN À VOIR avec `Illustration` : une
+// illustration est une planche insérable DANS le texte et embarquée par les
+// exports ; un média n'entre jamais dans le manuscrit, il est rangé à côté du
+// livre. Deux tables, deux panneaux, aucun mélange possible.
+export type BookMediaRole =
+  | 'couverture-epub'
+  | 'couverture-broche'
+  | 'couverture-relie'
+  | 'quatrieme'
+  | 'banniere'
+  | 'vignette'
+  | 'portrait-auteur'
+  | 'autre'
+
+export interface BookMedia {
+  id: number
+  bookId: number
+  role: BookMediaRole
+  fileName: string // nom dans userData/media — unique, généré côté main
+  displayName: string // nom lisible, initialisé au nom du fichier source
+  note: string // mémo libre (dimensions, où il est publié, version…)
+  position: number // ordre dans le magasin du livre
   createdAt: string
 }
 

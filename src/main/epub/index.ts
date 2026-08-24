@@ -11,6 +11,7 @@ import { getBook } from '../db/books'
 import { escapeXml } from '../../shared/export'
 import { IMAGE_MEDIA_TYPES } from '../media'
 import { buildEpubCss } from './style'
+import { findBookMediaByRole } from '../db/bookMedia'
 import { buildEpubDocuments } from './documents'
 import { textesEpub } from './textes'
 
@@ -74,6 +75,31 @@ function annee(valeur: string): string {
   return correspondance ? correspondance[1] : '1970'
 }
 
+// Couverture de l'ebook. Le magasin de médias du livre prime sur book.coverPath :
+// une couverture ebook et une couverture d'écran n'ont ni les mêmes dimensions ni
+// le même cadrage, et c'est justement pour les distinguer que le magasin existe.
+// Un livre sans média de ce rôle garde EXACTEMENT le comportement d'avant — aucune
+// régression sur les livres existants.
+function resoudreCouverture(
+  db: Db,
+  bookId: number,
+  coverPath: string | null,
+  mediaDir?: string
+): string | null {
+  if (mediaDir) {
+    const media = findBookMediaByRole(db, bookId, 'couverture-epub')
+    // Le magasin accepte les PDF (la couverture brochée en est un) : un PDF n'est
+    // pas une image d'EPUB valide. Si l'auteur en a rangé un sous ce rôle, on
+    // l'ignore et on retombe sur la couverture du livre, plutôt que de produire
+    // une archive que les liseuses refusent.
+    if (media && extname(media.fileName).toLowerCase() in IMAGE_MEDIA_TYPES) {
+      const chemin = join(mediaDir, media.fileName)
+      if (existsSync(chemin)) return chemin
+    }
+  }
+  return coverPath && existsSync(coverPath) ? coverPath : null
+}
+
 export async function buildEpub(
   db: Db,
   bookId: number,
@@ -103,12 +129,13 @@ export async function buildEpub(
   // Couverture : jusqu'ici l'image entrait au manifest mais aucun document ne la
   // portait, donc elle n'apparaissait pas dans le fil de lecture de la plupart
   // des liseuses. cover.xhtml la remet dans la spine, en tête.
-  const aCouverture = !!book.coverPath && existsSync(book.coverPath)
+  const couverture = resoudreCouverture(db, bookId, book.coverPath, mediaDir)
+  const aCouverture = couverture !== null
   let couvertureXhtml = ''
-  if (aCouverture) {
-    const ext = extname(book.coverPath as string).toLowerCase()
+  if (couverture) {
+    const ext = extname(couverture).toLowerCase()
     const typeMime = IMAGE_MEDIA_TYPES[ext] ?? 'application/octet-stream'
-    zip.file(`OEBPS/images/couverture${ext}`, readFileSync(book.coverPath as string))
+    zip.file(`OEBPS/images/couverture${ext}`, readFileSync(couverture))
     manifest.push(
       `<item id="img-couverture" href="images/couverture${ext}" media-type="${typeMime}" properties="cover-image"/>`
     )

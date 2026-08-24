@@ -139,5 +139,23 @@ export const MIGRATIONS: string[] = [
   `,
   `
   ALTER TABLE chapters ADD COLUMN word_goal INTEGER;
+  `,
+  // Magasin de médias du livre. Table SÉPARÉE d'`illustrations` à dessein : une
+  // illustration est insérable dans le texte et embarquée par les exports, un
+  // média est un livrable rangé à côté du livre (couvertures, promo) qui n'entre
+  // jamais dans le manuscrit. Les confondre exposerait des bannières promo au
+  // menu d'insertion de l'éditeur.
+  `
+  CREATE TABLE book_media (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id      INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    role         TEXT NOT NULL DEFAULT 'autre',
+    file_name    TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    note         TEXT NOT NULL DEFAULT '',
+    position     INTEGER NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_book_media_book ON book_media(book_id, position);
   `
 ]
