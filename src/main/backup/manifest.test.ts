@@ -21,7 +21,7 @@ function manifest(over: Partial<Manifest> = {}): Manifest {
   return {
     version: 1,
     generatedAt: NOW.toISOString(),
-    counts: { books: 0, chapters: 0, entities: 0, illustrations: 0, media: 0 },
+    counts: { books: 0, chapters: 0, entities: 0, illustrations: 0, bookMedia: 0, media: 0 },
     books: [],
     media: [],
     chapters: [],
@@ -33,8 +33,11 @@ describe('buildManifest', () => {
   it('photographie chapitres, comptes, livres et noms de médias', () => {
     const book = createBook(db, { title: 'Livre' })
     const ch = createChapter(db, book.id, 'Ch. 1')
-    db.prepare('UPDATE chapters SET content_json = ?, word_count = ? WHERE id = ?')
-      .run('{"doc":1}', 42, ch.id)
+    db.prepare('UPDATE chapters SET content_json = ?, word_count = ? WHERE id = ?').run(
+      '{"doc":1}',
+      42,
+      ch.id
+    )
     writeFileSync(join(mediaDir, 'b.png'), 'x')
     writeFileSync(join(mediaDir, 'a.png'), 'x')
 
@@ -72,17 +75,26 @@ describe('buildManifest', () => {
 })
 
 describe('diffManifests', () => {
-  it('ne signale rien quand rien n\'a changé', () => {
+  it("ne signale rien quand rien n'a changé", () => {
     const m = manifest({
       chapters: [{ id: 1, bookId: 1, title: 'A', words: 10, hash: 'h1' }]
     })
     const d = diffManifests(m, m)
-    expect(d).toMatchObject({ chaptersChanged: 0, chaptersAdded: 0, chaptersRemoved: 0, wordsDelta: 0 })
+    expect(d).toMatchObject({
+      chaptersChanged: 0,
+      chaptersAdded: 0,
+      chaptersRemoved: 0,
+      wordsDelta: 0
+    })
   })
 
   it('attrape une réécriture à nombre de mots constant (le cas du hash)', () => {
-    const prev = manifest({ chapters: [{ id: 1, bookId: 1, title: 'A', words: 10, hash: 'avant' }] })
-    const next = manifest({ chapters: [{ id: 1, bookId: 1, title: 'A', words: 10, hash: 'apres' }] })
+    const prev = manifest({
+      chapters: [{ id: 1, bookId: 1, title: 'A', words: 10, hash: 'avant' }]
+    })
+    const next = manifest({
+      chapters: [{ id: 1, bookId: 1, title: 'A', words: 10, hash: 'apres' }]
+    })
     const d = diffManifests(prev, next)
     expect(d.chaptersChanged).toBe(1)
     expect(d.wordsDelta).toBe(0)
@@ -116,7 +128,7 @@ describe('diffManifests', () => {
 
   it('première sauvegarde (prev null) : tout est ajouté', () => {
     const next = manifest({
-      counts: { books: 1, chapters: 1, entities: 0, illustrations: 0, media: 2 },
+      counts: { books: 1, chapters: 1, entities: 0, illustrations: 0, bookMedia: 0, media: 2 },
       books: [1],
       media: ['a.png', 'b.png'],
       chapters: [{ id: 1, bookId: 1, title: 'A', words: 10, hash: 'h1' }]
@@ -134,7 +146,11 @@ describe('diffManifests', () => {
 
   it('tronque changedTitles à 5', () => {
     const chapters = Array.from({ length: 8 }, (_, i) => ({
-      id: i + 1, bookId: 1, title: `Ch ${i + 1}`, words: 1, hash: 'h'
+      id: i + 1,
+      bookId: 1,
+      title: `Ch ${i + 1}`,
+      words: 1,
+      hash: 'h'
     }))
     const d = diffManifests(null, manifest({ chapters }))
     expect(d.chaptersAdded).toBe(8)

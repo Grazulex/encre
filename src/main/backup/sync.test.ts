@@ -51,19 +51,29 @@ beforeEach(() => {
 describe('commitMessage', () => {
   it('résume le diff dans le message', () => {
     const msg = commitMessage(new Date('2026-08-23T20:15:00Z'), {
-      chaptersChanged: 3, chaptersAdded: 0, chaptersRemoved: 0,
-      wordsDelta: 1240, mediaAdded: 0, booksAdded: 0, changedTitles: []
+      chaptersChanged: 3,
+      chaptersAdded: 0,
+      chaptersRemoved: 0,
+      wordsDelta: 1240,
+      mediaAdded: 0,
+      booksAdded: 0,
+      changedTitles: []
     })
     expect(msg).toContain('3 chapitres')
     expect(msg).toContain('+1 240 mots')
   })
 
-  it('mentionne les images quand il y en a', () => {
+  it('mentionne les médias quand il y en a', () => {
     const msg = commitMessage(new Date('2026-08-23T20:15:00Z'), {
-      chaptersChanged: 0, chaptersAdded: 0, chaptersRemoved: 0,
-      wordsDelta: 0, mediaAdded: 2, booksAdded: 0, changedTitles: []
+      chaptersChanged: 0,
+      chaptersAdded: 0,
+      chaptersRemoved: 0,
+      wordsDelta: 0,
+      mediaAdded: 2,
+      booksAdded: 0,
+      changedTitles: []
     })
-    expect(msg).toContain('2 images')
+    expect(msg).toContain('2 médias')
   })
 })
 
@@ -102,8 +112,11 @@ describe('createBackupService — séquence nominale', () => {
     await svc.runNow()
 
     const ch = createChapter(db, 1, 'Ch. 2')
-    db.prepare('UPDATE chapters SET content_json = ?, word_count = ? WHERE id = ?')
-      .run('{"nouveau":1}', 300, ch.id)
+    db.prepare('UPDATE chapters SET content_json = ?, word_count = ? WHERE id = ?').run(
+      '{"nouveau":1}',
+      300,
+      ch.id
+    )
     writeFileSync(join(paths.mediaDir, 'autre.png'), 'octets')
 
     const status = await svc.status()
@@ -153,15 +166,17 @@ describe('createBackupService — instantané et manifeste', () => {
     await svc.runNow()
 
     // Le dump vient de l'instantané : il ignore ce chapitre.
-    expect(readFileSync(join(paths.repoDir, 'library.sql'), 'utf8'))
-      .not.toContain('Écrit pendant la sauvegarde')
+    expect(readFileSync(join(paths.repoDir, 'library.sql'), 'utf8')).not.toContain(
+      'Écrit pendant la sauvegarde'
+    )
 
     // Le manifeste doit dire la même chose que le dump. S'il le mentionne, le
     // run suivant ne verra plus aucun changement pour lui et le déclarera
     // sauvegardé alors que le dépôt contient l'ancien texte.
     const manifest = JSON.parse(readFileSync(join(paths.repoDir, 'manifest.json'), 'utf8'))
-    expect(manifest.chapters.map((c: { title: string }) => c.title))
-      .not.toContain('Écrit pendant la sauvegarde')
+    expect(manifest.chapters.map((c: { title: string }) => c.title)).not.toContain(
+      'Écrit pendant la sauvegarde'
+    )
 
     // Et il reste donc en attente, ce qui est la vérité.
     const status = await svc.status()
@@ -186,7 +201,7 @@ describe('createBackupService — instantanés locaux', () => {
     expect(apresDeux[1]).not.toBe(apresUn[0])
   })
 
-  it('élague les vieux instantanés, y compris ceux d\'un run manuel', async () => {
+  it("élague les vieux instantanés, y compris ceux d'un run manuel", async () => {
     mkdirSync(paths.backupsDir, { recursive: true })
     const vieux = join(paths.backupsDir, 'library-2020-01-01T00-00-00-000Z.db')
     const vieuxWal = `${vieux}-wal`
@@ -208,7 +223,7 @@ describe('createBackupService — instantanés locaux', () => {
 })
 
 describe('createBackupService — runs sans changement', () => {
-  it('n\'ajoute pas de commit quand rien n\'a changé', async () => {
+  it("n'ajoute pas de commit quand rien n'a changé", async () => {
     const svc = createBackupService(db, paths)
     const first = await svc.runNow()
     const avant = await runGit(['rev-list', '--count', 'HEAD'], { cwd: paths.repoDir })
@@ -223,7 +238,7 @@ describe('createBackupService — runs sans changement', () => {
     expect(second.lastCommitAt).toBe(first.lastCommitAt)
   })
 
-  it('commite bien dès qu\'un chapitre change', async () => {
+  it("commite bien dès qu'un chapitre change", async () => {
     const svc = createBackupService(db, paths)
     await svc.runNow()
     const avant = await runGit(['rev-list', '--count', 'HEAD'], { cwd: paths.repoDir })
@@ -236,7 +251,7 @@ describe('createBackupService — runs sans changement', () => {
   })
 })
 
-describe('createBackupService — chemins d\'échec', () => {
+describe("createBackupService — chemins d'échec", () => {
   it('garde le commit local quand le push échoue', async () => {
     const svc = createBackupService(db, paths)
     const first = await svc.runNow()
@@ -254,7 +269,7 @@ describe('createBackupService — chemins d\'échec', () => {
     expect(count.stdout.trim()).toBe('2')
   })
 
-  it('un `git add` en échec n\'est pas rapporté comme une sauvegarde réussie', async () => {
+  it("un `git add` en échec n'est pas rapporté comme une sauvegarde réussie", async () => {
     const svc = createBackupService(db, paths)
     const first = await svc.runNow()
 
@@ -280,8 +295,11 @@ describe('createBackupService — chemins d\'échec', () => {
     writeFileSync(join(paths.repoDir, '.git', 'index.lock'), '')
 
     const ch = createChapter(db, 1, 'Ch. 2')
-    db.prepare('UPDATE chapters SET content_json = ?, word_count = ? WHERE id = ?')
-      .run('{"cinq mille mots":1}', 5000, ch.id)
+    db.prepare('UPDATE chapters SET content_json = ?, word_count = ? WHERE id = ?').run(
+      '{"cinq mille mots":1}',
+      5000,
+      ch.id
+    )
 
     const second = await svc.runNow()
     expect(second.lastError).not.toBeNull()
@@ -295,7 +313,7 @@ describe('createBackupService — chemins d\'échec', () => {
     expect(later.pending.chaptersAdded).toBe(1)
   })
 
-  it('refuse d\'élaguer le dépôt distant depuis un dossier de travail amputé', async () => {
+  it("refuse d'élaguer le dépôt distant depuis un dossier de travail amputé", async () => {
     const svc = createBackupService(db, paths)
     await svc.runNow()
 
@@ -331,7 +349,7 @@ describe('createBackupService — chemins d\'échec', () => {
     expect(JSON.parse(readFileSync(paths.statePath, 'utf8')).lastError).not.toBeNull()
   })
 
-  it('libère le verrou même si l\'écriture de l\'état échoue', async () => {
+  it("libère le verrou même si l'écriture de l'état échoue", async () => {
     // Le chemin d'état est un dossier plutôt qu'un fichier : writeFileSync y
     // échoue systématiquement (EISDIR).
     mkdirSync(paths.statePath)
@@ -343,14 +361,14 @@ describe('createBackupService — chemins d\'échec', () => {
     await expect(svc.runNow()).resolves.toBeDefined()
   })
 
-  it('rejette un second runNow pendant qu\'une sauvegarde tourne', async () => {
+  it("rejette un second runNow pendant qu'une sauvegarde tourne", async () => {
     const svc = createBackupService(db, paths)
     const first = svc.runNow()
     await expect(svc.runNow()).rejects.toThrow(/en cours/)
     await first
   })
 
-  it('reconstruit lastCommitAt depuis HEAD quand l\'état a été perdu', async () => {
+  it("reconstruit lastCommitAt depuis HEAD quand l'état a été perdu", async () => {
     // Régression observée en production : l'app avait été quittée pendant un
     // push de 700 Mo, donc `runNow` n'était jamais revenu et son état n'avait
     // jamais été écrit. Au lancement suivant il n'y avait plus rien à commiter,
@@ -360,8 +378,8 @@ describe('createBackupService — chemins d\'échec', () => {
     const svc = createBackupService(db, paths)
     await svc.runNow()
 
-    rmSync(paths.statePath)                       // l'état est perdu
-    const apres = await svc.runNow()              // rien de neuf à commiter
+    rmSync(paths.statePath) // l'état est perdu
+    const apres = await svc.runNow() // rien de neuf à commiter
 
     expect(apres.lastCommitAt).not.toBeNull()
     expect(apres.lastError).toBeNull()

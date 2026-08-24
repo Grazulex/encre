@@ -40,7 +40,10 @@ export function commitMessage(now: Date, diff: BackupDiff): string {
   if (diff.wordsDelta !== 0) {
     parts.push(`${diff.wordsDelta > 0 ? '+' : '−'}${formatWords(Math.abs(diff.wordsDelta))} mots`)
   }
-  if (diff.mediaAdded > 0) parts.push(`${diff.mediaAdded} image${diff.mediaAdded > 1 ? 's' : ''}`)
+  // « médias » et non « images » : le magasin de médias du livre accepte aussi
+  // les PDF (une couverture brochée en est un), et ce compteur les mélange aux
+  // illustrations — annoncer « 1 image » pour un PDF serait faux.
+  if (diff.mediaAdded > 0) parts.push(`${diff.mediaAdded} média${diff.mediaAdded > 1 ? 's' : ''}`)
   return parts.length > 0 ? `sauvegarde ${stamp} — ${parts.join(', ')}` : `sauvegarde ${stamp}`
 }
 
@@ -234,7 +237,9 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
           // `commit` échoué. Seul l'arbre propre (result.ok) est un non-événement
           // légitime. Confondre les trois pousserait un HEAD inchangé et
           // annoncerait « sauvegardé » alors que rien n'a été enregistré.
-          throw new Error(`Commit impossible : ${result.stderr.trim().split('\n').pop() ?? 'erreur inconnue'}`)
+          throw new Error(
+            `Commit impossible : ${result.stderr.trim().split('\n').pop() ?? 'erreur inconnue'}`
+          )
         }
 
         const pushed = await pushRepo(paths.repoDir, paths.keyPath)
@@ -285,8 +290,7 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
         // donc ici un message synthétique quand aucun n'est déjà là, sans le
         // persister sur disque (le sondage suivant se rattrape via
         // `buildStatus`, qui repart de zéro).
-        state.lastError ??=
-          `État indisponible après la sauvegarde : ${err instanceof Error ? err.message : String(err)}`
+        state.lastError ??= `État indisponible après la sauvegarde : ${err instanceof Error ? err.message : String(err)}`
         return baseStatus(state, {
           chaptersChanged: 0,
           chaptersAdded: 0,

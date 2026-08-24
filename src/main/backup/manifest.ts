@@ -16,7 +16,16 @@ export interface ManifestChapter {
 export interface Manifest {
   version: 1
   generatedAt: string
-  counts: { books: number; chapters: number; entities: number; illustrations: number; media: number }
+  counts: {
+    books: number
+    chapters: number
+    entities: number
+    illustrations: number
+    /** Lignes de `book_media` : les couvertures et le matériel de promotion. */
+    bookMedia: number
+    /** Fichiers présents dans media/, les deux familles confondues. */
+    media: number
+  }
   /** Identités, pas compteurs — voir diffManifests. */
   books: number[]
   media: string[]
@@ -32,7 +41,13 @@ function count(db: Db, table: string): number {
 export function buildManifest(db: Db, mediaDir: string, now: Date): Manifest {
   const rows = db
     .prepare('SELECT id, book_id, title, word_count, content_json FROM chapters ORDER BY id')
-    .all() as { id: number; book_id: number; title: string; word_count: number; content_json: string }[]
+    .all() as {
+    id: number
+    book_id: number
+    title: string
+    word_count: number
+    content_json: string
+  }[]
 
   const chapters: ManifestChapter[] = rows.map((r) => ({
     id: r.id,
@@ -44,7 +59,9 @@ export function buildManifest(db: Db, mediaDir: string, now: Date): Manifest {
     hash: createHash('sha1').update(r.content_json).digest('hex')
   }))
 
-  const books = (db.prepare('SELECT id FROM books ORDER BY id').all() as { id: number }[]).map((b) => b.id)
+  const books = (db.prepare('SELECT id FROM books ORDER BY id').all() as { id: number }[]).map(
+    (b) => b.id
+  )
 
   // Trié : sans tri, l'ordre de readdir ferait bouger le manifeste d'une
   // sauvegarde à l'autre sans qu'aucune donnée n'ait changé.
@@ -68,6 +85,7 @@ export function buildManifest(db: Db, mediaDir: string, now: Date): Manifest {
       chapters: chapters.length,
       entities: count(db, 'entities'),
       illustrations: count(db, 'illustrations'),
+      bookMedia: count(db, 'book_media'),
       media: media.length
     },
     books,
