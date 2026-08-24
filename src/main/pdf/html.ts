@@ -6,7 +6,8 @@ import { getBook } from '../db/books'
 import { listChapters, getChapter } from '../db/chapters'
 import { tiptapToXhtml, escapeXml } from '../../shared/export'
 import type { ExportOptions } from '../../shared/export'
-import { IMAGE_MEDIA_TYPES } from '../epub'
+import { IMAGE_MEDIA_TYPES } from '../media'
+import { poserApresScene, poserPremier } from '../paragraphes'
 import { buildPrintCss } from './style'
 
 // Marqueur de coupure : le sérialiseur rend les nœuds de mise en page à leur place
@@ -49,7 +50,12 @@ function collectAnchors(docs: string[]): Ancre[] {
     walk(doc, (n) => {
       if (n?.type === 'partOpening') {
         parts += 1
-        ancres.push({ kind: 'part', id: `part-${parts}`, enseigne: '', texte: String(n.attrs?.label ?? '') })
+        ancres.push({
+          kind: 'part',
+          id: `part-${parts}`,
+          enseigne: '',
+          texte: String(n.attrs?.label ?? '')
+        })
       } else if (n?.type === 'chapterOpening') {
         chapitres += 1
         ancres.push({
@@ -81,7 +87,9 @@ function contientOuverture(contentJson: string): boolean {
 function renderToc(ancres: Ancre[], titre: string): string {
   const items = ancres.map((a) => {
     if (a.kind === 'part') return `<li class="toc-partie">${escapeXml(a.texte)}</li>`
-    const enseigne = a.enseigne ? `<span class="toc-enseigne">${escapeXml(a.enseigne)} — </span>` : ''
+    const enseigne = a.enseigne
+      ? `<span class="toc-enseigne">${escapeXml(a.enseigne)} — </span>`
+      : ''
     return `<li><a href="#${a.id}"><span class="toc-titre">${enseigne}${escapeXml(a.texte)}</span><span class="toc-fill"></span></a></li>`
   })
   return `<section class="sommaire"><h2>${escapeXml(titre)}</h2><ol>\n${items.join('\n')}\n</ol></section>`
@@ -139,7 +147,9 @@ function makeLayoutRenderer(ancres: Ancre[]): NonNullable<ExportOptions['layout'
     const enfants = children.xhtml.split(COUPURE).join('')
     return {
       md: '',
-      xhtml: entourer(`<section class="liminaire liminaire-${escapeXml(genre)}">${enfants}</section>`)
+      xhtml: entourer(
+        `<section class="liminaire liminaire-${escapeXml(genre)}">${enfants}</section>`
+      )
     }
   }
 }
@@ -162,28 +172,6 @@ function makeIllustrationRenderer(mediaDir?: string): NonNullable<ExportOptions[
   }
 }
 
-// Pose la classe du premier paragraphe (repli text-indent + petites capitales,
-// cf. style.ts) : une classe posée ici plutôt qu'un sélecteur positionnel
-// (:first-of-type), qui ne survit pas à la fragmentation de paged.js — un
-// export réel de 340 pages a montré la coupure de page recomposant le DOM
-// et perdant ces sélecteurs. Ne touche que la toute première occurrence de
-// `<p>` littéral dans ce segment — le lookahead négatif exclut un `<p></p>`
-// vide en tête (defect 2a, revue finale) : un paragraphe vide n'a ni lettrine
-// ni petites capitales à afficher, la classe irait sur le mauvais paragraphe.
-// Appelée APRÈS poserApresScene (voir segmenter) : un paragraphe déjà classé
-// `apres-scene` ne porte plus `<p>` nu, donc n'est plus une cible possible ici
-// — un paragraphe ne peut jamais recevoir les deux classes (defect 2b).
-function poserPremier(contenu: string): string {
-  return contenu.replace(/<p>(?!<\/p>)/, '<p class="premier">')
-}
-
-// Même raison que poserPremier : `.scene-break + p` ne survit pas non plus à la
-// fragmentation. Le paragraphe qui suit immédiatement un séparateur de scène
-// reçoit sa classe à l'assemblage.
-function poserApresScene(contenu: string): string {
-  return contenu.replace(/(<div class="scene-break">[\s\S]*?<\/div>\s*)<p>/g, '$1<p class="apres-scene">')
-}
-
 // Découpe le rendu d'un chapitre sur le marqueur : les tronçons déjà sectionnés
 // sortent tels quels, les autres deviennent des segments de corps. Un chapitre
 // entièrement composé de nœuds de mise en page n'a aucun segment de corps — le
@@ -202,7 +190,9 @@ function segmenter(xhtml: string, titreRepli: string | null): string {
       continue
     }
     const tete =
-      titreRepli !== null && !repliPose ? `<h1 class="titre-chapitre">${escapeXml(titreRepli)}</h1>\n` : ''
+      titreRepli !== null && !repliPose
+        ? `<h1 class="titre-chapitre">${escapeXml(titreRepli)}</h1>\n`
+        : ''
     // data-debut : seul le repli de titre a besoin de sa propre coupure de page
     // (.chapitre[data-debut='true'] en CSS) — quand une ouverture est posée,
     // elle porte déjà le break-before recto et son break-after: page, une
