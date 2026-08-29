@@ -7,6 +7,9 @@ describe('buildEpubCss', () => {
     expect(css).toContain('font-family: "EB Garamond", Baskerville, Charter, Georgia, serif')
     expect(css).toContain('text-align: justify')
     expect(css).toContain('hyphens: auto')
+    // Google Play Livres refuse -webkit-hyphens (« Bad property », 29/08/2026).
+    expect(css).not.toContain('-webkit-hyphens')
+    expect(css).toContain('-epub-hyphens: auto')
     expect(css).toContain('color: #16130f')
     expect(css).toContain('line-height: 1.5')
   })

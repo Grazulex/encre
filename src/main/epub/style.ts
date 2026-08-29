@@ -31,10 +31,11 @@ html {
      maquette sont donc exprimées relativement à ce corps. */
   line-height: 1.5;
   color: #16130f;
-  /* Les moteurs des liseuses sont en retard sur la césure : WebKit (Apple Books,
-     Kobo) veut le préfixe -webkit-, et EPUB 3 normalise -epub-. On pose les trois. */
+  /* Césure : la propriété standard, plus le préfixe -epub- normalisé par EPUB 3.
+     Pas de préfixe -webkit- : Google Play Livres le rejette (« Bad property »)
+     et le retire à la validation, avertissement à chaque envoi (29/08/2026) ;
+     WebKit moderne (Apple Books) lit hyphens sans préfixe. */
   hyphens: auto;
-  -webkit-hyphens: auto;
   -epub-hyphens: auto;
   text-align: justify;
   orphans: 2;
