@@ -14,6 +14,10 @@ const illustration = (fileName: string, displayName: string) => ({
   type: 'illustration',
   attrs: { fileName, displayName }
 })
+const vignette = (fileName: string, displayName: string) => ({
+  type: 'illustration',
+  attrs: { fileName, displayName, taille: 'vignette' }
+})
 
 async function livre(langue = 'fr') {
   const db = openDb(':memory:')
@@ -339,6 +343,19 @@ describe('buildEpubDocuments', () => {
     expect(corps.indexOf('<div class="illustration">')).toBeLessThan(corps.indexOf('Après.'))
     // Chemins de zip : littéraux, dans l'ordre de première rencontre, dédupliqués.
     expect(images).toEqual(['Élan gris.jpg', 'planche.png'])
+  })
+
+  it('classe une illustration en vignette pour que la CSS la réduise', async () => {
+    const { db, api, book } = await livre()
+    const ch = await api.chapters.create(book.id, 'Restons en contact')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(para('Merci.'), vignette('planche.png', 'QR'), para('jmauteur.com')),
+      'Merci. jmauteur.com'
+    )
+    const { documents, images } = buildEpubDocuments(db, book.id, [], mediaDir)
+    expect(documents[0].corps).toContain('<div class="illustration illustration-vignette">')
+    expect(images).toEqual(['planche.png'])
   })
 
   it('omet une illustration qui échoue à l’une des trois gardes', async () => {

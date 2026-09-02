@@ -153,7 +153,7 @@ function makeIllustrationRenderer(
   mediaDir: string | undefined,
   images: string[]
 ): NonNullable<ExportOptions['illustration']> {
-  return ({ fileName, displayName }) => {
+  return ({ fileName, displayName, taille }) => {
     if (fileName !== basename(fileName)) return null
     if (!mediaDir) return null
     const src = join(mediaDir, fileName)
@@ -163,10 +163,11 @@ function makeIllustrationRenderer(
     // zip, pas une URI. Le `src`, lui, en est une : un nom accentué ou espacé
     // non encodé viole RSC-020 d'EPUBCheck.
     if (!images.includes(fileName)) images.push(fileName)
+    const classes = taille === 'vignette' ? 'illustration illustration-vignette' : 'illustration'
     return {
       md: '',
       xhtml:
-        `<div class="illustration">` +
+        `<div class="${classes}">` +
         `<img src="images/${encodeURIComponent(fileName)}" alt="${escapeXml(displayName)}"/>` +
         `</div>`
     }
