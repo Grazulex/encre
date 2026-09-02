@@ -93,6 +93,7 @@ type LayoutDraft =
   | { kind: 'partOpening'; label: string; recto: boolean }
   | { kind: 'tableOfContents'; titre: string }
   | { kind: 'frontMatterPage'; genre: 'titre' | 'colophon' | 'dedicace' }
+  | { kind: 'illustration'; taille: 'pleine' | 'vignette' }
 
 const layoutDraft = ref<{ draft: LayoutDraft; pos: number | null } | null>(null)
 
@@ -127,6 +128,8 @@ function draftFromLayoutNode(name: string, attrs: Record<string, unknown>): Layo
         kind: 'frontMatterPage',
         genre: attrs.genre === 'colophon' || attrs.genre === 'dedicace' ? attrs.genre : 'titre'
       }
+    case 'illustration':
+      return { kind: 'illustration', taille: attrs.taille === 'vignette' ? 'vignette' : 'pleine' }
     default:
       return null
   }
@@ -1037,6 +1040,10 @@ const frontMatterDraft = computed(() => {
   const d = layoutDraft.value?.draft
   return d?.kind === 'frontMatterPage' ? d : null
 })
+const illustrationDraft = computed(() => {
+  const d = layoutDraft.value?.draft
+  return d?.kind === 'illustration' ? d : null
+})
 
 function openLayoutInsert(kind: LayoutDraft['kind']): void {
   formatMenuOpen.value = false
@@ -1456,6 +1463,15 @@ const STATUSES: { value: ChapterStatus; label: string }[] = (
                 <option value="titre">Page de titre</option>
                 <option value="colophon">Colophon</option>
                 <option value="dedicace">Dédicace</option>
+              </select>
+            </label>
+          </template>
+          <template v-else-if="illustrationDraft">
+            <label class="field">
+              <span class="field-label">Taille</span>
+              <select v-model="illustrationDraft.taille">
+                <option value="pleine">Pleine page</option>
+                <option value="vignette">Vignette (30 mm)</option>
               </select>
             </label>
           </template>

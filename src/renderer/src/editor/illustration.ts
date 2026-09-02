@@ -36,6 +36,12 @@ export const Illustration = Node.create({
         default: '',
         parseHTML: (element: HTMLElement) => element.getAttribute('alt') ?? '',
         renderHTML: () => ({})
+      },
+      taille: {
+        default: 'pleine',
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('data-taille') === 'vignette' ? 'vignette' : 'pleine',
+        renderHTML: () => ({})
       }
     }
   },
@@ -50,6 +56,7 @@ export const Illustration = Node.create({
       'img',
       mergeAttributes(HTMLAttributes, {
         'data-illustration': fileName,
+        'data-taille': node.attrs.taille === 'vignette' ? 'vignette' : 'pleine',
         alt: String(node.attrs.displayName ?? ''),
         src: `encre-media://${encodeURIComponent(fileName)}`
       })
