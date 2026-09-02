@@ -158,17 +158,18 @@ function makeLayoutRenderer(ancres: Ancre[]): NonNullable<ExportOptions['layout'
 // planche est une page à part entière, elle ne peut pas rester dans un segment de
 // corps sans en emporter le titre courant et le folio.
 function makeIllustrationRenderer(mediaDir?: string): NonNullable<ExportOptions['illustration']> {
-  return ({ fileName, displayName }) => {
+  return ({ fileName, displayName, taille }) => {
     if (fileName !== basename(fileName)) return null
     if (!mediaDir) return null
     const src = join(mediaDir, fileName)
     if (!existsSync(src) || !(extname(fileName).toLowerCase() in IMAGE_MEDIA_TYPES)) return null
-    return {
-      md: '',
-      xhtml: entourer(
-        `<section class="illustration"><img src="${escapeXml(pathToFileURL(src).toString())}" alt="${escapeXml(displayName)}"/></section>`
-      )
+    const img = `<img src="${escapeXml(pathToFileURL(src).toString())}" alt="${escapeXml(displayName)}"/>`
+    // Vignette : un simple bloc du corps, sans marqueur — elle ne quitte pas
+    // le segment de chapitre et ne provoque aucune coupure de page.
+    if (taille === 'vignette') {
+      return { md: '', xhtml: `<figure class="illustration illustration-vignette">${img}</figure>` }
     }
+    return { md: '', xhtml: entourer(`<section class="illustration">${img}</section>`) }
   }
 }
 

@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { mkdtempSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { openDb } from '../db/connection'
 import { createApi } from '../api'
 import { buildBookHtml } from './html'
@@ -278,5 +281,43 @@ describe('buildBookHtml', () => {
     }
     expect(sommaires[0]).toContain('<h2>SOMMAIRE</h2>')
     expect(sommaires[1]).toContain('<h2>TABLE DES MATIÈRES</h2>')
+  })
+
+  it('garde une illustration en vignette dans le corps du chapitre, sans coupure de page', async () => {
+    const { db, api, book } = await livre()
+    const mediaDir = mkdtempSync(join(tmpdir(), 'encre-media-'))
+    writeFileSync(join(mediaDir, 'qr.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+    const ch = await api.chapters.create(book.id, 'Restons en contact')
+    await api.chapters.saveContent(ch.id, doc(
+      para('Merci.'),
+      { type: 'illustration', attrs: { fileName: 'qr.png', displayName: 'QR', taille: 'vignette' } },
+      para('jmauteur.com')
+    ), 'Merci. jmauteur.com')
+    const html = buildBookHtml(db, book.id, [], mediaDir)
+    expect(html).toContain('<figure class="illustration illustration-vignette">')
+    expect(html).not.toContain('<section class="illustration">')
+    // La vignette vit DANS l'unique segment de corps, entre les deux paragraphes.
+    expect(html.match(/<section class="chapitre"/g)).toHaveLength(1)
+    expect(html.indexOf('Merci.')).toBeLessThan(html.indexOf('<figure'))
+    expect(html.indexOf('<figure')).toBeLessThan(html.indexOf('jmauteur.com'))
+  })
+
+  it('garde la planche pleine page en section à part', async () => {
+    const { db, api, book } = await livre()
+    const mediaDir = mkdtempSync(join(tmpdir(), 'encre-media-'))
+    writeFileSync(join(mediaDir, 'planche.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+    const ch = await api.chapters.create(book.id, 'Un')
+    await api.chapters.saveContent(ch.id, doc(
+      para('Avant.'),
+      { type: 'illustration', attrs: { fileName: 'planche.png', displayName: 'Planche' } },
+      para('Après.')
+    ), 'Avant. Après.')
+    const html = buildBookHtml(db, book.id, [], mediaDir)
+    expect(html).toContain('<section class="illustration">')
+    // La classe vignette existe forcément dans la feuille de style <style> (CSS
+    // statique, indépendante du contenu) : on vérifie son absence dans le corps
+    // du document, pas dans le HTML entier.
+    expect(html.slice(html.indexOf('<body>'))).not.toContain('illustration-vignette')
+    expect(html.match(/<section class="chapitre"/g)).toHaveLength(2)
   })
 })

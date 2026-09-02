@@ -111,7 +111,7 @@ body { margin: 0; }
   text-align-last: auto !important;
 }
 
-.liminaire, .sommaire, .page-partie, .ouverture, .illustration { page: nue; }
+.liminaire, .sommaire, .page-partie, .ouverture, section.illustration { page: nue; }
 
 /* Corps de chapitre */
 .chapitre p { margin: 0; text-indent: 1.3em; }
@@ -203,7 +203,12 @@ hr.page-break { break-after: page; border: none; margin: 0; height: 0; }
 .sommaire a::after { content: target-counter(attr(href), page); flex: none; color: #6b6459; }
 
 /* Planches pleine page */
-.illustration { break-before: page; break-after: page; text-align: center; }
-.illustration img { max-width: 100%; max-height: ${m.hauteurPlanche}; width: auto; height: auto; }
+section.illustration { break-before: page; break-after: page; text-align: center; }
+section.illustration img { max-width: 100%; max-height: ${m.hauteurPlanche}; width: auto; height: auto; }
+
+/* Vignettes : dans le flux du corps, centrées, 30 mm de large (QR code de fin
+   de livre). Aucune règle de page : elles héritent de celle du chapitre. */
+figure.illustration-vignette { margin: 1.2em 0; text-align: center; text-indent: 0; break-inside: avoid; }
+figure.illustration-vignette img { width: 30mm; max-width: 30mm; height: auto; }
 `
 }
