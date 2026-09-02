@@ -258,6 +258,26 @@ describe('nœud illustration', () => {
     expect(tiptapToMarkdown(doc)).toContain('Avant.')
     expect(tiptapToMarkdown(doc)).toContain('Après.')
   })
+
+  it('transmet la taille au callback, normalisée sur pleine par défaut', () => {
+    const tailles: string[] = []
+    const opts = {
+      illustration: ({ taille }: { fileName: string; displayName: string; taille: string }) => {
+        tailles.push(taille)
+        return { md: '', xhtml: '' }
+      }
+    }
+    const docTailles = JSON.stringify({
+      type: 'doc',
+      content: [
+        { type: 'illustration', attrs: { fileName: 'a.png', displayName: 'A' } },
+        { type: 'illustration', attrs: { fileName: 'b.png', displayName: 'B', taille: 'vignette' } },
+        { type: 'illustration', attrs: { fileName: 'c.png', displayName: 'C', taille: 'géante' } }
+      ]
+    })
+    tiptapToXhtml(docTailles, opts)
+    expect(tailles).toEqual(['pleine', 'vignette', 'pleine'])
+  })
 })
 
 describe('nœuds de mise en page', () => {

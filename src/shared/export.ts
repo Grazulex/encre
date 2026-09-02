@@ -1,4 +1,11 @@
-export interface IllustrationAttrs { fileName: string; displayName: string }
+export type IllustrationTaille = 'pleine' | 'vignette'
+export interface IllustrationAttrs { fileName: string; displayName: string; taille: IllustrationTaille }
+
+// Toute valeur autre que 'vignette' (absente, inconnue) retombe sur 'pleine' :
+// les JSON écrits avant l'attribut gardent leur rendu planche.
+export function normaliserTaille(v: unknown): IllustrationTaille {
+  return v === 'vignette' ? 'vignette' : 'pleine'
+}
 
 export interface LayoutNode { type: string; attrs: Record<string, any> }
 // Rendu des nœuds de mise en page (chapterOpening, partOpening, tableOfContents,
@@ -148,7 +155,9 @@ function renderBlockNode(node: any, opts: ExportOptions): { md: string; xhtml: s
     // les embarque, PDF les référence en file://) : sans callback, ou si le
     // callback répond null (fichier manquant), le nœud est omis — un export
     // ne doit jamais contenir de lien mort (spec §5).
-    const rendered = fileName && opts.illustration ? opts.illustration({ fileName, displayName }) : null
+    const taille = normaliserTaille(node.attrs?.taille)
+    const rendered =
+      fileName && opts.illustration ? opts.illustration({ fileName, displayName, taille }) : null
     return rendered ?? { md: '', xhtml: '' }
   }
   if (LAYOUT_TYPES.has(node.type)) {
