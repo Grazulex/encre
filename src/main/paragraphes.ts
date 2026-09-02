@@ -22,6 +22,18 @@ export function poserPremier(contenu: string): string {
 
 // Le paragraphe qui suit immédiatement un séparateur de scène reçoit sa classe
 // à l'assemblage, pour la même raison que poserPremier.
+// Le paragraphe qui suit immédiatement une illustration en vignette (le QR de
+// la page « Restons en contact », par exemple) est une légende : centré, sans
+// alinéa. Même mécanique, pour la même raison ; la vignette est un <figure> en
+// PDF et un <div> en EPUB. À poser AVANT poserPremier, sans quoi une vignette en
+// tête de chapitre laisserait son paragraphe recevoir « premier ».
+export function poserLegende(contenu: string): string {
+  return contenu.replace(
+    /(<(figure|div) class="illustration illustration-vignette">[\s\S]*?<\/\2>\s*)<p>/g,
+    '$1<p class="legende">'
+  )
+}
+
 export function poserApresScene(contenu: string): string {
   return contenu.replace(
     /(<div class="scene-break">[\s\S]*?<\/div>\s*)<p>/g,

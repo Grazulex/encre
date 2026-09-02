@@ -6,7 +6,7 @@ import { listChapters, getChapter } from '../db/chapters'
 import { tiptapToXhtml, escapeXml } from '../../shared/export'
 import type { ExportOptions } from '../../shared/export'
 import { IMAGE_MEDIA_TYPES } from '../media'
-import { poserApresScene, poserPremier } from '../paragraphes'
+import { poserApresScene, poserLegende, poserPremier } from '../paragraphes'
 import { textesEpub } from './textes'
 
 // Découpage du manuscrit en documents XHTML (spec maquette EPUB, §2). Même
@@ -310,7 +310,7 @@ function repartir(
     // AVANT poserPremier. Un chapitre qui commence par un séparateur de scène a
     // son premier <p> déjà classé « apres-scene » une fois ce premier appel
     // passé ; poserPremier, cherchant un `<p>` nu, ne le retague alors plus.
-    let corps = poserApresScene(contenu)
+    let corps = poserApresScene(poserLegende(contenu))
     if (premierSegmentCorps) {
       const avant = corps
       corps = poserPremier(corps)

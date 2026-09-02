@@ -300,6 +300,9 @@ describe('buildBookHtml', () => {
     expect(html.match(/<section class="chapitre"/g)).toHaveLength(1)
     expect(html.indexOf('Merci.')).toBeLessThan(html.indexOf('<figure'))
     expect(html.indexOf('<figure')).toBeLessThan(html.indexOf('jmauteur.com'))
+    // Le paragraphe qui suit la vignette est une légende : centré, sans alinéa.
+    expect(html).toContain('<p class="legende">jmauteur.com</p>')
+    expect(html).toContain('<p class="premier">Merci.</p>')
   })
 
   it('garde la planche pleine page en section à part', async () => {

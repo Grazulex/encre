@@ -156,6 +156,7 @@ h1.titre-chapitre {
 
 /* Vignette (QR code de fin de livre) : un tiers de l'écran, jamais plus. */
 .illustration-vignette img { max-width: 35%; }
+p.legende { text-indent: 0; text-align: center; margin-bottom: 1.2em; }
 
 /* Première de couverture (cover.xhtml). Le PDF n'a pas d'équivalent : sa couverture
    est un fichier séparé confié à l'imprimeur. Ici elle est une page du livre, et

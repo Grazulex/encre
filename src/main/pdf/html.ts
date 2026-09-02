@@ -7,7 +7,7 @@ import { listChapters, getChapter } from '../db/chapters'
 import { tiptapToXhtml, escapeXml } from '../../shared/export'
 import type { ExportOptions } from '../../shared/export'
 import { IMAGE_MEDIA_TYPES } from '../media'
-import { poserApresScene, poserPremier } from '../paragraphes'
+import { poserApresScene, poserPremier, poserLegende } from '../paragraphes'
 import { buildPrintCss } from './style'
 
 // Marqueur de coupure : le sérialiseur rend les nœuds de mise en page à leur place
@@ -206,7 +206,7 @@ function segmenter(xhtml: string, titreRepli: string | null): string {
     // a son premier <p> déjà classé "apres-scene" une fois ce premier appel
     // passé ; poserPremier, cherchant un `<p>` nu, ne le retague alors plus —
     // sans quoi ce paragraphe recevait "premier" au lieu de "apres-scene".
-    let corpsSegment = poserApresScene(contenu)
+    let corpsSegment = poserApresScene(poserLegende(contenu))
     if (premierSegmentCorps) {
       corpsSegment = poserPremier(corpsSegment)
       premierSegmentCorps = false

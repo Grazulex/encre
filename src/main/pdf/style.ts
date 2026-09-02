@@ -210,5 +210,6 @@ section.illustration img { max-width: 100%; max-height: ${m.hauteurPlanche}; wid
    de livre). Aucune règle de page : elles héritent de celle du chapitre. */
 figure.illustration-vignette { margin: 1.2em 0; text-align: center; text-indent: 0; break-inside: avoid; }
 figure.illustration-vignette img { width: 30mm; max-width: 30mm; height: auto; }
+.chapitre p.legende { text-indent: 0; text-align: center; margin-bottom: 1.2em; }
 `
 }

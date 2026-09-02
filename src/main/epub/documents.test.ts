@@ -355,6 +355,7 @@ describe('buildEpubDocuments', () => {
     )
     const { documents, images } = buildEpubDocuments(db, book.id, [], mediaDir)
     expect(documents[0].corps).toContain('<div class="illustration illustration-vignette">')
+    expect(documents[0].corps).toContain('<p class="legende">jmauteur.com</p>')
     expect(images).toEqual(['planche.png'])
   })
 
