@@ -8,6 +8,7 @@ import { createApi } from './api'
 import { registerIpc } from './ipc'
 import { backupDatabase, pruneBackups, shouldBackup } from './backup/local'
 import { createBackupService } from './backup/sync'
+import { lancerExport, parseExportArgs } from './cli'
 
 // Protocole privilégié `encre-media` : seule voie d'affichage des images
 // (couvertures de livres, photos de fiches personnages/lieux) dans le
@@ -115,7 +116,27 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Mode export sans fenêtre (voir cli.ts) : `Encre --export …`. On lit la
+  // même base que l'interface, on exporte, on quitte — sans protocole media
+  // (le PDF référence ses images en file://), sans sauvegarde, sans IPC. Un
+  // argument mal formé ou un livre en échec donne un code de sortie non nul.
+  let exportArgs: ReturnType<typeof parseExportArgs> = null
+  try {
+    exportArgs = parseExportArgs(process.argv)
+  } catch (err) {
+    console.error(`encre --export : ${err instanceof Error ? err.message : String(err)}`)
+    app.exit(2)
+    return
+  }
+  if (exportArgs) {
+    const db = openDb(join(app.getPath('userData'), 'library.db'))
+    const resultat = await lancerExport(db, join(app.getPath('userData'), 'media'), exportArgs, console.log)
+    console.log(`${resultat.ecrits.length} fichier(s) écrit(s), ${resultat.erreurs.length} échec(s)`)
+    app.exit(resultat.erreurs.length === 0 ? 0 : 1)
+    return
+  }
+
   // Set app user model id for windows
   electronApp.setAppUserModelId('be.grazulex.encre')
 
