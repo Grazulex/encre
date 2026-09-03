@@ -68,7 +68,9 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      // Le preload n'utilise que contextBridge + ipcRenderer (CJS pur) :
+      // on garde le sandbox Electron actif par défaut.
+      sandbox: true
     }
   })
 
