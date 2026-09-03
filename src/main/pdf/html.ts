@@ -28,9 +28,15 @@ interface Ancre {
 
 const entourer = (section: string): string => `${COUPURE}${section}${COUPURE}`
 
-function walk(node: any, visit: (n: any) => void): void {
+interface NodeJson {
+  type?: string
+  attrs?: { label?: unknown; enseigne?: unknown; titre?: unknown }
+  content?: NodeJson[]
+}
+
+function walk(node: NodeJson, visit: (n: NodeJson) => void): void {
   visit(node)
-  if (Array.isArray(node?.content)) node.content.forEach((c: any) => walk(c, visit))
+  if (Array.isArray(node?.content)) node.content.forEach((c) => walk(c, visit))
 }
 
 // Passe 1 : relève les ancres de tous les chapitres retenus, dans l'ordre du livre.
@@ -41,7 +47,7 @@ function collectAnchors(docs: string[]): Ancre[] {
   let parts = 0
   let chapitres = 0
   for (const json of docs) {
-    let doc: any
+    let doc: NodeJson
     try {
       doc = JSON.parse(json)
     } catch {

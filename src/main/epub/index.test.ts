@@ -3,8 +3,9 @@ import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import JSZip from 'jszip'
-import { openDb } from '../db/connection'
+import { openDb, type Db } from '../db/connection'
 import { createApi } from '../api'
+import type { Book } from '../../shared/types'
 import { buildEpub, uuidV5 } from './index'
 import { createBookMedia } from '../db/bookMedia'
 
@@ -14,7 +15,10 @@ const para = (texte: string): unknown => ({
   content: [{ type: 'text', text: texte }]
 })
 
-async function livreSimple(titre = 'Mon EPUB', auteur = 'JMS') {
+async function livreSimple(
+  titre = 'Mon EPUB',
+  auteur = 'JMS'
+): Promise<{ db: Db; api: ReturnType<typeof createApi>; book: Book }> {
   const db = openDb(':memory:')
   const api = createApi(db)
   const book = await api.books.create({ title: titre, author: auteur })

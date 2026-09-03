@@ -266,7 +266,9 @@ async function applySelection(): Promise<void> {
 
     const parts: string[] = []
     if (createdCount > 0) {
-      parts.push(`${createdCount} fiche${createdCount > 1 ? 's' : ''} créée${createdCount > 1 ? 's' : ''}`)
+      parts.push(
+        `${createdCount} fiche${createdCount > 1 ? 's' : ''} créée${createdCount > 1 ? 's' : ''}`
+      )
     }
     if (enrichedCount > 0) {
       parts.push(`${enrichedCount} enrichie${enrichedCount > 1 ? 's' : ''}`)
@@ -334,113 +336,113 @@ onMounted(async () => {
 
 <template>
   <Transition name="dialog" appear>
-  <div class="overlay" @click.self="close">
-    <div
-      ref="cardEl"
-      class="extract-card dialog-card"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Validation de l'extraction de fiches"
-      tabindex="-1"
-      @keydown="onKeydown"
-    >
-      <header>
-        <h2>Extraction de fiches</h2>
-        <span class="kbd">Échap</span>
-      </header>
+    <div class="overlay" @click.self="close">
+      <div
+        ref="cardEl"
+        class="extract-card dialog-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Validation de l'extraction de fiches"
+        tabindex="-1"
+        @keydown="onKeydown"
+      >
+        <header>
+          <h2>Extraction de fiches</h2>
+          <span class="kbd">Échap</span>
+        </header>
 
-      <div class="extract-body">
-        <p v-if="ai.extractMalformedCount > 0" class="extract-hint">
-          {{ ai.extractMalformedCount }}
-          proposition{{ ai.extractMalformedCount > 1 ? 's' : '' }} malformée{{
-            ai.extractMalformedCount > 1 ? 's' : ''
-          }}
-          ignorée{{ ai.extractMalformedCount > 1 ? 's' : '' }}.
-        </p>
-        <p v-if="ai.extractUnknownEntityCount > 0" class="extract-hint">
-          {{ ai.extractUnknownEntityCount }}
-          proposition{{ ai.extractUnknownEntityCount > 1 ? 's' : '' }} ignorée{{
-            ai.extractUnknownEntityCount > 1 ? 's' : ''
-          }}
-          (entité inconnue).
-        </p>
-        <p v-if="enrichissementDuplicateCount > 0" class="extract-hint">
-          {{ enrichissementDuplicateCount }}
-          proposition{{ enrichissementDuplicateCount > 1 ? 's' : '' }} en double ignorée{{
-            enrichissementDuplicateCount > 1 ? 's' : ''
-          }}.
-        </p>
+        <div class="extract-body">
+          <p v-if="ai.extractMalformedCount > 0" class="extract-hint">
+            {{ ai.extractMalformedCount }}
+            proposition{{ ai.extractMalformedCount > 1 ? 's' : '' }} malformée{{
+              ai.extractMalformedCount > 1 ? 's' : ''
+            }}
+            ignorée{{ ai.extractMalformedCount > 1 ? 's' : '' }}.
+          </p>
+          <p v-if="ai.extractUnknownEntityCount > 0" class="extract-hint">
+            {{ ai.extractUnknownEntityCount }}
+            proposition{{ ai.extractUnknownEntityCount > 1 ? 's' : '' }} ignorée{{
+              ai.extractUnknownEntityCount > 1 ? 's' : ''
+            }}
+            (entité inconnue).
+          </p>
+          <p v-if="enrichissementDuplicateCount > 0" class="extract-hint">
+            {{ enrichissementDuplicateCount }}
+            proposition{{ enrichissementDuplicateCount > 1 ? 's' : '' }} en double ignorée{{
+              enrichissementDuplicateCount > 1 ? 's' : ''
+            }}.
+          </p>
 
-        <template v-if="creationChoices.length === 0 && enrichissementChoices.length === 0">
-          <p class="extract-empty">Aucune proposition pour ce chapitre.</p>
-        </template>
+          <template v-if="creationChoices.length === 0 && enrichissementChoices.length === 0">
+            <p class="extract-empty">Aucune proposition pour ce chapitre.</p>
+          </template>
 
-        <section v-if="creationChoices.length > 0" class="extract-section">
-          <span class="field-label">Nouvelles fiches</span>
-          <label
-            v-for="(choice, index) in creationChoices"
-            :key="`creation-${index}`"
-            class="creation-row"
-          >
-            <input v-model="choice.checked" type="checkbox" />
-            <div class="creation-body">
-              <div class="creation-head">
-                <span class="badge" :class="{ 'badge-place': choice.creation.kind === 'place' }">
-                  {{ choice.creation.kind === 'place' ? '●' : '◆' }}
+          <section v-if="creationChoices.length > 0" class="extract-section">
+            <span class="field-label">Nouvelles fiches</span>
+            <label
+              v-for="(choice, index) in creationChoices"
+              :key="`creation-${index}`"
+              class="creation-row"
+            >
+              <input v-model="choice.checked" type="checkbox" />
+              <div class="creation-body">
+                <div class="creation-head">
+                  <span class="badge" :class="{ 'badge-place': choice.creation.kind === 'place' }">
+                    {{ choice.creation.kind === 'place' ? '●' : '◆' }}
+                  </span>
+                  <span class="creation-name">{{ choice.creation.name }}</span>
+                  <span v-if="choice.creation.aliases.length > 0" class="creation-aliases">
+                    alias : {{ choice.creation.aliases.join(', ') }}
+                  </span>
+                </div>
+                <p v-if="choice.creation.description" class="creation-description">
+                  {{ choice.creation.description }}
+                </p>
+                <span v-if="choice.duplicateOf" class="creation-duplicate-tag">
+                  Doublon possible : {{ choice.duplicateOf.name }}
                 </span>
-                <span class="creation-name">{{ choice.creation.name }}</span>
-                <span v-if="choice.creation.aliases.length > 0" class="creation-aliases">
-                  alias : {{ choice.creation.aliases.join(', ') }}
-                </span>
-              </div>
-              <p v-if="choice.creation.description" class="creation-description">
-                {{ choice.creation.description }}
-              </p>
-              <span v-if="choice.duplicateOf" class="creation-duplicate-tag">
-                Doublon possible : {{ choice.duplicateOf.name }}
-              </span>
-            </div>
-          </label>
-        </section>
-
-        <section v-if="enrichissementChoices.length > 0" class="extract-section">
-          <span class="field-label">Enrichissements</span>
-          <div
-            v-for="(choice, index) in enrichissementChoices"
-            :key="`enrichissement-${index}`"
-            class="enrich-group"
-          >
-            <div class="enrich-head">
-              <span class="badge" :class="{ 'badge-place': choice.entity.kind === 'place' }">
-                {{ choice.entity.kind === 'place' ? '●' : '◆' }}
-              </span>
-              <span class="enrich-name">{{ choice.entity.name }}</span>
-            </div>
-            <label v-for="field in choice.fields" :key="field.field" class="enrich-row">
-              <input v-model="field.checked" type="checkbox" />
-              <div class="enrich-field">
-                <span class="enrich-field-label">{{ field.label }}</span>
-                <p class="enrich-field-preview">{{ field.preview }}</p>
               </div>
             </label>
-          </div>
-        </section>
-      </div>
+          </section>
 
-      <footer>
-        <button type="button" class="ghost" :disabled="applying" @click="close">Fermer</button>
-        <button
-          type="button"
-          class="primary"
-          :disabled="applying || !hasSelection"
-          @click="applySelection"
-        >
-          <span v-if="applying" class="spinner" aria-hidden="true"></span>
-          {{ applying ? 'Application…' : 'Appliquer la sélection' }}
-        </button>
-      </footer>
+          <section v-if="enrichissementChoices.length > 0" class="extract-section">
+            <span class="field-label">Enrichissements</span>
+            <div
+              v-for="(choice, index) in enrichissementChoices"
+              :key="`enrichissement-${index}`"
+              class="enrich-group"
+            >
+              <div class="enrich-head">
+                <span class="badge" :class="{ 'badge-place': choice.entity.kind === 'place' }">
+                  {{ choice.entity.kind === 'place' ? '●' : '◆' }}
+                </span>
+                <span class="enrich-name">{{ choice.entity.name }}</span>
+              </div>
+              <label v-for="field in choice.fields" :key="field.field" class="enrich-row">
+                <input v-model="field.checked" type="checkbox" />
+                <div class="enrich-field">
+                  <span class="enrich-field-label">{{ field.label }}</span>
+                  <p class="enrich-field-preview">{{ field.preview }}</p>
+                </div>
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <footer>
+          <button type="button" class="ghost" :disabled="applying" @click="close">Fermer</button>
+          <button
+            type="button"
+            class="primary"
+            :disabled="applying || !hasSelection"
+            @click="applySelection"
+          >
+            <span v-if="applying" class="spinner" aria-hidden="true"></span>
+            {{ applying ? 'Application…' : 'Appliquer la sélection' }}
+          </button>
+        </footer>
+      </div>
     </div>
-  </div>
   </Transition>
 </template>
 

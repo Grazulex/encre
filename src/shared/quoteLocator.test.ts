@@ -14,7 +14,7 @@ describe('locateQuote', () => {
     expect(locateQuote(doc, 'le monde')).toEqual({ found: true, from: 9, to: 17 })
   })
 
-  it("localise la citation même répartie sur plusieurs nœuds texte (marques différentes)", () => {
+  it('localise la citation même répartie sur plusieurs nœuds texte (marques différentes)', () => {
     const doc: DocNode = {
       type: 'doc',
       content: [
@@ -40,9 +40,7 @@ describe('locateQuote', () => {
   it('renvoie la PREMIÈRE occurrence quand la citation apparaît plusieurs fois', () => {
     const doc: DocNode = {
       type: 'doc',
-      content: [
-        { type: 'paragraph', content: [{ type: 'text', text: 'chat chat chat' }] }
-      ]
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'chat chat chat' }] }]
     }
     const result = locateQuote(doc, 'chat')
     expect(result).toEqual({ found: true, from: 1, to: 5 })

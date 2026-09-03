@@ -2,16 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { openDb } from '../db/connection'
+import { openDb, type Db } from '../db/connection'
 import { createApi } from '../api'
+import type { Book } from '../../shared/types'
 import { buildBookHtml } from './html'
 
-function doc(...content: any[]): string {
+function doc(...content: unknown[]): string {
   return JSON.stringify({ type: 'doc', content })
 }
-const para = (t: string) => ({ type: 'paragraph', content: [{ type: 'text', text: t }] })
+const para = (t: string): unknown => ({ type: 'paragraph', content: [{ type: 'text', text: t }] })
 
-async function livre() {
+async function livre(): Promise<{ db: Db; api: ReturnType<typeof createApi>; book: Book }> {
   const db = openDb(':memory:')
   const api = createApi(db)
   const book = await api.books.create({ title: 'LA MAISON', author: 'JMS' })
@@ -22,11 +23,18 @@ describe('buildBookHtml', () => {
   it('sort les nœuds de mise en page en sections de premier niveau, corps en segments', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } },
-      para('Le cri.'),
-      para('Elle était debout.')
-    ), 'Le cri. Elle était debout.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true }
+        },
+        para('Le cri.'),
+        para('Elle était debout.')
+      ),
+      'Le cri. Elle était debout.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<section class="ouverture" id="ouv-1" data-recto="true">')
@@ -37,27 +45,45 @@ describe('buildBookHtml', () => {
     // classe posée à l'assemblage (defect 2, round 3 de revue).
     expect(html).toContain('<p class="premier">Le cri.</p>')
     // l'ouverture n'est pas imbriquée dans le segment de corps
-    expect(html.indexOf('<section class="ouverture"')).toBeLessThan(html.indexOf('<section class="chapitre">'))
+    expect(html.indexOf('<section class="ouverture"')).toBeLessThan(
+      html.indexOf('<section class="chapitre">')
+    )
     expect(html).not.toMatch(/<section class="chapitre">[\s\S]*<section class="ouverture"/)
   })
 
   it('développe le sommaire avec parties et chapitres dans l’ordre du livre', async () => {
     const { db, api, book } = await livre()
     const lim = await api.chapters.create(book.id, 'Liminaires')
-    await api.chapters.saveContent(lim.id, doc(
-      { type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } }
-    ), '')
+    await api.chapters.saveContent(
+      lim.id,
+      doc({ type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } }),
+      ''
+    )
     const c1 = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(c1.id, doc(
-      { type: 'partOpening', attrs: { label: 'Première partie', recto: true } },
-      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } },
-      para('Le cri.')
-    ), 'Le cri.')
+    await api.chapters.saveContent(
+      c1.id,
+      doc(
+        { type: 'partOpening', attrs: { label: 'Première partie', recto: true } },
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true }
+        },
+        para('Le cri.')
+      ),
+      'Le cri.'
+    )
     const c2 = await api.chapters.create(book.id, 'Deux')
-    await api.chapters.saveContent(c2.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 2', titre: 'CEUX QUI', recto: true } },
-      para('Suite.')
-    ), 'Suite.')
+    await api.chapters.saveContent(
+      c2.id,
+      doc(
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CHAPITRE 2', titre: 'CEUX QUI', recto: true }
+        },
+        para('Suite.')
+      ),
+      'Suite.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<section class="sommaire">')
@@ -83,10 +109,14 @@ describe('buildBookHtml', () => {
   it('ne replie pas quand une ouverture est posée', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Titre en base')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CH. 1', titre: 'Titre posé', recto: false } },
-      para('Texte.')
-    ), 'Texte.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        { type: 'chapterOpening', attrs: { enseigne: 'CH. 1', titre: 'Titre posé', recto: false } },
+        para('Texte.')
+      ),
+      'Texte.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).not.toContain('<h1 class="titre-chapitre">Titre en base</h1>')
@@ -106,9 +136,11 @@ describe('buildBookHtml', () => {
   it('rend un sommaire vide sans erreur quand aucune ouverture n’est posée', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Liminaires')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } }
-    ), '')
+    await api.chapters.saveContent(
+      ch.id,
+      doc({ type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } }),
+      ''
+    )
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<section class="sommaire">')
     expect(html).not.toContain('<a href="#ouv-')
@@ -117,9 +149,11 @@ describe('buildBookHtml', () => {
   it('rend une page liminaire avec son contenu et son genre', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Liminaires')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'frontMatterPage', attrs: { genre: 'colophon' }, content: [para('© 2026')] }
-    ), '© 2026')
+    await api.chapters.saveContent(
+      ch.id,
+      doc({ type: 'frontMatterPage', attrs: { genre: 'colophon' }, content: [para('© 2026')] }),
+      '© 2026'
+    )
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<section class="liminaire liminaire-colophon">')
     expect(html).toContain('<p>© 2026</p>')
@@ -128,10 +162,22 @@ describe('buildBookHtml', () => {
   it('rend le sous-titre entre le titre et le filet quand il est renseigné', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', sousTitre: '« La reconnaissance »', recto: true } },
-      para('Le cri.')
-    ), 'Le cri.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        {
+          type: 'chapterOpening',
+          attrs: {
+            enseigne: 'CHAPITRE 1',
+            titre: 'TROIS HEURES',
+            sousTitre: '« La reconnaissance »',
+            recto: true
+          }
+        },
+        para('Le cri.')
+      ),
+      'Le cri.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<p class="sous-titre">« La reconnaissance »</p>')
@@ -145,10 +191,17 @@ describe('buildBookHtml', () => {
   it('n’émet aucun élément sous-titre quand il est absent', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } },
-      para('Le cri.')
-    ), 'Le cri.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true }
+        },
+        para('Le cri.')
+      ),
+      'Le cri.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     // La feuille de style embarquée porte toujours le sélecteur .sous-titre ;
@@ -160,10 +213,17 @@ describe('buildBookHtml', () => {
   it('échappe le sous-titre', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CH. 1', titre: 'Titre', sousTitre: 'Fer & <acier>', recto: true } },
-      para('Texte.')
-    ), 'Texte.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CH. 1', titre: 'Titre', sousTitre: 'Fer & <acier>', recto: true }
+        },
+        para('Texte.')
+      ),
+      'Texte.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<p class="sous-titre">Fer &amp; &lt;acier&gt;</p>')
@@ -173,10 +233,17 @@ describe('buildBookHtml', () => {
   it('échappe les attributs XML issus de valeurs contrôlées par l’auteur', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CH. 1 & 2', titre: 'Fer <acier>', recto: true } },
-      para('Texte.')
-    ), 'Texte.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CH. 1 & 2', titre: 'Fer <acier>', recto: true }
+        },
+        para('Texte.')
+      ),
+      'Texte.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('CH. 1 &amp; 2')
@@ -189,7 +256,11 @@ describe('buildBookHtml', () => {
   it('un chapitre en repli de titre porte sa propre coupure de page et son premier paragraphe', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Sans ouverture')
-    await api.chapters.saveContent(ch.id, doc(para('Premier.'), para('Second.')), 'Premier. Second.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(para('Premier.'), para('Second.')),
+      'Premier. Second.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<section class="chapitre" data-debut="true">')
@@ -200,10 +271,14 @@ describe('buildBookHtml', () => {
   it('un chapitre avec ouverture ne porte pas data-debut : la coupure de page est déjà sur l’ouverture', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CH. 1', titre: 'Titre', recto: true } },
-      para('Le cri.')
-    ), 'Le cri.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        { type: 'chapterOpening', attrs: { enseigne: 'CH. 1', titre: 'Titre', recto: true } },
+        para('Le cri.')
+      ),
+      'Le cri.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     // La feuille embarquée référence data-debut dans son sélecteur CSS (guillemets
@@ -215,11 +290,11 @@ describe('buildBookHtml', () => {
   it('pose la classe du paragraphe qui suit un séparateur de scène, pas de celui qui le précède', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      para('Avant.'),
-      { type: 'sceneBreak' },
-      para('Après.')
-    ), 'Avant. Après.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(para('Avant.'), { type: 'sceneBreak' }, para('Après.')),
+      'Avant. Après.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<p class="apres-scene">Après.</p>')
@@ -229,10 +304,11 @@ describe('buildBookHtml', () => {
   it('ne pose pas la classe premier sur un paragraphe vide en tête de segment', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'paragraph' },
-      para('Vrai premier.')
-    ), 'Vrai premier.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc({ type: 'paragraph' }, para('Vrai premier.')),
+      'Vrai premier.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<p class="premier">Vrai premier.</p>')
@@ -242,10 +318,7 @@ describe('buildBookHtml', () => {
   it('un chapitre qui commence par un séparateur de scène pose apres-scene, pas premier', async () => {
     const { db, api, book } = await livre()
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      { type: 'sceneBreak' },
-      para('Après.')
-    ), 'Après.')
+    await api.chapters.saveContent(ch.id, doc({ type: 'sceneBreak' }, para('Après.')), 'Après.')
 
     const html = buildBookHtml(db, book.id, [])
     expect(html).toContain('<p class="apres-scene">Après.</p>')
@@ -255,21 +328,39 @@ describe('buildBookHtml', () => {
   it('développement du sommaire dans plusieurs nœuds', async () => {
     const { db, api, book } = await livre()
     const lim = await api.chapters.create(book.id, 'Liminaires')
-    await api.chapters.saveContent(lim.id, doc(
-      { type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } },
-      { type: 'tableOfContents', attrs: { titre: 'TABLE DES MATIÈRES' } }
-    ), '')
+    await api.chapters.saveContent(
+      lim.id,
+      doc(
+        { type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } },
+        { type: 'tableOfContents', attrs: { titre: 'TABLE DES MATIÈRES' } }
+      ),
+      ''
+    )
     const c1 = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(c1.id, doc(
-      { type: 'partOpening', attrs: { label: 'Première partie', recto: true } },
-      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } },
-      para('Le cri.')
-    ), 'Le cri.')
+    await api.chapters.saveContent(
+      c1.id,
+      doc(
+        { type: 'partOpening', attrs: { label: 'Première partie', recto: true } },
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true }
+        },
+        para('Le cri.')
+      ),
+      'Le cri.'
+    )
     const c2 = await api.chapters.create(book.id, 'Deux')
-    await api.chapters.saveContent(c2.id, doc(
-      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 2', titre: 'CEUX QUI', recto: true } },
-      para('Suite.')
-    ), 'Suite.')
+    await api.chapters.saveContent(
+      c2.id,
+      doc(
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CHAPITRE 2', titre: 'CEUX QUI', recto: true }
+        },
+        para('Suite.')
+      ),
+      'Suite.'
+    )
 
     const html = buildBookHtml(db, book.id, [])
     const sommaires = html.match(/<section class="sommaire">[\s\S]*?<\/section>/g) ?? []
@@ -288,11 +379,18 @@ describe('buildBookHtml', () => {
     const mediaDir = mkdtempSync(join(tmpdir(), 'encre-media-'))
     writeFileSync(join(mediaDir, 'qr.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
     const ch = await api.chapters.create(book.id, 'Restons en contact')
-    await api.chapters.saveContent(ch.id, doc(
-      para('Merci.'),
-      { type: 'illustration', attrs: { fileName: 'qr.png', displayName: 'QR', taille: 'vignette' } },
-      para('jmauteur.com')
-    ), 'Merci. jmauteur.com')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        para('Merci.'),
+        {
+          type: 'illustration',
+          attrs: { fileName: 'qr.png', displayName: 'QR', taille: 'vignette' }
+        },
+        para('jmauteur.com')
+      ),
+      'Merci. jmauteur.com'
+    )
     const html = buildBookHtml(db, book.id, [], mediaDir)
     expect(html).toContain('<figure class="illustration illustration-vignette">')
     expect(html).not.toContain('<section class="illustration">')
@@ -310,11 +408,15 @@ describe('buildBookHtml', () => {
     const mediaDir = mkdtempSync(join(tmpdir(), 'encre-media-'))
     writeFileSync(join(mediaDir, 'planche.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
     const ch = await api.chapters.create(book.id, 'Un')
-    await api.chapters.saveContent(ch.id, doc(
-      para('Avant.'),
-      { type: 'illustration', attrs: { fileName: 'planche.png', displayName: 'Planche' } },
-      para('Après.')
-    ), 'Avant. Après.')
+    await api.chapters.saveContent(
+      ch.id,
+      doc(
+        para('Avant.'),
+        { type: 'illustration', attrs: { fileName: 'planche.png', displayName: 'Planche' } },
+        para('Après.')
+      ),
+      'Avant. Après.'
+    )
     const html = buildBookHtml(db, book.id, [], mediaDir)
     expect(html).toContain('<section class="illustration">')
     // La classe vignette existe forcément dans la feuille de style <style> (CSS

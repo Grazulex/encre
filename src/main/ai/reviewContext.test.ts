@@ -68,7 +68,7 @@ describe('buildReviewPrompt', () => {
     expect(prompt).toContain('Mara traverse la ville en direction de la tour de verre.')
   })
 
-  it('prompt : inclut le nom d\'une entité liée au chapitre via mentions', () => {
+  it("prompt : inclut le nom d'une entité liée au chapitre via mentions", () => {
     const mara = createEntity(db, { bookId, kind: 'character', name: 'Mara' })
     const contentJsonWithMention = JSON.stringify({
       type: 'doc',

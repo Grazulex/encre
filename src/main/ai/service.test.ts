@@ -69,7 +69,7 @@ describe('AiService', () => {
     expect(id1).not.toBe(id2)
   })
 
-  it("traduit une erreur du runner en message français lisible via onError", async () => {
+  it('traduit une erreur du runner en message français lisible via onError', async () => {
     const runner = makeRejectingRunner(new Error('network boom'))
     const service = new AiService(runner)
     let error: string | undefined
@@ -88,7 +88,7 @@ describe('AiService', () => {
     expect(error).toBe('Claude est indisponible — réessayez.')
   })
 
-  it('cancel() abandonne la génération en cours et déclenche onError avec le message d\'annulation', async () => {
+  it("cancel() abandonne la génération en cours et déclenche onError avec le message d'annulation", async () => {
     const runner = makeAbortableRunner()
     const service = new AiService(runner)
     let error: string | undefined
@@ -165,7 +165,10 @@ describe('AiService', () => {
 
       expect(onError).not.toHaveBeenCalled()
       expect(unhandled).toEqual([])
-      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('onDone'), expect.any(Error))
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('onDone'),
+        expect.any(Error)
+      )
     } finally {
       // Les assertions doivent s'exécuter AVANT mockRestore() : restaurer un spy efface
       // son historique d'appels (mock.calls), donc l'inverse ferait passer le test à tort.
@@ -174,7 +177,7 @@ describe('AiService', () => {
     }
   })
 
-  it("une exception dans onError (après une erreur du runner) est isolée : rien ne fuit en rejet non intercepté", async () => {
+  it('une exception dans onError (après une erreur du runner) est isolée : rien ne fuit en rejet non intercepté', async () => {
     const runner = makeRejectingRunner(new Error('network boom'))
     const service = new AiService(runner)
     const unhandled: unknown[] = []
@@ -195,7 +198,10 @@ describe('AiService', () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
 
       expect(unhandled).toEqual([])
-      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('onError'), expect.any(Error))
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('onError'),
+        expect.any(Error)
+      )
     } finally {
       process.off('unhandledRejection', onUnhandledRejection)
       consoleErrorSpy.mockRestore()

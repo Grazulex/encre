@@ -29,14 +29,15 @@ describe('isValidReviewSuggestion', () => {
   })
 
   it('rejette un champ manquant', () => {
-    const { quote: _quote, ...withoutQuote } = VALID
-    expect(isValidReviewSuggestion(withoutQuote)).toBe(false)
-    const { replacement: _replacement, ...withoutReplacement } = VALID
-    expect(isValidReviewSuggestion(withoutReplacement)).toBe(false)
-    const { reason: _reason, ...withoutReason } = VALID
-    expect(isValidReviewSuggestion(withoutReason)).toBe(false)
-    const { type: _type, ...withoutType } = VALID
-    expect(isValidReviewSuggestion(withoutType)).toBe(false)
+    const sansChamp = (champ: string): unknown => {
+      const copie: Record<string, unknown> = { ...VALID }
+      delete copie[champ]
+      return copie
+    }
+    expect(isValidReviewSuggestion(sansChamp('quote'))).toBe(false)
+    expect(isValidReviewSuggestion(sansChamp('replacement'))).toBe(false)
+    expect(isValidReviewSuggestion(sansChamp('reason'))).toBe(false)
+    expect(isValidReviewSuggestion(sansChamp('type'))).toBe(false)
   })
 
   it('rejette une citation vide', () => {

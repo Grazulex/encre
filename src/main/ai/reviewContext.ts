@@ -43,7 +43,7 @@ function formatEntity(entity: Entity): string {
 // exactement au texte du chapitre sera écarté à l'affichage, donc inutile.
 const SYSTEM_PROMPT_REVIEW =
   "Tu es relecteur littéraire. On te donne le texte d'un chapitre en Markdown, " +
-  "son résumé et les fiches des personnages et lieux qui y apparaissent. " +
+  'son résumé et les fiches des personnages et lieux qui y apparaissent. ' +
   'Tu repères des problèmes CIBLÉS et PEU NOMBREUX : répétitions maladroites, ' +
   'incohérences (noms, faits, chronologie) avec les fiches ou le résumé fournis, ' +
   "points de style maladroits, fautes d'orthographe ou de grammaire. " +
@@ -52,7 +52,7 @@ const SYSTEM_PROMPT_REVIEW =
   '`type` (une valeur parmi "repetition", "incoherence", "style", ' +
   '"orthographe"), `quote` (string), `replacement` (string), `reason` (string). ' +
   '`quote` doit être un extrait copié MOT POUR MOT depuis le texte du chapitre ' +
-  'ci-dessous : c\'est la clé qui permet de le repérer dans le texte — toute ' +
+  "ci-dessous : c'est la clé qui permet de le repérer dans le texte — toute " +
   'citation qui ne correspond pas exactement, au caractère près, sera ignorée. ' +
   '`replacement` est le texte de remplacement proposé pour cet extrait (chaîne ' +
   "vide '' pour une simple suppression). `reason` est une explication courte, " +
@@ -78,7 +78,9 @@ export function buildReviewPrompt(db: Db, chapterId: number): FormatPromptBundle
   const entityList = linkedEntities.length > 0 ? linkedEntities : listEntities(db, book.id)
   const entityBlocks = entityList.map(formatEntity)
 
-  const resume = chapter.summary.trim() ? chapter.summary.trim() : 'Aucun résumé fourni pour ce chapitre.'
+  const resume = chapter.summary.trim()
+    ? chapter.summary.trim()
+    : 'Aucun résumé fourni pour ce chapitre.'
 
   const lines: string[] = [
     '## RÉSUMÉ DU CHAPITRE',

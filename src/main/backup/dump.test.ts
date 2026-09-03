@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 describe('dumpDatabase', () => {
-  it('produit un SQL qui reconstruit la base à l\'identique', async () => {
+  it("produit un SQL qui reconstruit la base à l'identique", async () => {
     const dbPath = join(dir, 'library.db')
     const db = openDb(dbPath)
     createBook(db, { title: 'Le Livre' })
@@ -42,11 +42,13 @@ describe('dumpDatabase', () => {
     const { execFileSync } = await import('child_process')
     execFileSync('/usr/bin/sqlite3', [restored], { input: sql })
     const check = new Database(restored, { readonly: true })
-    expect((check.prepare('SELECT title FROM books').get() as { title: string }).title).toBe('Le Livre')
+    expect((check.prepare('SELECT title FROM books').get() as { title: string }).title).toBe(
+      'Le Livre'
+    )
     check.close()
   })
 
-  it('lève si la base source n\'existe pas', async () => {
+  it("lève si la base source n'existe pas", async () => {
     await expect(dumpDatabase(join(dir, 'nexistepas.db'), join(dir, 'o.sql'))).rejects.toThrow()
   })
 

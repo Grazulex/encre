@@ -23,7 +23,11 @@ describe('repository books', () => {
 
   it('met à jour les champs autorisés', () => {
     const book = createBook(db, { title: 'Brouillon' })
-    const updated = updateBook(db, book.id, { title: 'Titre final', status: 'termine', wordGoal: 80000 })
+    const updated = updateBook(db, book.id, {
+      title: 'Titre final',
+      status: 'termine',
+      wordGoal: 80000
+    })
     expect(updated.title).toBe('Titre final')
     expect(updated.status).toBe('termine')
     expect(updated.wordGoal).toBe(80000)

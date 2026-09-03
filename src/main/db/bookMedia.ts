@@ -7,7 +7,18 @@
 import type { Db } from './connection'
 import type { BookMedia, BookMediaRole } from '../../shared/types'
 
-function rowToBookMedia(row: any): BookMedia {
+interface BookMediaRow {
+  id: number
+  book_id: number
+  role: BookMediaRole
+  file_name: string
+  display_name: string
+  note: string
+  position: number
+  created_at: string
+}
+
+function rowToBookMedia(row: BookMediaRow): BookMedia {
   return {
     id: row.id,
     bookId: row.book_id,
@@ -21,14 +32,15 @@ function rowToBookMedia(row: any): BookMedia {
 }
 
 export function listBookMedia(db: Db, bookId: number): BookMedia[] {
-  return db
+  const rows = db
     .prepare('SELECT * FROM book_media WHERE book_id = ? ORDER BY position, id')
-    .all(bookId)
-    .map(rowToBookMedia)
+    .all(bookId) as BookMediaRow[]
+  return rows.map(rowToBookMedia)
 }
 
 export function getBookMedia(db: Db, id: number): BookMedia {
-  const row = db.prepare('SELECT * FROM book_media WHERE id = ?').get(id)
+  const row = db.prepare('SELECT * FROM book_media WHERE id = ?').get(id) as
+    BookMediaRow | undefined
   if (!row) throw new Error(`Média introuvable: ${id}`)
   return rowToBookMedia(row)
 }
@@ -42,7 +54,7 @@ export function findBookMediaByRole(db: Db, bookId: number, role: BookMediaRole)
     .prepare(
       'SELECT * FROM book_media WHERE book_id = ? AND role = ? ORDER BY position, id LIMIT 1'
     )
-    .get(bookId, role)
+    .get(bookId, role) as BookMediaRow | undefined
   return row ? rowToBookMedia(row) : null
 }
 

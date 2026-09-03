@@ -9,14 +9,31 @@ import type {
 } from '../../shared/types'
 import { extractMentionIds } from '../../shared/mentions'
 import { foldWithMap } from '../../shared/autolink'
-import { entityRowToEntity } from './entities'
+import { entityRowToEntity, type EntityRow } from './entities'
 
 export function countWords(text: string): number {
   const trimmed = text.trim()
   return trimmed ? trimmed.split(/\s+/).length : 0
 }
 
-function rowToMeta(row: any): ChapterMeta {
+interface ChapterMetaRow {
+  id: number
+  book_id: number
+  position: number
+  title: string
+  status: ChapterStatus
+  word_count: number
+  word_goal: number | null
+  updated_at: string
+}
+
+interface ChapterRow extends ChapterMetaRow {
+  content_json: string
+  content_text: string
+  summary: string
+}
+
+function rowToMeta(row: ChapterMetaRow): ChapterMeta {
   return {
     id: row.id,
     bookId: row.book_id,
@@ -30,13 +47,13 @@ function rowToMeta(row: any): ChapterMeta {
 }
 
 export function listChapters(db: Db, bookId: number): ChapterMeta[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT id, book_id, position, title, status, word_count, word_goal, updated_at
        FROM chapters WHERE book_id = ? ORDER BY position`
     )
-    .all(bookId)
-    .map(rowToMeta)
+    .all(bookId) as ChapterMetaRow[]
+  return rows.map(rowToMeta)
 }
 
 export interface ChapterSummary {
@@ -63,9 +80,14 @@ export function listChapterSummaries(db: Db, bookId: number): ChapterSummary[] {
 }
 
 export function getChapter(db: Db, id: number): Chapter {
-  const row = db.prepare('SELECT * FROM chapters WHERE id = ?').get(id) as any
+  const row = db.prepare('SELECT * FROM chapters WHERE id = ?').get(id) as ChapterRow | undefined
   if (!row) throw new Error(`Chapitre introuvable: ${id}`)
-  return { ...rowToMeta(row), contentJson: row.content_json, contentText: row.content_text, summary: row.summary }
+  return {
+    ...rowToMeta(row),
+    contentJson: row.content_json,
+    contentText: row.content_text,
+    summary: row.summary
+  }
 }
 
 export function createChapter(db: Db, bookId: number, title: string): ChapterMeta {
@@ -77,13 +99,22 @@ export function createChapter(db: Db, bookId: number, title: string): ChapterMet
     .run(bookId, bookId, title)
   const meta = getChapter(db, Number(result.lastInsertRowid))
   return rowToMeta({
-    id: meta.id, book_id: meta.bookId, position: meta.position, title: meta.title,
-    status: meta.status, word_count: meta.wordCount, word_goal: meta.wordGoal, updated_at: meta.updatedAt
+    id: meta.id,
+    book_id: meta.bookId,
+    position: meta.position,
+    title: meta.title,
+    status: meta.status,
+    word_count: meta.wordCount,
+    word_goal: meta.wordGoal,
+    updated_at: meta.updatedAt
   })
 }
 
 export function saveChapterContent(
-  db: Db, id: number, contentJson: string, contentText: string
+  db: Db,
+  id: number,
+  contentJson: string,
+  contentText: string
 ): { wordCount: number } {
   const wordCount = countWords(contentText)
   const mentionIds = extractMentionIds(contentJson)
@@ -107,21 +138,31 @@ export function saveChapterContent(
 }
 
 export function renameChapter(db: Db, id: number, title: string): void {
-  db.prepare("UPDATE chapters SET title = ?, updated_at = datetime('now') WHERE id = ?").run(title, id)
+  db.prepare("UPDATE chapters SET title = ?, updated_at = datetime('now') WHERE id = ?").run(
+    title,
+    id
+  )
 }
 
 export function saveChapterSummary(db: Db, id: number, summary: string): void {
-  db.prepare("UPDATE chapters SET summary = ?, updated_at = datetime('now') WHERE id = ?").run(summary, id)
+  db.prepare("UPDATE chapters SET summary = ?, updated_at = datetime('now') WHERE id = ?").run(
+    summary,
+    id
+  )
 }
 
 export function setChapterStatus(db: Db, id: number, status: ChapterStatus): void {
-  db.prepare("UPDATE chapters SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, id)
+  db.prepare("UPDATE chapters SET status = ?, updated_at = datetime('now') WHERE id = ?").run(
+    status,
+    id
+  )
 }
 
 export function setChapterGoal(db: Db, id: number, wordGoal: number | null): void {
-  db.prepare(
-    "UPDATE chapters SET word_goal = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(wordGoal, id)
+  db.prepare("UPDATE chapters SET word_goal = ?, updated_at = datetime('now') WHERE id = ?").run(
+    wordGoal,
+    id
+  )
 }
 
 export function reorderChapters(db: Db, bookId: number, orderedIds: number[]): void {
@@ -151,7 +192,7 @@ export function entitiesInChapter(db: Db, chapterId: number): Entity[] {
       `SELECT e.* FROM mentions m JOIN entities e ON e.id = m.entity_id
        WHERE m.chapter_id = ? ORDER BY e.kind, e.name`
     )
-    .all(chapterId)
+    .all(chapterId) as EntityRow[]
   return rows.map(entityRowToEntity)
 }
 

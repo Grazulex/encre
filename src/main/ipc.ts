@@ -7,10 +7,15 @@ import type { createApi } from './api'
 // domaine — seules ses méthodes invoke (prepareWrite/startWrite/cancel) y figurent.
 type MainApi = ReturnType<typeof createApi>
 
+type InvokeMethod = (...args: unknown[]) => unknown
+type DomainMethods = MainApi[keyof MainApi] & Record<string, InvokeMethod>
+
 export function registerIpc(api: MainApi): void {
   for (const [domain, methods] of Object.entries(api)) {
     if (domain === 'app') continue
-    for (const [method, fn] of Object.entries(methods as Record<string, Function>)) {
+    const domainMethods = methods as DomainMethods
+    for (const method of Object.keys(domainMethods)) {
+      const fn = domainMethods[method]
       ipcMain.handle(`${domain}:${method}`, (_event, ...args) => fn(...args))
     }
   }

@@ -13,9 +13,12 @@ describe('isValidChronoIssue', () => {
     expect(isValidChronoIssue(VALID)).toBe(true)
   })
 
-  it.each(['incoherence', 'doute'])('accepte chacune des 2 valeurs de severity (%s)', (severity) => {
-    expect(isValidChronoIssue({ ...VALID, severity })).toBe(true)
-  })
+  it.each(['incoherence', 'doute'])(
+    'accepte chacune des 2 valeurs de severity (%s)',
+    (severity) => {
+      expect(isValidChronoIssue({ ...VALID, severity })).toBe(true)
+    }
+  )
 
   it('accepte des tableaux d’ids vides (incohérence ne portant que sur des chapitres, ou que sur des événements)', () => {
     expect(isValidChronoIssue({ ...VALID, chapterIds: [] })).toBe(true)
@@ -28,14 +31,15 @@ describe('isValidChronoIssue', () => {
   })
 
   it('rejette un champ manquant', () => {
-    const { severity: _severity, ...withoutSeverity } = VALID
-    expect(isValidChronoIssue(withoutSeverity)).toBe(false)
-    const { description: _description, ...withoutDescription } = VALID
-    expect(isValidChronoIssue(withoutDescription)).toBe(false)
-    const { chapterIds: _chapterIds, ...withoutChapterIds } = VALID
-    expect(isValidChronoIssue(withoutChapterIds)).toBe(false)
-    const { eventIds: _eventIds, ...withoutEventIds } = VALID
-    expect(isValidChronoIssue(withoutEventIds)).toBe(false)
+    const sansChamp = (champ: string): unknown => {
+      const copie: Record<string, unknown> = { ...VALID }
+      delete copie[champ]
+      return copie
+    }
+    expect(isValidChronoIssue(sansChamp('severity'))).toBe(false)
+    expect(isValidChronoIssue(sansChamp('description'))).toBe(false)
+    expect(isValidChronoIssue(sansChamp('chapterIds'))).toBe(false)
+    expect(isValidChronoIssue(sansChamp('eventIds'))).toBe(false)
   })
 
   it('rejette une description vide', () => {
@@ -58,7 +62,12 @@ describe('isValidChronoIssue', () => {
 })
 
 describe('filterChronoIssueIds', () => {
-  const issue = { severity: 'incoherence' as const, description: 'Test.', chapterIds: [1, 2, 3], eventIds: [10, 11] }
+  const issue = {
+    severity: 'incoherence' as const,
+    description: 'Test.',
+    chapterIds: [1, 2, 3],
+    eventIds: [10, 11]
+  }
 
   it('conserve tous les ids connus, ne retire rien', () => {
     const known = new Set([1, 2, 3])

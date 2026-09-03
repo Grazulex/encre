@@ -1,8 +1,6 @@
 import { stripMarkdownFences } from './sanitizeFormatOutput'
 
-export type ParseAiJsonResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string }
+export type ParseAiJsonResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 /**
  * Parse JSON défensif extrait d'une sortie IA structurée.
@@ -35,7 +33,7 @@ export function parseAiJson<T>(raw: string): ParseAiJsonResult<T> {
     for (let attemptCount = 0; attemptCount < MAX_CANDIDATES; attemptCount++) {
       // Trouver le prochain [ ou { à partir de searchStartIndex
       const remainingText = trimmed.slice(searchStartIndex)
-      const nextMatch = remainingText.search(/[\[\{]/)
+      const nextMatch = remainingText.search(/[[{]/)
 
       if (nextMatch === -1) {
         // Pas de JSON trouvé

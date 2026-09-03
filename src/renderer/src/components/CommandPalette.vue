@@ -246,48 +246,53 @@ function onKeydown(event: KeyboardEvent): void {
 
 <template>
   <Transition name="dialog" appear>
-  <div class="overlay" @click.self="close">
-    <div class="palette-card dialog-card" role="dialog" aria-modal="true" aria-label="Palette de commandes">
-      <div class="input-row">
-        <input
-          ref="inputEl"
-          v-model="query"
-          type="text"
-          placeholder="Rechercher un livre, une section, un chapitre, une action…"
-          autocomplete="off"
-          spellcheck="false"
-          @keydown="onKeydown"
-        />
-        <span class="kbd">Échap</span>
-      </div>
-      <div class="results" role="listbox">
-        <template v-if="rows.length > 0">
-          <template v-for="row in rows" :key="row.key">
-            <div v-if="row.type === 'header'" class="group-label">{{ row.label }}</div>
-            <button
-              v-else
-              type="button"
-              class="item"
-              :class="{ selected: row.index === selectedIndex }"
-              role="option"
-              :aria-selected="row.index === selectedIndex"
-              :data-row-index="row.index"
-              @click="row.item?.action()"
-              @mouseenter="selectedIndex = row.index ?? selectedIndex"
-            >
-              {{ row.item?.label }}
-            </button>
+    <div class="overlay" @click.self="close">
+      <div
+        class="palette-card dialog-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Palette de commandes"
+      >
+        <div class="input-row">
+          <input
+            ref="inputEl"
+            v-model="query"
+            type="text"
+            placeholder="Rechercher un livre, une section, un chapitre, une action…"
+            autocomplete="off"
+            spellcheck="false"
+            @keydown="onKeydown"
+          />
+          <span class="kbd">Échap</span>
+        </div>
+        <div class="results" role="listbox">
+          <template v-if="rows.length > 0">
+            <template v-for="row in rows" :key="row.key">
+              <div v-if="row.type === 'header'" class="group-label">{{ row.label }}</div>
+              <button
+                v-else
+                type="button"
+                class="item"
+                :class="{ selected: row.index === selectedIndex }"
+                role="option"
+                :aria-selected="row.index === selectedIndex"
+                :data-row-index="row.index"
+                @click="row.item?.action()"
+                @mouseenter="selectedIndex = row.index ?? selectedIndex"
+              >
+                {{ row.item?.label }}
+              </button>
+            </template>
           </template>
-        </template>
-        <p v-else class="empty">Aucun résultat.</p>
-      </div>
-      <div class="footer-hints">
-        <span><span class="kbd">↑</span><span class="kbd">↓</span> naviguer</span>
-        <span><span class="kbd">Entrée</span> choisir</span>
-        <span><span class="kbd">Échap</span> fermer</span>
+          <p v-else class="empty">Aucun résultat.</p>
+        </div>
+        <div class="footer-hints">
+          <span><span class="kbd">↑</span><span class="kbd">↓</span> naviguer</span>
+          <span><span class="kbd">Entrée</span> choisir</span>
+          <span><span class="kbd">Échap</span> fermer</span>
+        </div>
       </div>
     </div>
-  </div>
   </Transition>
 </template>
 

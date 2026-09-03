@@ -2,13 +2,14 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { openDb } from './db/connection'
+import { openDb, type Db } from './db/connection'
 import { createBook } from './db/books'
+import type { Book } from '../shared/types'
 import { createChapter, saveChapterContent } from './db/chapters'
 import { listIllustrations } from './db/illustrations'
 import { addIllustrationFiles, removeIllustration, illustrationUsage } from './illustrations'
 
-function setup() {
+function setup(): { db: Db; book: Book; srcDir: string; mediaDir: string } {
   const db = openDb(':memory:')
   const book = createBook(db, { title: 'Tome 1' })
   const srcDir = mkdtempSync(join(tmpdir(), 'encre-ill-src-'))
@@ -17,12 +18,15 @@ function setup() {
 }
 
 describe('addIllustrationFiles', () => {
-  it('copie les fichiers dans media et crée les lignes dans l\'ordre', () => {
+  it("copie les fichiers dans media et crée les lignes dans l'ordre", () => {
     const { db, book, srcDir, mediaDir } = setup()
     writeFileSync(join(srcDir, 'planche-1.png'), 'png-1')
     writeFileSync(join(srcDir, 'planche-2.jpg'), 'jpg-2')
     const added = addIllustrationFiles(
-      db, book.id, [join(srcDir, 'planche-1.png'), join(srcDir, 'planche-2.jpg')], mediaDir
+      db,
+      book.id,
+      [join(srcDir, 'planche-1.png'), join(srcDir, 'planche-2.jpg')],
+      mediaDir
     )
     expect(added).toHaveLength(2)
     expect(added[0].displayName).toBe('planche-1.png')
@@ -32,12 +36,13 @@ describe('addIllustrationFiles', () => {
     expect(listIllustrations(db, book.id)).toHaveLength(2)
   })
 
-  it('ignore un fichier illisible ou d\'extension refusée sans bloquer les autres', () => {
+  it("ignore un fichier illisible ou d'extension refusée sans bloquer les autres", () => {
     const { db, book, srcDir, mediaDir } = setup()
     writeFileSync(join(srcDir, 'ok.webp'), 'webp')
     writeFileSync(join(srcDir, 'notes.txt'), 'txt')
     const added = addIllustrationFiles(
-      db, book.id,
+      db,
+      book.id,
       [join(srcDir, 'absent.png'), join(srcDir, 'notes.txt'), join(srcDir, 'ok.webp')],
       mediaDir
     )

@@ -64,9 +64,7 @@ function suggestionItems({ query }: { query: string }): MentionSuggestionItem[] 
 // un tippy piloté manuellement (trigger 'manual', positionné via
 // clientRect). onKeyDown délègue à la liste exposée (defineExpose) pour que
 // ↑/↓/Entrée pilotent la sélection sans jamais quitter l'éditeur.
-function suggestionRender(): NonNullable<
-  SuggestionOptions<MentionSuggestionItem>['render']
-> {
+function suggestionRender(): NonNullable<SuggestionOptions<MentionSuggestionItem>['render']> {
   return () => {
     let component: VueRenderer
     let popup: TippyInstance[] | undefined
@@ -95,8 +93,11 @@ function suggestionRender(): NonNullable<
           popup?.[0]?.hide()
           return true
         }
-        return (component.ref as { onKeyDown?: (p: SuggestionKeyDownProps) => boolean } | null)
-          ?.onKeyDown?.(props) ?? false
+        return (
+          (
+            component.ref as { onKeyDown?: (p: SuggestionKeyDownProps) => boolean } | null
+          )?.onKeyDown?.(props) ?? false
+        )
       },
       onExit() {
         popup?.[0]?.destroy()

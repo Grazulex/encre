@@ -7,9 +7,11 @@ describe('openDb', () => {
     const db = openDb(':memory:')
     expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
     const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .prepare<unknown[], { name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+      )
       .all()
-      .map((r: any) => r.name)
+      .map((r) => r.name)
     expect(tables).toContain('books')
     expect(tables).toContain('chapters')
     db.close()

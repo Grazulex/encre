@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { openDb } from './db/connection'
+import { openDb, type Db } from './db/connection'
 import { createApi } from './api'
+import type { Book } from '../shared/types'
 import { exporterLivre, lancerExport, livresExportables, parseExportArgs } from './cli'
 
 const doc = (...content: unknown[]): string => JSON.stringify({ type: 'doc', content })
@@ -12,7 +13,12 @@ const para = (texte: string): unknown => ({
   content: [{ type: 'text', text: texte }]
 })
 
-async function bibliotheque() {
+async function bibliotheque(): Promise<{
+  db: Db
+  plein: Book
+  vide: Book
+  liminairesSeules: Book
+}> {
   const db = openDb(':memory:')
   const api = createApi(db)
   const plein = await api.books.create({ title: 'DOMICILE INCONNU', author: 'JMS' })

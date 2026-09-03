@@ -12,10 +12,7 @@ import { contrastRatio, AA_TEXTE_NORMAL } from './contrast'
  * fichier de thème plutôt que des constantes recopiées : une palette future
  * qui repasserait sous le seuil échouera ici, pas chez l'utilisateur.
  */
-const CSS = readFileSync(
-  join(__dirname, '../renderer/src/styles/theme.css'),
-  'utf8'
-)
+const CSS = readFileSync(join(__dirname, '../renderer/src/styles/theme.css'), 'utf8')
 
 /** Extrait les variables de couleur d'un bloc `:root` (clair) ou du bloc sombre. */
 function palette(sombre: boolean): Record<string, string> {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tiptapToMarkdown, tiptapToXhtml } from './export'
+import { tiptapToMarkdown, tiptapToXhtml, type LayoutNode } from './export'
 
 const doc = JSON.stringify({
   type: 'doc',
@@ -48,8 +48,14 @@ describe('bulletList (conteneur de blocs)', () => {
         {
           type: 'bulletList',
           content: [
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 1' }] }] },
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 2' }] }] }
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 1' }] }]
+            },
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 2' }] }]
+            }
           ]
         }
       ]
@@ -89,8 +95,14 @@ describe('orderedList (conteneur de blocs)', () => {
         {
           type: 'orderedList',
           content: [
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Un' }] }] },
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Deux' }] }] }
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Un' }] }]
+            },
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Deux' }] }]
+            }
           ]
         }
       ]
@@ -98,7 +110,7 @@ describe('orderedList (conteneur de blocs)', () => {
     expect(tiptapToMarkdown(docWithList)).toBe('1. Un\n2. Deux\n')
   })
 
-  it('respecte l\'attribut start', () => {
+  it("respecte l'attribut start", () => {
     const docWithList = JSON.stringify({
       type: 'doc',
       content: [
@@ -106,8 +118,14 @@ describe('orderedList (conteneur de blocs)', () => {
           type: 'orderedList',
           attrs: { start: 5 },
           content: [
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cinq' }] }] },
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Six' }] }] }
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cinq' }] }]
+            },
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Six' }] }]
+            }
           ]
         }
       ]
@@ -271,7 +289,10 @@ describe('nœud illustration', () => {
       type: 'doc',
       content: [
         { type: 'illustration', attrs: { fileName: 'a.png', displayName: 'A' } },
-        { type: 'illustration', attrs: { fileName: 'b.png', displayName: 'B', taille: 'vignette' } },
+        {
+          type: 'illustration',
+          attrs: { fileName: 'b.png', displayName: 'B', taille: 'vignette' }
+        },
         { type: 'illustration', attrs: { fileName: 'c.png', displayName: 'C', taille: 'géante' } }
       ]
     })
@@ -284,11 +305,17 @@ describe('nœuds de mise en page', () => {
   const doc = JSON.stringify({
     type: 'doc',
     content: [
-      { type: 'frontMatterPage', attrs: { genre: 'titre' },
-        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'LA MAISON' }] }] },
+      {
+        type: 'frontMatterPage',
+        attrs: { genre: 'titre' },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'LA MAISON' }] }]
+      },
       { type: 'tableOfContents', attrs: { titre: 'SOMMAIRE' } },
       { type: 'partOpening', attrs: { label: 'Première partie', recto: true } },
-      { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } },
+      {
+        type: 'chapterOpening',
+        attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true }
+      },
       { type: 'paragraph', content: [{ type: 'text', text: 'Le cri.' }] }
     ]
   })
@@ -298,7 +325,7 @@ describe('nœuds de mise en page', () => {
     expect(md).toContain('LA MAISON')
     expect(md).toContain('# Première partie')
     expect(md).toContain('# TROIS HEURES')
-    expect(md).not.toContain('SOMMAIRE')      // sommaire omis hors PDF
+    expect(md).not.toContain('SOMMAIRE') // sommaire omis hors PDF
     const xhtml = tiptapToXhtml(doc)
     expect(xhtml).toContain('<div class="liminaire liminaire-titre">')
     expect(xhtml).toContain('<p class="enseigne">CHAPITRE 1</p>')
@@ -311,7 +338,15 @@ describe('nœuds de mise en page', () => {
     const d = JSON.stringify({
       type: 'doc',
       content: [
-        { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', sousTitre: '« La reconnaissance »', recto: true } }
+        {
+          type: 'chapterOpening',
+          attrs: {
+            enseigne: 'CHAPITRE 1',
+            titre: 'TROIS HEURES',
+            sousTitre: '« La reconnaissance »',
+            recto: true
+          }
+        }
       ]
     })
     const xhtml = tiptapToXhtml(d)
@@ -324,7 +359,10 @@ describe('nœuds de mise en page', () => {
     const d = JSON.stringify({
       type: 'doc',
       content: [
-        { type: 'chapterOpening', attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true } }
+        {
+          type: 'chapterOpening',
+          attrs: { enseigne: 'CHAPITRE 1', titre: 'TROIS HEURES', recto: true }
+        }
       ]
     })
     const xhtml = tiptapToXhtml(d)
@@ -334,16 +372,17 @@ describe('nœuds de mise en page', () => {
   })
 
   it('échappe le XML des attributs', () => {
-    const d = JSON.stringify({ type: 'doc', content: [
-      { type: 'partOpening', attrs: { label: 'Fer & <acier>', recto: false } }
-    ] })
+    const d = JSON.stringify({
+      type: 'doc',
+      content: [{ type: 'partOpening', attrs: { label: 'Fer & <acier>', recto: false } }]
+    })
     expect(tiptapToXhtml(d)).toContain('Fer &amp; &lt;acier&gt;')
   })
 
   it('délègue au callback layout quand il est fourni, et omet sur null', () => {
     const seen: string[] = []
     const opts = {
-      layout: (node: any, children: { md: string; xhtml: string }) => {
+      layout: (node: LayoutNode, children: { md: string; xhtml: string }) => {
         seen.push(node.type)
         if (node.type === 'tableOfContents') return { md: '', xhtml: '<nav>TDM</nav>' }
         if (node.type === 'partOpening') return null
@@ -354,6 +393,6 @@ describe('nœuds de mise en page', () => {
     expect(seen).toEqual(['frontMatterPage', 'tableOfContents', 'partOpening', 'chapterOpening'])
     expect(xhtml).toContain('<nav>TDM</nav>')
     expect(xhtml).not.toContain('Première partie')
-    expect(xhtml).toContain('<x><p>LA MAISON</p></x>')  // enfants rendus, passés au callback
+    expect(xhtml).toContain('<x><p>LA MAISON</p></x>') // enfants rendus, passés au callback
   })
 })

@@ -65,9 +65,14 @@ const LIMINAIRES: Record<string, Liminaire> = {
 }
 const LIMINAIRE_INCONNU: Liminaire = { base: 'liminaire', epubType: 'frontmatter', nav: () => null }
 
+interface NodeJson {
+  type?: string
+  content?: NodeJson[]
+}
+
 function contientOuverture(contentJson: string): boolean {
   let trouve = false
-  const walk = (node: any): void => {
+  const walk = (node: NodeJson): void => {
     if (node?.type === 'chapterOpening') trouve = true
     if (Array.isArray(node?.content)) node.content.forEach(walk)
   }

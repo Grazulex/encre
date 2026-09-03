@@ -55,7 +55,10 @@ describe('buildChronoPrompt', () => {
 
   it('prompt : inclut les événements de chronologie avec id, date_label et liens', () => {
     const event = createTimelineEvent(db, bookId, 'Incendie de la tour')
-    updateTimelineEvent(db, event.id, { dateLabel: 'Printemps an 3', description: 'La tour brûle.' })
+    updateTimelineEvent(db, event.id, {
+      dateLabel: 'Printemps an 3',
+      description: 'La tour brûle.'
+    })
     const mara = createEntity(db, { bookId, kind: 'character', name: 'Mara' })
     setTimelineLinks(db, event.id, [chapterId], [mara.id])
 

@@ -1,7 +1,21 @@
 import type { Db } from './connection'
 import type { Entity, EntityCreate, EntityKind, EntityPatch } from '../../shared/types'
 
-export function entityRowToEntity(row: any): Entity {
+export interface EntityRow {
+  id: number
+  book_id: number
+  kind: EntityKind
+  name: string
+  aliases: string
+  description: string
+  attributes: string
+  notes: string
+  image_path: string | null
+  created_at: string
+  updated_at: string
+}
+
+export function entityRowToEntity(row: EntityRow): Entity {
   return {
     id: row.id,
     bookId: row.book_id,
@@ -18,14 +32,18 @@ export function entityRowToEntity(row: any): Entity {
 }
 
 export function listEntities(db: Db, bookId: number, kind?: EntityKind): Entity[] {
-  const rows = kind
-    ? db.prepare('SELECT * FROM entities WHERE book_id = ? AND kind = ? ORDER BY name').all(bookId, kind)
-    : db.prepare('SELECT * FROM entities WHERE book_id = ? ORDER BY kind, name').all(bookId)
+  const rows = (
+    kind
+      ? db
+          .prepare('SELECT * FROM entities WHERE book_id = ? AND kind = ? ORDER BY name')
+          .all(bookId, kind)
+      : db.prepare('SELECT * FROM entities WHERE book_id = ? ORDER BY kind, name').all(bookId)
+  ) as EntityRow[]
   return rows.map(entityRowToEntity)
 }
 
 export function getEntity(db: Db, id: number): Entity {
-  const row = db.prepare('SELECT * FROM entities WHERE id = ?').get(id)
+  const row = db.prepare('SELECT * FROM entities WHERE id = ?').get(id) as EntityRow | undefined
   if (!row) throw new Error(`Entité introuvable: ${id}`)
   return entityRowToEntity(row)
 }
@@ -52,7 +70,9 @@ export function updateEntity(db: Db, id: number, patch: EntityPatch): Entity {
     const sets = entries.map(([k]) => `${COLS[k].col} = @${k}`).join(', ')
     const params: Record<string, unknown> = { id }
     for (const [k, v] of entries) params[k] = COLS[k].json ? JSON.stringify(v) : v
-    db.prepare(`UPDATE entities SET ${sets}, updated_at = datetime('now') WHERE id = @id`).run(params)
+    db.prepare(`UPDATE entities SET ${sets}, updated_at = datetime('now') WHERE id = @id`).run(
+      params
+    )
   }
   return getEntity(db, id)
 }

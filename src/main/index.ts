@@ -131,8 +131,15 @@ app.whenReady().then(async () => {
   }
   if (exportArgs) {
     const db = openDb(join(app.getPath('userData'), 'library.db'))
-    const resultat = await lancerExport(db, join(app.getPath('userData'), 'media'), exportArgs, console.log)
-    console.log(`${resultat.ecrits.length} fichier(s) écrit(s), ${resultat.erreurs.length} échec(s)`)
+    const resultat = await lancerExport(
+      db,
+      join(app.getPath('userData'), 'media'),
+      exportArgs,
+      console.log
+    )
+    console.log(
+      `${resultat.ecrits.length} fichier(s) écrit(s), ${resultat.erreurs.length} échec(s)`
+    )
     app.exit(resultat.erreurs.length === 0 ? 0 : 1)
     return
   }

@@ -12,9 +12,9 @@
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   --font-manuscript: 'Iowan Old Style', 'Charter', 'Georgia', serif;
 
-  --bg: #eff1f5;        /* Latte base */
-  --bg-panel: #e6e9ef;  /* Latte mantle */
-  --fg: #4c4f69;        /* Latte text — 7,06:1 sur --bg */
+  --bg: #eff1f5; /* Latte base */
+  --bg-panel: #e6e9ef; /* Latte mantle */
+  --fg: #4c4f69; /* Latte text — 7,06:1 sur --bg */
   /* Latte subtext0 (#6c6f85) ne rend que 4,06:1 sur --bg-panel, sous le seuil
      AA de 4,5:1 pour du texte normal. Assombri à teinte constante jusqu'à
      #64667b, qui rend 4,63:1. Même correction que celle déjà appliquée à
@@ -25,7 +25,7 @@
      assombri jusqu'à #4c5ec9 — 4,95:1 sur --bg, 4,60:1 sur --bg-panel — ce qui
      lui rend la retenue de l'ancien bleu d'encre sans quitter la famille. */
   --accent: #4c5ec9;
-  --border: #ccd0da;    /* Latte surface0 */
+  --border: #ccd0da; /* Latte surface0 */
   /* Latte red (#d20f39) rend 4,46:1 sur --bg-panel, juste sous le seuil.
      Assombri à #ce0f38 : 4,60:1. Signal d'erreur/danger (clé en double, etc.),
      dérivé en teinte plutôt que figé en dur dans les composants — voir
@@ -36,10 +36,10 @@
      de thème (palettes.ts) — même accent que l'homonyme, Archive = fgMuted.
      Surchargées au runtime par le store quand une sauveur/accent différent est
      choisi ; en défaut ici pour le cas où le store ne s'exécuterait pas. */
-  --status-reserve: #8738ed;   /* mauve */
-  --status-en-cours: #1c5fe4;  /* blue */
-  --status-termine: #307820;   /* green */
-  --status-archive: #64667b;   /* fg-muted */
+  --status-reserve: #8738ed; /* mauve */
+  --status-en-cours: #1c5fe4; /* blue */
+  --status-termine: #307820; /* green */
+  --status-archive: #64667b; /* fg-muted */
 
   /* Échelle de rayons (audit UI/UX, proposition #2) : les 7px/5px éparpillés
      dans plusieurs composants étaient des accidents de copie, pas une échelle
@@ -56,19 +56,19 @@
     /* Frappé passe AA partout sans retouche, contrairement à Latte : les
        accents d'une palette sombre sont naturellement plus contrastés sur
        leur fond. Aucune valeur n'est ajustée ici. */
-    --bg: #303446;        /* Frappé base */
-    --bg-panel: #292c3c;  /* Frappé mantle */
-    --fg: #c6d0f5;        /* Frappé text — 8,06:1 sur --bg */
-    --fg-muted: #a5adce;  /* Frappé subtext0 — 6,23:1 sur --bg-panel */
-    --accent: #babbf1;    /* Frappé lavender — 6,72:1 sur --bg */
-    --border: #414559;    /* Frappé surface0 */
-    --danger: #e78284;    /* Frappé red — 5,21:1 sur --bg-panel */
+    --bg: #303446; /* Frappé base */
+    --bg-panel: #292c3c; /* Frappé mantle */
+    --fg: #c6d0f5; /* Frappé text — 8,06:1 sur --bg */
+    --fg-muted: #a5adce; /* Frappé subtext0 — 6,23:1 sur --bg-panel */
+    --accent: #babbf1; /* Frappé lavender — 6,72:1 sur --bg */
+    --border: #414559; /* Frappé surface0 */
+    --danger: #e78284; /* Frappé red — 5,21:1 sur --bg-panel */
     /* Même rôle que le bloc clair : fallback Frappé tant que le store de
        thème n'a pas posé ses variables runtime. */
-    --status-reserve: #ca9ee6;   /* mauve */
-    --status-en-cours: #8caaee;  /* blue */
-    --status-termine: #a6d189;   /* green */
-    --status-archive: #a5adce;   /* subtext0 */
+    --status-reserve: #ca9ee6; /* mauve */
+    --status-en-cours: #8caaee; /* blue */
+    --status-termine: #a6d189; /* green */
+    --status-archive: #a5adce; /* subtext0 */
   }
 }
 

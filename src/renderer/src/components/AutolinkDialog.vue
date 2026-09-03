@@ -99,46 +99,46 @@ function onKeydown(event: KeyboardEvent): void {
 
 <template>
   <Transition name="dialog" appear>
-  <div class="overlay" @click.self="close">
-    <div
-      ref="dialogEl"
-      class="autolink-card dialog-card"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Lier les entités"
-      tabindex="-1"
-      @keydown="onKeydown"
-    >
-      <header>
-        <h2>Lier les entités</h2>
-        <span class="kbd">Échap</span>
-      </header>
-      <div class="body">
-        <template v-if="groups.length">
-          <section v-for="g in groups" :key="g.entityId" class="group">
-            <div class="group-label">
-              <span class="badge" :class="{ 'badge-place': g.kind === 'place' }">{{
-                g.kind === 'place' ? '●' : '◆'
-              }}</span>
-              <span class="name">{{ g.name }}</span>
-              <span class="count">{{ g.matches.length }}</span>
-            </div>
-            <label v-for="m in g.matches" :key="keyOf(m)" class="row">
-              <input type="checkbox" :checked="isSelected(m)" @change="toggle(m)" />
-              <span class="matched">{{ m.matched }}</span>
-            </label>
-          </section>
-        </template>
-        <p v-else class="empty">Aucune correspondance trouvée.</p>
+    <div class="overlay" @click.self="close">
+      <div
+        ref="dialogEl"
+        class="autolink-card dialog-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Lier les entités"
+        tabindex="-1"
+        @keydown="onKeydown"
+      >
+        <header>
+          <h2>Lier les entités</h2>
+          <span class="kbd">Échap</span>
+        </header>
+        <div class="body">
+          <template v-if="groups.length">
+            <section v-for="g in groups" :key="g.entityId" class="group">
+              <div class="group-label">
+                <span class="badge" :class="{ 'badge-place': g.kind === 'place' }">{{
+                  g.kind === 'place' ? '●' : '◆'
+                }}</span>
+                <span class="name">{{ g.name }}</span>
+                <span class="count">{{ g.matches.length }}</span>
+              </div>
+              <label v-for="m in g.matches" :key="keyOf(m)" class="row">
+                <input type="checkbox" :checked="isSelected(m)" @change="toggle(m)" />
+                <span class="matched">{{ m.matched }}</span>
+              </label>
+            </section>
+          </template>
+          <p v-else class="empty">Aucune correspondance trouvée.</p>
+        </div>
+        <footer>
+          <button type="button" @click="close">Annuler</button>
+          <button type="button" class="primary" :disabled="selectedCount === 0" @click="apply">
+            Lier la sélection ({{ selectedCount }})
+          </button>
+        </footer>
       </div>
-      <footer>
-        <button type="button" @click="close">Annuler</button>
-        <button type="button" class="primary" :disabled="selectedCount === 0" @click="apply">
-          Lier la sélection ({{ selectedCount }})
-        </button>
-      </footer>
     </div>
-  </div>
   </Transition>
 </template>
 

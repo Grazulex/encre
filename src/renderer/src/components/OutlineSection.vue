@@ -18,9 +18,7 @@ async function load(): Promise<void> {
   if (!store.book) return
   try {
     const all = await window.encre.outline.listByBook(store.book.id)
-    notes.value = all
-      .filter((n) => n.chapterId === null)
-      .sort((a, b) => a.position - b.position)
+    notes.value = all.filter((n) => n.chapterId === null).sort((a, b) => a.position - b.position)
     // Les données arrivent après le rendu initial (await ci-dessus) : le
     // ref-callback des textareas (setTextareaRef) tourne bien à leur
     // création, mais on force ici un second passage une fois le DOM à jour

@@ -2,24 +2,27 @@ import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { describe, it, expect, beforeAll } from 'vitest'
-import { openDb } from '../db/connection'
+import { openDb, type Db } from '../db/connection'
 import { createApi } from '../api'
+import type { Book } from '../../shared/types'
 import { buildEpubDocuments } from './documents'
 
-function doc(...content: any[]): string {
+function doc(...content: unknown[]): string {
   return JSON.stringify({ type: 'doc', content })
 }
-const para = (t: string) => ({ type: 'paragraph', content: [{ type: 'text', text: t }] })
-const illustration = (fileName: string, displayName: string) => ({
+const para = (t: string): unknown => ({ type: 'paragraph', content: [{ type: 'text', text: t }] })
+const illustration = (fileName: string, displayName: string): unknown => ({
   type: 'illustration',
   attrs: { fileName, displayName }
 })
-const vignette = (fileName: string, displayName: string) => ({
+const vignette = (fileName: string, displayName: string): unknown => ({
   type: 'illustration',
   attrs: { fileName, displayName, taille: 'vignette' }
 })
 
-async function livre(langue = 'fr') {
+async function livre(
+  langue = 'fr'
+): Promise<{ db: Db; api: ReturnType<typeof createApi>; book: Book }> {
   const db = openDb(':memory:')
   const api = createApi(db)
   const book = await api.books.create({ title: 'LA MAISON', author: 'JMS', language: langue })

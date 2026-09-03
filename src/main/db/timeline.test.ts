@@ -4,8 +4,12 @@ import { createBook } from './books'
 import { createChapter } from './chapters'
 import { createEntity } from './entities'
 import {
-  listTimeline, createTimelineEvent, updateTimelineEvent,
-  setTimelineLinks, reorderTimeline, deleteTimelineEvent
+  listTimeline,
+  createTimelineEvent,
+  updateTimelineEvent,
+  setTimelineLinks,
+  reorderTimeline,
+  deleteTimelineEvent
 } from './timeline'
 
 let db: Db
@@ -20,7 +24,10 @@ describe('repository timeline', () => {
     const e1 = createTimelineEvent(db, bookId, 'Incendie')
     const e2 = createTimelineEvent(db, bookId, 'Fuite')
     expect([e1.position, e2.position]).toEqual([1, 2])
-    const up = updateTimelineEvent(db, e1.id, { dateLabel: 'An 3, printemps', description: 'Tout brûle.' })
+    const up = updateTimelineEvent(db, e1.id, {
+      dateLabel: 'An 3, printemps',
+      description: 'Tout brûle.'
+    })
     expect(up.dateLabel).toBe('An 3, printemps')
   })
 

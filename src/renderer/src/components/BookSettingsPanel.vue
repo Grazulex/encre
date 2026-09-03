@@ -188,122 +188,130 @@ onBeforeUnmount(flushAll)
 
 <template>
   <Transition name="dialog" appear>
-  <div v-if="store.book" class="settings-overlay" @click.self="close">
-    <div
-      ref="dialogEl"
-      class="settings-card"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Modifier le livre"
-      tabindex="-1"
-      @keydown="onKeydown"
-    >
-      <header>
-        <h2>Modifier le livre</h2>
-        <span class="kbd">Échap</span>
-      </header>
+    <div v-if="store.book" class="settings-overlay" @click.self="close">
+      <div
+        ref="dialogEl"
+        class="settings-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Modifier le livre"
+        tabindex="-1"
+        @keydown="onKeydown"
+      >
+        <header>
+          <h2>Modifier le livre</h2>
+          <span class="kbd">Échap</span>
+        </header>
 
-      <div class="body">
-        <div class="cover-row">
-          <div class="cover-preview">
-            <img v-if="store.book.coverPath" :src="mediaUrl(store.book.coverPath) ?? undefined" alt="" />
-            <span v-else>{{ (store.book.title.trim().slice(0, 1) || '?').toUpperCase() }}</span>
-          </div>
-          <button type="button" class="pick-cover" @click="chooseCover">Choisir une couverture</button>
-        </div>
-
-        <label class="field">
-          <span class="field-label">Titre</span>
-          <input v-model="store.book.title" type="text" @input="onTitleInput" />
-        </label>
-
-        <div class="field-pair">
-          <label class="field">
-            <span class="field-label">Auteur</span>
-            <input v-model="store.book.author" type="text" @input="onAuthorInput" />
-          </label>
-          <label class="field">
-            <span class="field-label">Genre</span>
-            <input v-model="store.book.genre" type="text" @input="onGenreInput" />
-          </label>
-        </div>
-
-        <label class="field">
-          <span class="field-label">Format</span>
-          <select :value="store.book.pageFormat" @change="onPageFormatChange">
-            <option value="broche">Broché — 139,7 × 215,9 mm</option>
-            <option value="relie">Relié — 6,14 × 9,21 in</option>
-          </select>
-        </label>
-
-        <label class="field series-field">
-          <span class="field-label">Série</span>
-          <div class="series-combobox">
-            <input
-              v-model="seriesInput"
-              type="text"
-              placeholder="Aucune série"
-              autocomplete="off"
-              spellcheck="false"
-              @focus="showSeriesSuggestions = true"
-              @input="showSeriesSuggestions = true"
-              @keydown="onSeriesKeydown"
-              @blur="commitSeriesInput"
-            />
-            <button
-              v-if="seriesInput"
-              type="button"
-              class="clear-series"
-              title="Aucune série"
-              aria-label="Retirer la série"
-              @mousedown.prevent
-              @click="clearSeries"
-            >
-              ×
+        <div class="body">
+          <div class="cover-row">
+            <div class="cover-preview">
+              <img
+                v-if="store.book.coverPath"
+                :src="mediaUrl(store.book.coverPath) ?? undefined"
+                alt=""
+              />
+              <span v-else>{{ (store.book.title.trim().slice(0, 1) || '?').toUpperCase() }}</span>
+            </div>
+            <button type="button" class="pick-cover" @click="chooseCover">
+              Choisir une couverture
             </button>
-            <ul v-if="showSeriesSuggestions && filteredSeries.length" class="series-suggestions">
-              <li v-for="s in filteredSeries" :key="s.id">
-                <button type="button" @mousedown.prevent @click="selectSeries(s)">{{ s.name }}</button>
-              </li>
-            </ul>
           </div>
-        </label>
 
-        <label class="field">
-          <span class="field-label">Synopsis</span>
-          <textarea
-            v-model="store.book.synopsis"
-            rows="3"
-            placeholder="Résumé de l'histoire…"
-            @input="onSynopsisInput"
-          ></textarea>
-        </label>
-
-        <div class="field-pair">
           <label class="field">
-            <span class="field-label">Objectif de mots</span>
-            <input
-              :value="store.book.wordGoal ?? ''"
-              type="number"
-              min="0"
-              placeholder="Optionnel"
-              @input="onWordGoalInput"
-            />
+            <span class="field-label">Titre</span>
+            <input v-model="store.book.title" type="text" @input="onTitleInput" />
           </label>
+
+          <div class="field-pair">
+            <label class="field">
+              <span class="field-label">Auteur</span>
+              <input v-model="store.book.author" type="text" @input="onAuthorInput" />
+            </label>
+            <label class="field">
+              <span class="field-label">Genre</span>
+              <input v-model="store.book.genre" type="text" @input="onGenreInput" />
+            </label>
+          </div>
+
           <label class="field">
-            <span class="field-label">Statut</span>
-            <select :value="store.book.status" @change="onStatusChange">
-              <option v-for="s in STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
+            <span class="field-label">Format</span>
+            <select :value="store.book.pageFormat" @change="onPageFormatChange">
+              <option value="broche">Broché — 139,7 × 215,9 mm</option>
+              <option value="relie">Relié — 6,14 × 9,21 in</option>
             </select>
           </label>
-        </div>
-      </div>
 
-      <footer>
-        <button type="button" class="primary" @click="close">Fermer</button>
-      </footer>
+          <label class="field series-field">
+            <span class="field-label">Série</span>
+            <div class="series-combobox">
+              <input
+                v-model="seriesInput"
+                type="text"
+                placeholder="Aucune série"
+                autocomplete="off"
+                spellcheck="false"
+                @focus="showSeriesSuggestions = true"
+                @input="showSeriesSuggestions = true"
+                @keydown="onSeriesKeydown"
+                @blur="commitSeriesInput"
+              />
+              <button
+                v-if="seriesInput"
+                type="button"
+                class="clear-series"
+                title="Aucune série"
+                aria-label="Retirer la série"
+                @mousedown.prevent
+                @click="clearSeries"
+              >
+                ×
+              </button>
+              <ul v-if="showSeriesSuggestions && filteredSeries.length" class="series-suggestions">
+                <li v-for="s in filteredSeries" :key="s.id">
+                  <button type="button" @mousedown.prevent @click="selectSeries(s)">
+                    {{ s.name }}
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Synopsis</span>
+            <textarea
+              v-model="store.book.synopsis"
+              rows="3"
+              placeholder="Résumé de l'histoire…"
+              @input="onSynopsisInput"
+            ></textarea>
+          </label>
+
+          <div class="field-pair">
+            <label class="field">
+              <span class="field-label">Objectif de mots</span>
+              <input
+                :value="store.book.wordGoal ?? ''"
+                type="number"
+                min="0"
+                placeholder="Optionnel"
+                @input="onWordGoalInput"
+              />
+            </label>
+            <label class="field">
+              <span class="field-label">Statut</span>
+              <select :value="store.book.status" @change="onStatusChange">
+                <option v-for="s in STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <footer>
+          <button type="button" class="primary" @click="close">Fermer</button>
+        </footer>
+      </div>
     </div>
-  </div>
   </Transition>
 </template>
 

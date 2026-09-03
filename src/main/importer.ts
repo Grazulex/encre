@@ -41,42 +41,60 @@ const EXTENSIONS = [StarterKit.configure({ codeBlock: false, code: false })]
 const PAGE_BREAK_TOKEN = '%%ENCRE-PAGE-BREAK%%'
 const PAGE_BREAK_COMMENT_LINE = /^[ \t]*<!--\s*page-break\s*-->[ \t]*$/gm
 
+interface TipNode {
+  type?: string
+  text?: string
+  content?: TipNode[]
+}
+
 // Éclate un paragraphe contenant le jeton (au milieu ou seul) en jusqu'à trois
 // nœuds : paragraphe(avant) si non vide, pageBreak, paragraphe(après) si non
 // vide. Ne fait rien si le paragraphe ne contient pas le jeton — renvoie alors
 // le nœud seul (inchangé) sous forme de tableau à un élément.
-function splitParagraphOnPageBreakToken(node: any): any[] {
+function splitParagraphOnPageBreakToken(node: TipNode): TipNode[] {
   if (node?.type !== 'paragraph' || !Array.isArray(node.content)) return [node]
   const idx = node.content.findIndex(
-    (c: any) => c?.type === 'text' && typeof c.text === 'string' && c.text.includes(PAGE_BREAK_TOKEN)
+    (c) => c?.type === 'text' && typeof c.text === 'string' && c.text.includes(PAGE_BREAK_TOKEN)
   )
   if (idx === -1) return [node]
   const target = node.content[idx]
-  const tokenPos = target.text.indexOf(PAGE_BREAK_TOKEN)
-  const beforeText = target.text.slice(0, tokenPos).replace(/\s+$/, '')
-  const afterText = target.text.slice(tokenPos + PAGE_BREAK_TOKEN.length).replace(/^\s+/, '')
+  const tokenText = target.text!
+  const tokenPos = tokenText.indexOf(PAGE_BREAK_TOKEN)
+  const beforeText = tokenText.slice(0, tokenPos).replace(/\s+$/, '')
+  const afterText = tokenText.slice(tokenPos + PAGE_BREAK_TOKEN.length).replace(/^\s+/, '')
 
-  const beforeContent = [...node.content.slice(0, idx), ...(beforeText ? [{ ...target, text: beforeText }] : [])]
-  const afterContent = [...(afterText ? [{ ...target, text: afterText }] : []), ...node.content.slice(idx + 1)]
+  const beforeContent = [
+    ...node.content.slice(0, idx),
+    ...(beforeText ? [{ ...target, text: beforeText }] : [])
+  ]
+  const afterContent = [
+    ...(afterText ? [{ ...target, text: afterText }] : []),
+    ...node.content.slice(idx + 1)
+  ]
 
-  const result: any[] = []
+  const result: TipNode[] = []
   if (beforeContent.length) result.push({ type: 'paragraph', content: beforeContent })
   result.push({ type: 'pageBreak' })
   if (afterContent.length) result.push({ type: 'paragraph', content: afterContent })
   return result
 }
 
-function convertPageBreakPlaceholders(node: any): any {
+function convertPageBreakPlaceholders(node: TipNode): TipNode {
   if (!node || typeof node !== 'object') return node
   if (Array.isArray(node.content)) {
-    const content = node.content.map(convertPageBreakPlaceholders).flatMap(splitParagraphOnPageBreakToken)
+    const content = node.content
+      .map(convertPageBreakPlaceholders)
+      .flatMap(splitParagraphOnPageBreakToken)
     return { ...node, content }
   }
   return node
 }
 
 function titleFromFilename(file: string): string {
-  return basename(file, '.md').replace(/^\d+[\s._-]*/, '').replace(/[_-]+/g, ' ').trim()
+  return basename(file, '.md')
+    .replace(/^\d+[\s._-]*/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim()
 }
 
 // Titre d'un chapitre importé : le premier `# Titre` du fichier s'il existe,
@@ -106,7 +124,7 @@ export function scanChapterFiles(folder: string): { file: string; title: string 
 
 const INLINE_TYPES = new Set(['text', 'mention', 'hardBreak'])
 
-function docText(node: any): string {
+function docText(node: TipNode): string {
   if (node?.type === 'text') return node.text ?? ''
   if (node?.type === 'hardBreak') return '\n'
   const children = node?.content ?? []
@@ -115,7 +133,7 @@ function docText(node: any): string {
   // séparateur ; tout le reste (paragraphes, items de liste, citations, …)
   // est un conteneur de blocs et doit être séparé par des retours à la ligne
   // pour ne pas coller le texte de blocs distincts (ex. "Item 1Item 2").
-  const allInline = children.every((c: any) => INLINE_TYPES.has(c?.type))
+  const allInline = children.every((c) => INLINE_TYPES.has(c.type ?? ''))
   return children.map(docText).join(allInline ? '' : '\n')
 }
 

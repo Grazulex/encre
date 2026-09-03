@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { openDb } from './connection'
+import { openDb, type Db } from './connection'
 import { createBook } from './books'
+import type { Book } from '../../shared/types'
 import {
   listBookMedia,
   getBookMedia,
@@ -10,7 +11,7 @@ import {
   deleteBookMedia
 } from './bookMedia'
 
-function setup() {
+function setup(): { db: Db; book: Book } {
   const db = openDb(':memory:')
   const book = createBook(db, { title: 'Tome 1' })
   return { db, book }

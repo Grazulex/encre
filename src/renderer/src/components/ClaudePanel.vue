@@ -42,7 +42,13 @@ const activeTab = ref<PanelTab>('ecriture')
 // du template ci-dessous) : ←/→ déplace activeTab de façon circulaire et
 // focus le bouton nouvellement actif, tabindex="0" uniquement sur celui-ci
 // (-1 sur les autres) pour que Tab n'entre dans la rangée qu'une seule fois.
-const TAB_ORDER: PanelTab[] = ['ecriture', 'mise-en-forme', 'relecture', 'extraction', 'chronologie']
+const TAB_ORDER: PanelTab[] = [
+  'ecriture',
+  'mise-en-forme',
+  'relecture',
+  'extraction',
+  'chronologie'
+]
 const tabRefs: (HTMLElement | null)[] = []
 function setTabRef(index: number, el: Element | null): void {
   tabRefs[index] = el instanceof HTMLElement ? el : null
@@ -450,7 +456,9 @@ watch(
           "
           class="cp-launch"
         >
-          <p v-if="ai.errorMessage && ai.task === 'write'" class="error-text">{{ ai.errorMessage }}</p>
+          <p v-if="ai.errorMessage && ai.task === 'write'" class="error-text">
+            {{ ai.errorMessage }}
+          </p>
           <button type="button" class="primary" :disabled="!summaryReady" @click="launch(false)">
             Rédiger le brouillon
           </button>
@@ -459,7 +467,10 @@ watch(
           </button>
         </div>
 
-        <div v-if="ai.task === 'write' && (ai.phase === 'streaming' || ai.phase === 'done')" class="cp-stream">
+        <div
+          v-if="ai.task === 'write' && (ai.phase === 'streaming' || ai.phase === 'done')"
+          class="cp-stream"
+        >
           <span class="field-label">Brouillon</span>
           <div ref="streamEl" class="cp-stream-text">
             {{ ai.draft }}<span v-if="ai.phase === 'streaming'" class="cp-cursor">▍</span>
@@ -529,9 +540,7 @@ watch(
               <input v-model="proposerSeparations" type="checkbox" :disabled="busy" />
               Proposer des séparations manquantes
             </label>
-            <p class="hint">
-              Suggère des *** aux transitions de scène — à valider dans l'aperçu.
-            </p>
+            <p class="hint">Suggère des *** aux transitions de scène — à valider dans l'aperçu.</p>
           </div>
         </section>
 
@@ -552,7 +561,9 @@ watch(
           "
           class="cp-launch"
         >
-          <p v-if="ai.errorMessage && ai.task === 'format'" class="error-text">{{ ai.errorMessage }}</p>
+          <p v-if="ai.errorMessage && ai.task === 'format'" class="error-text">
+            {{ ai.errorMessage }}
+          </p>
           <button type="button" class="primary" :disabled="!hasContent" @click="launchFormat">
             Harmoniser ce chapitre
           </button>
@@ -590,9 +601,20 @@ watch(
           v-if="ai.phase === 'idle' || ai.phase === 'error' || ai.phase === 'done'"
           class="cp-launch"
         >
-          <p v-if="ai.errorMessage && ai.task === 'review'" class="error-text">{{ ai.errorMessage }}</p>
-          <button type="button" class="primary" :disabled="!hasContent || busy" @click="launchReview">
-            {{ ai.task === 'review' && ai.phase === 'done' ? 'Relire à nouveau' : 'Relire ce chapitre' }}
+          <p v-if="ai.errorMessage && ai.task === 'review'" class="error-text">
+            {{ ai.errorMessage }}
+          </p>
+          <button
+            type="button"
+            class="primary"
+            :disabled="!hasContent || busy"
+            @click="launchReview"
+          >
+            {{
+              ai.task === 'review' && ai.phase === 'done'
+                ? 'Relire à nouveau'
+                : 'Relire ce chapitre'
+            }}
           </button>
         </div>
 
@@ -631,7 +653,12 @@ watch(
           <p v-if="ai.errorMessage && ai.task === 'extract'" class="error-text">
             {{ ai.errorMessage }}
           </p>
-          <button type="button" class="primary" :disabled="!hasContent || busy" @click="launchExtract">
+          <button
+            type="button"
+            class="primary"
+            :disabled="!hasContent || busy"
+            @click="launchExtract"
+          >
             Analyser ce chapitre
           </button>
         </div>
@@ -668,9 +695,15 @@ watch(
           v-if="ai.phase === 'idle' || ai.phase === 'error' || ai.phase === 'done'"
           class="cp-launch"
         >
-          <p v-if="ai.errorMessage && ai.task === 'chrono'" class="error-text">{{ ai.errorMessage }}</p>
+          <p v-if="ai.errorMessage && ai.task === 'chrono'" class="error-text">
+            {{ ai.errorMessage }}
+          </p>
           <button type="button" class="primary" :disabled="busy" @click="launchChrono">
-            {{ ai.task === 'chrono' && ai.phase === 'done' ? 'Vérifier à nouveau' : 'Vérifier le livre' }}
+            {{
+              ai.task === 'chrono' && ai.phase === 'done'
+                ? 'Vérifier à nouveau'
+                : 'Vérifier le livre'
+            }}
           </button>
         </div>
 

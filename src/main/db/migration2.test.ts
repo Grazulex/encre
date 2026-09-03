@@ -17,14 +17,27 @@ describe('migration 2', () => {
 
     expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
     const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .prepare<unknown[], { name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+      )
       .all()
-      .map((r: any) => r.name)
-    for (const t of ['entities', 'outline_notes', 'timeline_events', 'event_chapters', 'event_entities', 'mentions']) {
+      .map((r) => r.name)
+    for (const t of [
+      'entities',
+      'outline_notes',
+      'timeline_events',
+      'event_chapters',
+      'event_entities',
+      'mentions'
+    ]) {
       expect(tables).toContain(t)
     }
     // colonne summary ajoutée, données intactes
-    const ch = db.prepare('SELECT title, summary FROM chapters WHERE id = 1').get() as any
+    const ch = db
+      .prepare<unknown[], { title: string; summary: string }>(
+        'SELECT title, summary FROM chapters WHERE id = 1'
+      )
+      .get() as { title: string; summary: string }
     expect(ch.title).toBe('Ch. 1')
     expect(ch.summary).toBe('')
     db.close()

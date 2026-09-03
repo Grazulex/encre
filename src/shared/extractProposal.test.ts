@@ -47,14 +47,15 @@ describe('isValidExtractCreation', () => {
   })
 
   it('rejette un champ manquant', () => {
-    const { kind: _kind, ...withoutKind } = VALID_CREATION
-    expect(isValidExtractCreation(withoutKind)).toBe(false)
-    const { name: _name, ...withoutName } = VALID_CREATION
-    expect(isValidExtractCreation(withoutName)).toBe(false)
-    const { aliases: _aliases, ...withoutAliases } = VALID_CREATION
-    expect(isValidExtractCreation(withoutAliases)).toBe(false)
-    const { description: _description, ...withoutDescription } = VALID_CREATION
-    expect(isValidExtractCreation(withoutDescription)).toBe(false)
+    const sansChamp = (champ: string): unknown => {
+      const copie: Record<string, unknown> = { ...VALID_CREATION }
+      delete copie[champ]
+      return copie
+    }
+    expect(isValidExtractCreation(sansChamp('kind'))).toBe(false)
+    expect(isValidExtractCreation(sansChamp('name'))).toBe(false)
+    expect(isValidExtractCreation(sansChamp('aliases'))).toBe(false)
+    expect(isValidExtractCreation(sansChamp('description'))).toBe(false)
   })
 
   it('rejette aliases avec un élément non-chaîne', () => {
@@ -86,9 +87,9 @@ describe('isValidExtractEnrichissement', () => {
   it.each(['aliases', 'description', 'notes'] as const)(
     'accepte un enrichissement avec seulement %s présent',
     (field) => {
-      expect(isValidExtractEnrichissement({ entityId: 1, [field]: VALID_ENRICHISSEMENT[field] })).toBe(
-        true
-      )
+      expect(
+        isValidExtractEnrichissement({ entityId: 1, [field]: VALID_ENRICHISSEMENT[field] })
+      ).toBe(true)
     }
   )
 
@@ -99,8 +100,12 @@ describe('isValidExtractEnrichissement', () => {
   })
 
   it('rejette aliases du mauvais type', () => {
-    expect(isValidExtractEnrichissement({ ...VALID_ENRICHISSEMENT, aliases: 'la reine' })).toBe(false)
-    expect(isValidExtractEnrichissement({ ...VALID_ENRICHISSEMENT, aliases: ['ok', 1] })).toBe(false)
+    expect(isValidExtractEnrichissement({ ...VALID_ENRICHISSEMENT, aliases: 'la reine' })).toBe(
+      false
+    )
+    expect(isValidExtractEnrichissement({ ...VALID_ENRICHISSEMENT, aliases: ['ok', 1] })).toBe(
+      false
+    )
   })
 
   it('rejette description/notes du mauvais type', () => {
@@ -125,7 +130,8 @@ describe('pairEnrichissementsWithEntities', () => {
   // buildFields minimal : un champ exploitable ssi `description` est présent
   // (suffisant pour distinguer un enrichissement "vide" d'un enrichissement
   // "plein" sans dépendre de la vraie logique d'affichage d'ExtractDialog).
-  const buildFields = (e: { description?: string }): string[] => (e.description ? ['description'] : [])
+  const buildFields = (e: { description?: string }): string[] =>
+    e.description ? ['description'] : []
 
   it('associe le SEUL enrichissement exploitable à SA propre entité, même précédé d’un enrichissement sans champ exploitable (régression)', () => {
     const enrichissements = [
@@ -141,12 +147,16 @@ describe('pairEnrichissementsWithEntities', () => {
 
   it('écarte un enrichissement dont l’entité n’existe pas dans le catalogue fourni', () => {
     const enrichissements = [{ entityId: 99, description: 'x' }]
-    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields).pairs).toEqual([])
+    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields).pairs).toEqual(
+      []
+    )
   })
 
   it('écarte un enrichissement sans aucun champ exploitable, même avec une entité connue', () => {
     const enrichissements = [{ entityId: 1 }]
-    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields).pairs).toEqual([])
+    expect(pairEnrichissementsWithEntities(enrichissements, ENTITIES, buildFields).pairs).toEqual(
+      []
+    )
   })
 
   it('préserve l’ordre des enrichissements pairés et associe chacun à SA propre entité', () => {

@@ -17,7 +17,11 @@ describe('migration 6', () => {
     migrate(db)
 
     expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
-    const chapter = db.prepare('SELECT id, word_goal FROM chapters WHERE id = ?').get(chapId) as any
+    const chapter = db
+      .prepare<unknown[], { id: number; word_goal: number | null }>(
+        'SELECT id, word_goal FROM chapters WHERE id = ?'
+      )
+      .get(chapId) as { id: number; word_goal: number | null }
     expect(chapter.id).toBe(chapId)
     expect(chapter.word_goal).toBeNull()
   })
@@ -28,4 +32,3 @@ describe('migration 6', () => {
     db.close()
   })
 })
-

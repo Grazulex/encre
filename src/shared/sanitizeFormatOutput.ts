@@ -47,7 +47,10 @@ export function sanitizeFormatOutput(markdown: string): string {
 
     const isHeadingEcho = HEADING_ECHO_RE.test(first)
     const isAnnouncement =
-      !isHeadingEcho && first.length > 0 && first.length < MAX_ANNOUNCEMENT_LENGTH && first.endsWith(':')
+      !isHeadingEcho &&
+      first.length > 0 &&
+      first.length < MAX_ANNOUNCEMENT_LENGTH &&
+      first.endsWith(':')
 
     if (!isHeadingEcho && !isAnnouncement) break
 

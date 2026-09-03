@@ -119,9 +119,7 @@ function goToTimelineEvent(): void {
 <template>
   <article v-if="entity" class="page">
     <header class="head">
-      <button class="delete-fiche" type="button" @click="requestRemoval">
-        Supprimer la fiche
-      </button>
+      <button class="delete-fiche" type="button" @click="requestRemoval">Supprimer la fiche</button>
       <div class="identity">
         <div class="portrait-wrap">
           <div class="portrait">
@@ -133,9 +131,7 @@ function goToTimelineEvent(): void {
             />
             <span v-else>{{ initials }}</span>
           </div>
-          <button class="pick-image" type="button" @click="choosePicture">
-            Choisir une image
-          </button>
+          <button class="pick-image" type="button" @click="choosePicture">Choisir une image</button>
         </div>
         <div class="identity-main">
           <span class="kind-badge">{{ kindLabel }}</span>
@@ -203,7 +199,9 @@ function goToTimelineEvent(): void {
           :key="pair.id"
           class="attr-row"
           :class="{ duplicate: isDuplicateKey(pair) }"
-          :title="isDuplicateKey(pair) ? 'Clé en double — la dernière valeur l\'emporte' : undefined"
+          :title="
+            isDuplicateKey(pair) ? 'Clé en double — la dernière valeur l\'emporte' : undefined
+          "
         >
           <input
             v-model="pair.key"

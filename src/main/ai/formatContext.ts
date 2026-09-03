@@ -39,10 +39,10 @@ const SYSTEM_PROMPT_STRICT =
   "Tu es typographe littéraire. On te donne le texte d'un chapitre en Markdown. " +
   'Tu rends le MÊME texte, mots et ponctuation du récit inchangés, en normalisant ' +
   'UNIQUEMENT la mise en forme selon les conventions demandées : dialogues, listes, ' +
-  'séparateurs de scène (uniquement la ligne `***`), et rien d\'autre. ' +
+  "séparateurs de scène (uniquement la ligne `***`), et rien d'autre. " +
   'Tu ne réécris JAMAIS une phrase, tu ne corriges pas le style, ' +
   "tu n'ajoutes ni ne retires de contenu. " +
-  'Sortie : le Markdown complet du chapitre, rien d\'autre.'
+  "Sortie : le Markdown complet du chapitre, rien d'autre."
 
 const SYSTEM_PROMPT_WITH_PROPOSALS =
   "Tu es typographe littéraire. On te donne le texte d'un chapitre en Markdown. " +
@@ -105,9 +105,9 @@ const PROPOSAL_BLOCK = [
     'où une transition de scène manifeste se produit sans séparateur (saut de ' +
     'temps, changement de lieu, changement de point de vue) — ce sont des cas ' +
     'fréquents, ne sois pas timide sur ce point : préfère proposer une ' +
-    'transition clairement identifiable plutôt que de t\'abstenir. Plus rare ' +
+    "transition clairement identifiable plutôt que de t'abstenir. Plus rare " +
     'et plus conservateur : ajoute aussi une ligne `<!-- page-break -->` là ' +
-    'où une rupture structurelle majeure est évidente (début d\'une nouvelle ' +
+    "où une rupture structurelle majeure est évidente (début d'une nouvelle " +
     'partie) — ici seulement, abstiens-toi si le doute est réel. Règles ' +
     'strictes dans tous les cas : ce ne sont que des INSERTIONS de lignes de ' +
     'marqueur ; tu ne modifies, ne réécris ni ne déplaces jamais une phrase ' +
@@ -115,7 +115,11 @@ const PROPOSAL_BLOCK = [
     'déjà présent.'
 ].join('\n')
 
-export function buildFormatPrompt(db: Db, chapterId: number, conventions: FormatConventions): FormatPromptBundle {
+export function buildFormatPrompt(
+  db: Db,
+  chapterId: number,
+  conventions: FormatConventions
+): FormatPromptBundle {
   const chapter = getChapter(db, chapterId)
   const markdown = tiptapToMarkdown(chapter.contentJson)
 
@@ -125,10 +129,10 @@ export function buildFormatPrompt(db: Db, chapterId: number, conventions: Format
     `- Dialogue : ${conventions.dialogue} — exemple : ${DIALOGUE_EXAMPLES[conventions.dialogue]}`,
     `- Listes (énumérations en prose, hors listes Markdown structurées) : ${conventions.listes} — ` +
       `exemple : ${LISTE_EXAMPLES[conventions.listes]}`,
-    "- Important : une vraie liste Markdown déjà présente (lignes commençant par `- `, `* `, `+ ` ou " +
-      "`1. `, `2. `, …) reste TOUJOURS en syntaxe Markdown standard `- élément` / `1. élément`, dans les " +
+    '- Important : une vraie liste Markdown déjà présente (lignes commençant par `- `, `* `, `+ ` ou ' +
+      '`1. `, `2. `, …) reste TOUJOURS en syntaxe Markdown standard `- élément` / `1. élément`, dans les ' +
       'DEUX conventions ci-dessus — ne la convertis JAMAIS en paragraphes préfixés par un caractère de ' +
-      'puce ou de tiret, sous peine d\'en perdre la structure.',
+      "puce ou de tiret, sous peine d'en perdre la structure.",
     '- Séparateur de scène : une ligne contenant uniquement `***`.',
     '',
     'Marqueurs hétérogènes existants à convertir vers les conventions ci-dessus ' +
@@ -147,7 +151,7 @@ export function buildFormatPrompt(db: Db, chapterId: number, conventions: Format
     'Format de sortie : réponds UNIQUEMENT par le texte du chapitre, en commençant ' +
       "directement à sa toute première ligne. N'écris aucune phrase d'introduction " +
       "ou d'annonce (par ex. « Voici le texte harmonisé : »), ne recopie pas le " +
-      'titre « ## CHAPITRE (Markdown) » ci-dessous (il ne sert qu\'à délimiter ce ' +
+      "titre « ## CHAPITRE (Markdown) » ci-dessous (il ne sert qu'à délimiter ce " +
       "prompt, il ne fait pas partie du chapitre), et n'ajoute aucun commentaire " +
       'après le texte.',
     '',
@@ -156,7 +160,9 @@ export function buildFormatPrompt(db: Db, chapterId: number, conventions: Format
     markdown
   )
 
-  const system = conventions.proposerSeparations ? SYSTEM_PROMPT_WITH_PROPOSALS : SYSTEM_PROMPT_STRICT
+  const system = conventions.proposerSeparations
+    ? SYSTEM_PROMPT_WITH_PROPOSALS
+    : SYSTEM_PROMPT_STRICT
 
   return { system, prompt: lines.join('\n') }
 }

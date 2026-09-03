@@ -29,9 +29,9 @@ const KIND_LABELS: Record<string, string> = {
 //   ci-dessous) est un ANGLE MORT à signaler comme limite de l'analyse,
 //   jamais un prétexte à inventer un contenu qui n'a pas été fourni.
 const SYSTEM_PROMPT_CHRONO =
-  "Tu es continuité littéraire. On te donne, pour un livre ENTIER (jamais le texte intégral des " +
+  'Tu es continuité littéraire. On te donne, pour un livre ENTIER (jamais le texte intégral des ' +
   'chapitres, seulement leurs résumés manuels — tu dois raisonner à partir de ce résumé, du plan et ' +
-  "de la chronologie fournis), la liste de ses chapitres (id, position, titre, résumé), sa " +
+  'de la chronologie fournis), la liste de ses chapitres (id, position, titre, résumé), sa ' +
   'chronologie narrative (id, position, date, titre, description, chapitres et personnages/lieux ' +
   'liés), son plan et la liste de ses personnages et lieux. ' +
   "Tu détectes des incohérences de CHRONOLOGIE : contradictions d'ordre entre les événements, dates " +
@@ -40,13 +40,13 @@ const SYSTEM_PROMPT_CHRONO =
   'Sortie : UNIQUEMENT un tableau JSON, sans aucun texte avant ni après, sans bloc de code Markdown ' +
   "(pas de ```), d'objets ayant EXACTEMENT ces champs : `severity` (une valeur parmi " +
   '"incoherence" pour une contradiction avérée, "doute" pour un soupçon qui mériterait une ' +
-  'vérification par l\'autrice ou l\'auteur), `description` (string, en français, autoportante — ' +
+  "vérification par l'autrice ou l'auteur), `description` (string, en français, autoportante — " +
   'compréhensible sans relire le livre), `chapterIds` (tableau des ids de chapitres, parmi ceux ' +
-  "fournis ci-dessous, impliqués dans cette incohérence — peut être vide), `eventIds` (tableau des " +
+  'fournis ci-dessous, impliqués dans cette incohérence — peut être vide), `eventIds` (tableau des ' +
   "ids d'événements de chronologie, parmi ceux fournis ci-dessous, impliqués — peut être vide). " +
   "N'INVENTE JAMAIS un id : chaque chapterId/eventId DOIT être recopié tel quel depuis les listes " +
-  "fournies ci-dessous ; un id inventé, approximatif ou absent de ces listes est INTERDIT. " +
-  "Un chapitre marqué « (pas de résumé) » est un ANGLE MORT : tu peux le signaler (severity " +
+  'fournies ci-dessous ; un id inventé, approximatif ou absent de ces listes est INTERDIT. ' +
+  'Un chapitre marqué « (pas de résumé) » est un ANGLE MORT : tu peux le signaler (severity ' +
   '"doute") comme une limite de l\'analyse si son absence empêche de vérifier une cohérence, mais tu ' +
   "N'INVENTES JAMAIS son contenu ni les faits qu'il pourrait raconter. " +
   "Si aucune incohérence n'est détectée, réponds par un tableau JSON VIDE `[]` : c'est un résultat " +
@@ -84,7 +84,9 @@ export function buildChronoPrompt(db: Db, bookId: number): FormatPromptBundle {
       `- id ${event.id}, position ${event.position}, date « ${dateLabel} », titre « ${event.title} »`
     ]
     if (event.description.trim()) block.push(`  Description : ${event.description.trim()}`)
-    block.push(`  Chapitres liés (ids) : ${event.chapterIds.length > 0 ? event.chapterIds.join(', ') : '(aucun)'}`)
+    block.push(
+      `  Chapitres liés (ids) : ${event.chapterIds.length > 0 ? event.chapterIds.join(', ') : '(aucun)'}`
+    )
     block.push(
       `  Personnages/lieux liés (ids) : ${event.entityIds.length > 0 ? event.entityIds.join(', ') : '(aucun)'}`
     )
@@ -114,7 +116,9 @@ export function buildChronoPrompt(db: Db, bookId: number): FormatPromptBundle {
     chapterBlocks.join('\n\n'),
     '',
     "## CHRONOLOGIE (événements de l'histoire — id, position, date, titre, description, liens)",
-    eventBlocks.length > 0 ? eventBlocks.join('\n\n') : '(aucun événement de chronologie pour ce livre)',
+    eventBlocks.length > 0
+      ? eventBlocks.join('\n\n')
+      : '(aucun événement de chronologie pour ce livre)',
     '',
     '## PLAN',
     outlineLines.length > 0 ? outlineLines.join('\n') : '(aucune note de plan pour ce livre)',

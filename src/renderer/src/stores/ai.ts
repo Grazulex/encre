@@ -291,8 +291,7 @@ export const useAiStore = defineStore('ai', {
           // moment (uniquement à 'done') et même raisonnement que 'review'
           // ci-dessus, mais la cible est UN SEUL objet, jamais un tableau.
           const result = parseAiJson<unknown>(this.draft)
-          const filtered =
-            result.ok ? filterExtractProposal(result.value) : null
+          const filtered = result.ok ? filterExtractProposal(result.value) : null
           if (result.ok && filtered) {
             // Second filtre, RENDERER-ONLY (voir commentaire du state
             // ci-dessus) : un enrichissement bien formé mais dont l'entityId
@@ -469,8 +468,7 @@ export const useAiStore = defineStore('ai', {
       } catch (err) {
         console.error('Échec du démarrage de l’écriture IA', err)
         this.phase = 'error'
-        this.errorMessage =
-          err instanceof Error ? err.message : "Échec du démarrage de l'écriture."
+        this.errorMessage = err instanceof Error ? err.message : "Échec du démarrage de l'écriture."
       }
     },
     // Lance une harmonisation de mise en forme (Task 6) — même squelette que

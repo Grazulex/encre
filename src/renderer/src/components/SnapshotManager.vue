@@ -167,57 +167,57 @@ function onKeydown(event: KeyboardEvent): void {
 
 <template>
   <Transition name="dialog" appear>
-  <div class="snap-overlay" @click.self="close">
-    <div
-      ref="cardEl"
-      class="snap-card"
-      role="dialog"
-      aria-label="Gérer les snapshots"
-      tabindex="-1"
-      @keydown="onKeydown"
-    >
-      <header>
-        <h2>Snapshots du chapitre</h2>
-        <button
-          type="button"
-          class="snap-close"
-          title="Fermer"
-          aria-label="Fermer le gestionnaire de snapshots"
-          @click="close"
-        >
-          ×
-        </button>
-      </header>
-      <div class="body">
-        <p v-if="loading" class="status">Chargement…</p>
-        <p v-else-if="snapshots.length === 0" class="status">Aucun snapshot pour ce chapitre.</p>
-        <ul v-else class="list">
-          <li v-for="snapshot in snapshots" :key="snapshot.id" class="item">
-            <div class="meta">
-              <div class="meta-top">
-                <span class="date">{{ formatDate(snapshot.createdAt) }}</span>
-                <span v-if="isAiSnapshot(snapshot.reason)" class="badge-ia">IA</span>
+    <div class="snap-overlay" @click.self="close">
+      <div
+        ref="cardEl"
+        class="snap-card"
+        role="dialog"
+        aria-label="Gérer les snapshots"
+        tabindex="-1"
+        @keydown="onKeydown"
+      >
+        <header>
+          <h2>Snapshots du chapitre</h2>
+          <button
+            type="button"
+            class="snap-close"
+            title="Fermer"
+            aria-label="Fermer le gestionnaire de snapshots"
+            @click="close"
+          >
+            ×
+          </button>
+        </header>
+        <div class="body">
+          <p v-if="loading" class="status">Chargement…</p>
+          <p v-else-if="snapshots.length === 0" class="status">Aucun snapshot pour ce chapitre.</p>
+          <ul v-else class="list">
+            <li v-for="snapshot in snapshots" :key="snapshot.id" class="item">
+              <div class="meta">
+                <div class="meta-top">
+                  <span class="date">{{ formatDate(snapshot.createdAt) }}</span>
+                  <span v-if="isAiSnapshot(snapshot.reason)" class="badge-ia">IA</span>
+                </div>
+                <span class="reason">{{ snapshot.reason }}</span>
               </div>
-              <span class="reason">{{ snapshot.reason }}</span>
-            </div>
-            <div class="actions">
-              <button type="button" :disabled="busyId != null" @click="requestRestore(snapshot)">
-                {{ busyId === snapshot.id ? '…' : 'Restaurer' }}
-              </button>
-              <button
-                type="button"
-                class="danger"
-                :disabled="busyId != null"
-                @click="requestRemove(snapshot)"
-              >
-                {{ busyId === snapshot.id ? '…' : 'Supprimer' }}
-              </button>
-            </div>
-          </li>
-        </ul>
+              <div class="actions">
+                <button type="button" :disabled="busyId != null" @click="requestRestore(snapshot)">
+                  {{ busyId === snapshot.id ? '…' : 'Restaurer' }}
+                </button>
+                <button
+                  type="button"
+                  class="danger"
+                  :disabled="busyId != null"
+                  @click="requestRemove(snapshot)"
+                >
+                  {{ busyId === snapshot.id ? '…' : 'Supprimer' }}
+                </button>
+              </div>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
-  </div>
   </Transition>
   <!-- .confirm-lift : .snap-overlay ci-dessus a un z-index de 220, au-dessus
        du z-index 200 partagé par ConfirmDialog (theme.css .overlay) — sans ce

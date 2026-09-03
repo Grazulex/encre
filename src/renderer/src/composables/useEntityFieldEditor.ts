@@ -15,7 +15,7 @@
 // l'absence de tout watch(entityId) pour re-semer l'état en cours de vie : la
 // course qu'un tel watch neutralisait (frappe en attente + changement de
 // sélection dans la MÊME instance) ne peut plus se produire.
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { useEntitiesStore } from '../stores/entities'
 import { useBookStore } from '../stores/book'
 import { useUiStore } from '../stores/ui'
@@ -27,6 +27,31 @@ export interface AttrPair {
   value: string
 }
 
+export interface UseEntityFieldEditorReturn {
+  entity: ComputedRef<Entity | null>
+  occurrences: ComputedRef<EntityOccurrence[]>
+  goToOccurrence: (chapterId: number) => void
+  onNameInput: () => void
+  onDescriptionInput: () => void
+  onNotesInput: () => void
+  newAlias: Ref<string>
+  addAlias: () => void
+  removeAlias: (index: number) => void
+  attrPairs: Ref<AttrPair[]>
+  isDuplicateKey: (pair: AttrPair) => boolean
+  commitAttributesDebounced: () => void
+  addAttrPair: () => void
+  removeAttrPair: (index: number) => void
+  imgFailed: Ref<boolean>
+  initials: ComputedRef<string>
+  choosePicture: () => Promise<void>
+  confirmingRemoval: Ref<boolean>
+  requestRemoval: () => void
+  cancelRemoval: () => void
+  confirmRemoval: () => Promise<void>
+  removalMessage: ComputedRef<string>
+}
+
 export function useEntityFieldEditor(
   entityId: number,
   // Fourni par EntityCard quand EntityDrawer lui passe des occurrences déjà
@@ -35,7 +60,7 @@ export function useEntityFieldEditor(
   // remplacement de store.occurrences sans que l'appelant ait à fournir un
   // ComputedRef explicite.
   occurrencesOverride?: () => EntityOccurrence[] | undefined
-) {
+): UseEntityFieldEditorReturn {
   const store = useEntitiesStore()
   const bookStore = useBookStore()
   const ui = useUiStore()

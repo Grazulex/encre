@@ -42,7 +42,7 @@ describe('parseAiJson', () => {
     }
   })
 
-  it('retourne {ok:false} quand il n\'y a pas de JSON', () => {
+  it("retourne {ok:false} quand il n'y a pas de JSON", () => {
     const result = parseAiJson<unknown>('Ceci est du texte sans JSON')
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -72,7 +72,10 @@ describe('parseAiJson', () => {
     const result = parseAiJson<unknown>('Preamble [[1, 2], [3, 4]]')
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.value).toEqual([[1, 2], [3, 4]])
+      expect(result.value).toEqual([
+        [1, 2],
+        [3, 4]
+      ])
     }
   })
 
@@ -130,19 +133,23 @@ describe('parseAiJson', () => {
     }).not.toThrow()
 
     expect(() => {
-      parseAiJson<unknown>(null as any)
+      // La signature déclare `raw: string`, mais ce cas teste la défense au
+      // runtime contre un appel hors contrat : le cast est volontaire.
+      parseAiJson<unknown>(null as unknown as string)
     }).not.toThrow()
   })
 
   it('gère un JSON avec fences markdown et préambule', () => {
-    const result = parseAiJson<string[]>('Voici les suggestions :\n\n```json\n["suggestion1", "suggestion2"]\n```')
+    const result = parseAiJson<string[]>(
+      'Voici les suggestions :\n\n```json\n["suggestion1", "suggestion2"]\n```'
+    )
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.value).toEqual(['suggestion1', 'suggestion2'])
     }
   })
 
-  it('retourne un message d\'erreur en français', () => {
+  it("retourne un message d'erreur en français", () => {
     const result = parseAiJson<unknown>('pas de json ici')
     expect(result.ok).toBe(false)
     if (!result.ok) {

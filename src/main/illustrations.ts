@@ -14,7 +14,10 @@ import { createIllustration, getIllustration, deleteIllustration } from './db/il
 const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
 
 export function addIllustrationFiles(
-  db: Db, bookId: number, sourcePaths: string[], mediaDir: string
+  db: Db,
+  bookId: number,
+  sourcePaths: string[],
+  mediaDir: string
 ): Illustration[] {
   mkdirSync(mediaDir, { recursive: true })
   // Horodatage unique par lot + index par fichier : deux ajouts successifs du

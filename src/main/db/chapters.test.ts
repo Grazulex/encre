@@ -4,9 +4,21 @@ import { createBook } from './books'
 import { getBook } from './books'
 import { createEntity } from './entities'
 import {
-  countWords, listChapters, listChapterSummaries, getChapter, createChapter,
-  saveChapterContent, renameChapter, setChapterStatus, setChapterGoal, searchInBook,
-  reorderChapters, deleteChapter, entityOccurrences, entitiesInChapter, saveChapterSummary
+  countWords,
+  listChapters,
+  listChapterSummaries,
+  getChapter,
+  createChapter,
+  saveChapterContent,
+  renameChapter,
+  setChapterStatus,
+  setChapterGoal,
+  searchInBook,
+  reorderChapters,
+  deleteChapter,
+  entityOccurrences,
+  entitiesInChapter,
+  saveChapterSummary
 } from './chapters'
 
 let db: Db
@@ -65,7 +77,7 @@ describe('repository chapters', () => {
 
   it('recherche plein texte, insensible à la casse et aux accents', () => {
     const c1 = createChapter(db, bookId, 'Ouverture')
-    saveChapterContent(db, c1.id, 'Ia', "Il était une fois Brest.")
+    saveChapterContent(db, c1.id, 'Ia', 'Il était une fois Brest.')
     const c2 = createChapter(db, bookId, 'Suite')
     saveChapterContent(db, c2.id, 'Ib', 'Une île lointaine où brétonnaient les Échos.')
     const c3 = createChapter(db, bookId, 'Autre')
@@ -127,7 +139,9 @@ describe('mentions et occurrences', () => {
     const before = getBook(db, bookId).updatedAt
     const json = JSON.stringify({
       type: 'doc',
-      content: [{ type: 'paragraph', content: [{ type: 'mention', attrs: { id: mara.id, label: 'Mara' } }] }]
+      content: [
+        { type: 'paragraph', content: [{ type: 'mention', attrs: { id: mara.id, label: 'Mara' } }] }
+      ]
     })
     db.prepare("UPDATE books SET updated_at = '2000-01-01 00:00:00' WHERE id = ?").run(bookId)
     saveChapterContent(db, c.id, json, 'Mara')
@@ -146,7 +160,9 @@ describe('mentions et occurrences', () => {
     const c = createChapter(db, bookId, 'Ch. 1')
     const json = JSON.stringify({
       type: 'doc',
-      content: [{ type: 'paragraph', content: [{ type: 'mention', attrs: { id: 999, label: 'Fantôme' } }] }]
+      content: [
+        { type: 'paragraph', content: [{ type: 'mention', attrs: { id: 999, label: 'Fantôme' } }] }
+      ]
     })
     expect(() => saveChapterContent(db, c.id, json, 'Fantôme')).not.toThrow()
     expect(entitiesInChapter(db, c.id)).toEqual([])

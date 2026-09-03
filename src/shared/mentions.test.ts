@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { extractMentionIds } from './mentions'
 
-const doc = (content: unknown[]) => JSON.stringify({ type: 'doc', content })
+const doc = (content: unknown[]): string => JSON.stringify({ type: 'doc', content })
 
 describe('extractMentionIds', () => {
   it('extrait les ids de mention, uniques, en profondeur', () => {
@@ -22,6 +22,8 @@ describe('extractMentionIds', () => {
 
   it('rend [] pour un doc vide ou sans mention', () => {
     expect(extractMentionIds(doc([]))).toEqual([])
-    expect(extractMentionIds(doc([{ type: 'paragraph', content: [{ type: 'text', text: 'rien' }] }]))).toEqual([])
+    expect(
+      extractMentionIds(doc([{ type: 'paragraph', content: [{ type: 'text', text: 'rien' }] }]))
+    ).toEqual([])
   })
 })

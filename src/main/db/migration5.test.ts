@@ -7,14 +7,21 @@ describe('migration 5', () => {
   it('fait passer une base v4 peuplée en v5 sans perte', () => {
     const db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
-    db.exec(MIGRATIONS[0]); db.exec(MIGRATIONS[1]); db.exec(MIGRATIONS[2]); db.exec(MIGRATIONS[3])
+    db.exec(MIGRATIONS[0])
+    db.exec(MIGRATIONS[1])
+    db.exec(MIGRATIONS[2])
+    db.exec(MIGRATIONS[3])
     db.pragma('user_version = 4')
     db.prepare("INSERT INTO books (title) VALUES ('Livre v4')").run()
 
     migrate(db)
 
     expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
-    const book = db.prepare('SELECT id, page_format FROM books WHERE id = 1').get() as any
+    const book = db
+      .prepare<unknown[], { id: number; page_format: string }>(
+        'SELECT id, page_format FROM books WHERE id = 1'
+      )
+      .get() as { id: number; page_format: string }
     expect(book.id).toBe(1)
     expect(book.page_format).toBe('broche')
   })

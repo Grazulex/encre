@@ -62,7 +62,7 @@ describe('readState / writeState', () => {
     expect(readState(path)).toEqual(original)
   })
 
-  it('rend un état vide quand le fichier n\'existe pas', () => {
+  it("rend un état vide quand le fichier n'existe pas", () => {
     expect(readState(path)).toEqual(EMPTY_STATE)
   })
 
@@ -79,8 +79,13 @@ describe('readState / writeState', () => {
       lastPushAt: null,
       lastError: 'réseau injoignable',
       lastDiff: {
-        chaptersChanged: 2, chaptersAdded: 0, chaptersRemoved: 0,
-        wordsDelta: 340, mediaAdded: 1, booksAdded: 0, changedTitles: ['A', 'B']
+        chaptersChanged: 2,
+        chaptersAdded: 0,
+        chaptersRemoved: 0,
+        wordsDelta: 340,
+        mediaAdded: 1,
+        booksAdded: 0,
+        changedTitles: ['A', 'B']
       }
     }
     writeState(path, state)

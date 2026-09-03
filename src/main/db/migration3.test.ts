@@ -18,18 +18,26 @@ describe('migration 3', () => {
 
     expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
     const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .prepare<unknown[], { name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+      )
       .all()
-      .map((r: any) => r.name)
+      .map((r) => r.name)
     for (const t of ['snapshots', 'ai_sessions', 'ai_messages', 'series']) {
       expect(tables).toContain(t)
     }
     // books.series_id colonne ajoutée
-    const book = db.prepare('SELECT id, series_id FROM books WHERE id = 1').get() as any
+    const book = db
+      .prepare<unknown[], { id: number; series_id: number | null }>(
+        'SELECT id, series_id FROM books WHERE id = 1'
+      )
+      .get() as { id: number; series_id: number | null }
     expect(book.id).toBe(1)
     expect(book.series_id).toBeNull()
     // chapitre intact
-    const ch = db.prepare('SELECT title FROM chapters WHERE id = 1').get() as any
+    const ch = db
+      .prepare<unknown[], { title: string }>('SELECT title FROM chapters WHERE id = 1')
+      .get() as { title: string }
     expect(ch.title).toBe('Ch. 1')
     db.close()
   })

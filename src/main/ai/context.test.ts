@@ -27,7 +27,8 @@ beforeEach(() => {
     title: 'Les Ombres de Verre',
     author: 'Jeanne Autrice',
     genre: 'Fantasy urbaine',
-    synopsis: 'Dans une cité où le verre remplace la pierre, une adolescente découvre un pouvoir interdit.'
+    synopsis:
+      'Dans une cité où le verre remplace la pierre, une adolescente découvre un pouvoir interdit.'
   })
   updateBook(db, book.id, { seriesId: series.id })
   bookId = book.id
@@ -80,7 +81,10 @@ beforeEach(() => {
   setTimelineLinks(db, linkedEvent.id, [ch2Id], [ariaId])
 
   const otherEvent = createTimelineEvent(db, bookId, 'Naissance d’Aria')
-  updateTimelineEvent(db, otherEvent.id, { dateLabel: 'Jour -6205', description: 'Aria naît à la Cité de Verre.' })
+  updateTimelineEvent(db, otherEvent.id, {
+    dateLabel: 'Jour -6205',
+    description: 'Aria naît à la Cité de Verre.'
+  })
 })
 
 describe('excerpt', () => {
@@ -101,7 +105,7 @@ describe('excerpt', () => {
     expect(result).not.toContain('mot4')
   })
 
-  it("renvoie une chaîne vide pour un texte vide", () => {
+  it('renvoie une chaîne vide pour un texte vide', () => {
     expect(excerpt('', 50)).toBe('')
   })
 
@@ -200,7 +204,7 @@ describe('buildWritePrompt', () => {
     expect(bundle.prompt).not.toContain('phrase1 ')
   })
 
-  it('mode continuer sans texte existant (contentText vide) n\'ajoute pas la section TEXTE EXISTANT', () => {
+  it("mode continuer sans texte existant (contentText vide) n'ajoute pas la section TEXTE EXISTANT", () => {
     saveChapterContent(db, ch2Id, '{"type":"doc","content":[]}', '')
     const bundle = buildWritePrompt(db, ch2Id, { continueFromText: true })
     expect(bundle.prompt).not.toContain('TEXTE EXISTANT')

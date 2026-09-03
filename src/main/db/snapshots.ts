@@ -1,7 +1,19 @@
 import type { Db } from './connection'
 import type { Snapshot } from '../../shared/types'
 
-export function createSnapshot(db: Db, chapterId: number, contentJson: string, reason: string): Snapshot {
+interface SnapshotRow {
+  id: number
+  chapter_id: number
+  reason: string
+  created_at: string
+}
+
+export function createSnapshot(
+  db: Db,
+  chapterId: number,
+  contentJson: string,
+  reason: string
+): Snapshot {
   const id = db.transaction(() => {
     const result = db
       .prepare(
@@ -20,7 +32,7 @@ export function createSnapshot(db: Db, chapterId: number, contentJson: string, r
          ORDER BY created_at DESC, id DESC
          LIMIT -1 OFFSET 50`
       )
-      .all(chapterId) as any[]
+      .all(chapterId) as Array<{ id: number }>
 
     for (const row of toDelete) {
       db.prepare('DELETE FROM snapshots WHERE id = ?').run(row.id)
@@ -35,7 +47,7 @@ export function createSnapshot(db: Db, chapterId: number, contentJson: string, r
 function getSnapshot(db: Db, id: number): Snapshot {
   const row = db
     .prepare('SELECT id, chapter_id, reason, created_at FROM snapshots WHERE id = ?')
-    .get(id) as any
+    .get(id) as SnapshotRow | undefined
   if (!row) throw new Error(`Snapshot introuvable: ${id}`)
   return {
     id: row.id,
@@ -46,23 +58,24 @@ function getSnapshot(db: Db, id: number): Snapshot {
 }
 
 export function listSnapshots(db: Db, chapterId: number): Snapshot[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT id, chapter_id, reason, created_at FROM snapshots
        WHERE chapter_id = ?
        ORDER BY created_at DESC, id DESC`
     )
-    .all(chapterId)
-    .map((row: any) => ({
-      id: row.id,
-      chapterId: row.chapter_id,
-      reason: row.reason,
-      createdAt: row.created_at
-    }))
+    .all(chapterId) as SnapshotRow[]
+  return rows.map((row) => ({
+    id: row.id,
+    chapterId: row.chapter_id,
+    reason: row.reason,
+    createdAt: row.created_at
+  }))
 }
 
 export function getSnapshotContent(db: Db, id: number): string {
-  const row = db.prepare('SELECT content_json FROM snapshots WHERE id = ?').get(id) as any
+  const row = db.prepare('SELECT content_json FROM snapshots WHERE id = ?').get(id) as
+    { content_json: string } | undefined
   if (!row) throw new Error(`Snapshot introuvable: ${id}`)
   return row.content_json
 }

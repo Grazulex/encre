@@ -142,77 +142,79 @@ onMounted(async () => {
 
 <template>
   <Transition name="dialog" appear>
-  <div class="overlay" @click.self="requestClose">
-    <div
-      ref="cardEl"
-      class="export-card dialog-card"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Exporter le livre"
-      tabindex="-1"
-      @keydown="onKeydown"
-    >
-      <header>
-        <h2>Exporter le livre</h2>
-        <span class="kbd">Échap</span>
-      </header>
+    <div class="overlay" @click.self="requestClose">
+      <div
+        ref="cardEl"
+        class="export-card dialog-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Exporter le livre"
+        tabindex="-1"
+        @keydown="onKeydown"
+      >
+        <header>
+          <h2>Exporter le livre</h2>
+          <span class="kbd">Échap</span>
+        </header>
 
-      <div class="body">
-        <div class="formats" role="radiogroup" aria-label="Format d'export">
-          <label
-            v-for="f in FORMATS"
-            :key="f.value"
-            class="format-card"
-            :class="{ active: format === f.value }"
-          >
-            <input
-              v-model="format"
-              type="radio"
-              name="export-format"
-              :value="f.value"
-              :disabled="busy"
-            />
-            <span class="format-badge">{{ f.badge }}</span>
-            <span class="format-label">{{ f.label }}</span>
-            <span class="format-hint">{{ f.hint }}</span>
-          </label>
+        <div class="body">
+          <div class="formats" role="radiogroup" aria-label="Format d'export">
+            <label
+              v-for="f in FORMATS"
+              :key="f.value"
+              class="format-card"
+              :class="{ active: format === f.value }"
+            >
+              <input
+                v-model="format"
+                type="radio"
+                name="export-format"
+                :value="f.value"
+                :disabled="busy"
+              />
+              <span class="format-badge">{{ f.badge }}</span>
+              <span class="format-label">{{ f.label }}</span>
+              <span class="format-hint">{{ f.hint }}</span>
+            </label>
+          </div>
+
+          <section v-if="needsChapters || rows.length === 0" class="chapters-pane">
+            <div v-if="needsChapters" class="chapters-head">
+              <span class="field-label">Chapitres à inclure</span>
+              <div class="chapters-toggle">
+                <button type="button" class="link" :disabled="busy" @click="checkAll(true)">
+                  Tous
+                </button>
+                <button type="button" class="link" :disabled="busy" @click="checkAll(false)">
+                  Aucun
+                </button>
+              </div>
+            </div>
+            <p v-if="rows.length === 0" class="empty-warning">
+              Ce livre n'a aucun chapitre à exporter.
+            </p>
+            <ul v-else class="chapter-list">
+              <li v-for="r in rows" :key="r.id">
+                <label class="row">
+                  <input v-model="r.checked" type="checkbox" :disabled="busy" />
+                  <span>{{ r.title }}</span>
+                </label>
+              </li>
+            </ul>
+          </section>
         </div>
 
-        <section v-if="needsChapters || rows.length === 0" class="chapters-pane">
-          <div v-if="needsChapters" class="chapters-head">
-            <span class="field-label">Chapitres à inclure</span>
-            <div class="chapters-toggle">
-              <button type="button" class="link" :disabled="busy" @click="checkAll(true)">
-                Tous
-              </button>
-              <button type="button" class="link" :disabled="busy" @click="checkAll(false)">
-                Aucun
-              </button>
-            </div>
-          </div>
-          <p v-if="rows.length === 0" class="empty-warning">
-            Ce livre n'a aucun chapitre à exporter.
-          </p>
-          <ul v-else class="chapter-list">
-            <li v-for="r in rows" :key="r.id">
-              <label class="row">
-                <input v-model="r.checked" type="checkbox" :disabled="busy" />
-                <span>{{ r.title }}</span>
-              </label>
-            </li>
-          </ul>
-        </section>
+        <footer>
+          <button type="button" class="ghost" :disabled="busy" @click="requestClose">
+            Annuler
+          </button>
+          <button type="button" class="primary" :disabled="busy || !canExport" @click="runExport">
+            <span v-if="busy" class="spinner" aria-hidden="true"></span>
+            {{ busy ? 'Export…' : 'Exporter' }}
+          </button>
+        </footer>
       </div>
-
-      <footer>
-        <button type="button" class="ghost" :disabled="busy" @click="requestClose">Annuler</button>
-        <button type="button" class="primary" :disabled="busy || !canExport" @click="runExport">
-          <span v-if="busy" class="spinner" aria-hidden="true"></span>
-          {{ busy ? 'Export…' : 'Exporter' }}
-        </button>
-      </footer>
     </div>
-  </div>
   </Transition>
 </template>
 

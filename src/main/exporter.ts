@@ -7,10 +7,22 @@ import { tiptapToMarkdown } from '../shared/export'
 import type { ExportOptions } from '../shared/export'
 
 export function slugify(s: string): string {
-  return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'chapitre'
+  return (
+    s
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'chapitre'
+  )
 }
 
-export function exportMarkdownToFolder(db: Db, bookId: number, folder: string, mediaDir?: string): string {
+export function exportMarkdownToFolder(
+  db: Db,
+  bookId: number,
+  folder: string,
+  mediaDir?: string
+): string {
   getBook(db, bookId) // vérifie l'existence du livre — lève si l'id est invalide
   mkdirSync(folder, { recursive: true })
   const chapters = listChapters(db, bookId)

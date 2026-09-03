@@ -6,8 +6,8 @@
 import type { BookPageFormat } from '../../shared/types'
 
 interface Maquette {
-  page: string          // valeur de `size`
-  margeBloc: string     // marges haut et bas
+  page: string // valeur de `size`
+  margeBloc: string // marges haut et bas
   margeInterieure: string
   margeExterieure: string
   corps: string

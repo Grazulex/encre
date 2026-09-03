@@ -1,5 +1,5 @@
 import type { Db } from './connection'
-import type { Book, BookCreate, BookPatch } from '../../shared/types'
+import type { Book, BookCreate, BookPageFormat, BookPatch, BookStatus } from '../../shared/types'
 
 const SELECT_BOOK = `
   SELECT b.*,
@@ -11,7 +11,26 @@ const SELECT_BOOK = `
   LEFT JOIN chapters c ON c.book_id = b.id
 `
 
-function rowToBook(row: any): Book {
+interface BookRow {
+  id: number
+  title: string
+  author: string
+  genre: string
+  language: string
+  synopsis: string
+  status: BookStatus
+  page_format: BookPageFormat
+  cover_path: string | null
+  word_goal: number | null
+  series_id: number | null
+  series_name: string | null
+  agg_word_count: number
+  agg_chapter_count: number
+  created_at: string
+  updated_at: string
+}
+
+function rowToBook(row: BookRow): Book {
   return {
     id: row.id,
     title: row.title,
@@ -33,14 +52,15 @@ function rowToBook(row: any): Book {
 }
 
 export function listBooks(db: Db): Book[] {
-  return db
+  const rows = db
     .prepare(`${SELECT_BOOK} GROUP BY b.id ORDER BY b.updated_at DESC`)
-    .all()
-    .map(rowToBook)
+    .all() as BookRow[]
+  return rows.map(rowToBook)
 }
 
 export function getBook(db: Db, id: number): Book {
-  const row = db.prepare(`${SELECT_BOOK} WHERE b.id = ? GROUP BY b.id`).get(id)
+  const row = db.prepare(`${SELECT_BOOK} WHERE b.id = ? GROUP BY b.id`).get(id) as
+    BookRow | undefined
   if (!row) throw new Error(`Livre introuvable: ${id}`)
   return rowToBook(row)
 }
@@ -79,9 +99,10 @@ export function updateBook(db: Db, id: number, patch: BookPatch): Book {
   const entries = Object.entries(patch).filter(([k]) => k in PATCH_COLUMNS)
   if (entries.length > 0) {
     const sets = entries.map(([k]) => `${PATCH_COLUMNS[k]} = @${k}`).join(', ')
-    db.prepare(
-      `UPDATE books SET ${sets}, updated_at = datetime('now') WHERE id = @id`
-    ).run({ ...Object.fromEntries(entries), id })
+    db.prepare(`UPDATE books SET ${sets}, updated_at = datetime('now') WHERE id = @id`).run({
+      ...Object.fromEntries(entries),
+      id
+    })
   }
   return getBook(db, id)
 }

@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { openDb } from './db/connection'
+import { openDb, type Db } from './db/connection'
 import { createBook } from './db/books'
+import type { Book } from '../shared/types'
 import { listBookMedia, findBookMediaByRole } from './db/bookMedia'
 import { addBookMediaFiles, removeBookMedia, BOOK_MEDIA_EXTENSIONS } from './bookMedia'
 
-function setup() {
+function setup(): { db: Db; book: Book; srcDir: string; mediaDir: string } {
   const db = openDb(':memory:')
   const book = createBook(db, { title: 'Tome 1' })
   const srcDir = mkdtempSync(join(tmpdir(), 'encre-bm-src-'))

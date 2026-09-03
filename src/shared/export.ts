@@ -1,5 +1,9 @@
 export type IllustrationTaille = 'pleine' | 'vignette'
-export interface IllustrationAttrs { fileName: string; displayName: string; taille: IllustrationTaille }
+export interface IllustrationAttrs {
+  fileName: string
+  displayName: string
+  taille: IllustrationTaille
+}
 
 // Toute valeur autre que 'vignette' (absente, inconnue) retombe sur 'pleine' :
 // les JSON écrits avant l'attribut gardent leur rendu planche.
@@ -7,7 +11,39 @@ export function normaliserTaille(v: unknown): IllustrationTaille {
   return v === 'vignette' ? 'vignette' : 'pleine'
 }
 
-export interface LayoutNode { type: string; attrs: Record<string, any> }
+export interface LayoutNode {
+  type: string
+  attrs: Record<string, unknown>
+}
+
+// Nœud TipTap lu par le sérialiseur : JSON produit par l'éditeur, sans
+// dépendance au package tiptap dans ce module partagé.
+interface TipTapNode {
+  type: string
+  text?: string
+  attrs?: TipTapAttrs
+  marks?: TipTapMark[]
+  content?: TipTapNode[]
+}
+
+interface TipTapMark {
+  type: string
+}
+
+interface TipTapAttrs {
+  label?: string
+  fileName?: string
+  displayName?: string
+  taille?: string
+  level?: number
+  start?: number
+  order?: number
+  enseigne?: string
+  titre?: string
+  sousTitre?: string
+  genre?: string
+  [key: string]: unknown
+}
 // Rendu des nœuds de mise en page (chapterOpening, partOpening, tableOfContents,
 // frontMatterPage) par le consommateur. `children` porte le rendu déjà fait des
 // blocs enfants (vide pour les atomes). Retourner null omet le nœud.
@@ -32,15 +68,24 @@ export interface ExportOptions {
 // dans le PDF, un simple bloc sémantique ailleurs. Le PDF passe par ExportOptions
 // .layout pour poser ses `id` d'ancrage et développer le sommaire ; sans callback,
 // le rendu par défaut ci-dessous sert l'EPUB et le Markdown.
-const LAYOUT_TYPES = new Set(['chapterOpening', 'partOpening', 'tableOfContents', 'frontMatterPage'])
+const LAYOUT_TYPES = new Set([
+  'chapterOpening',
+  'partOpening',
+  'tableOfContents',
+  'frontMatterPage'
+])
 
 export function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 type Inline = { md: string; xhtml: string }
 
-function renderInline(node: any): Inline {
+function renderInline(node: TipTapNode): Inline {
   if (node.type === 'mention') {
     const label = String(node.attrs?.label ?? '')
     return { md: label, xhtml: escapeXml(label) }
@@ -48,9 +93,15 @@ function renderInline(node: any): Inline {
   if (node.type === 'text') {
     let md = String(node.text ?? '')
     let xhtml = escapeXml(md)
-    const marks = (node.marks ?? []).map((m: any) => m.type)
-    if (marks.includes('bold')) { md = `**${md}**`; xhtml = `<strong>${xhtml}</strong>` }
-    if (marks.includes('italic')) { md = `*${md}*`; xhtml = `<em>${xhtml}</em>` }
+    const marks = (node.marks ?? []).map((m: TipTapMark) => m.type)
+    if (marks.includes('bold')) {
+      md = `**${md}**`
+      xhtml = `<strong>${xhtml}</strong>`
+    }
+    if (marks.includes('italic')) {
+      md = `*${md}*`
+      xhtml = `<em>${xhtml}</em>`
+    }
     return { md, xhtml }
   }
   if (node.type === 'hardBreak') {
@@ -67,7 +118,7 @@ function renderInline(node: any): Inline {
   return { md: '', xhtml: '' }
 }
 
-function joinInline(nodes: any[]): Inline {
+function joinInline(nodes: TipTapNode[]): Inline {
   const parts = nodes.map(renderInline)
   return { md: parts.map((p) => p.md).join(''), xhtml: parts.map((p) => p.xhtml).join('') }
 }
@@ -87,7 +138,7 @@ const BLOCK_CONTAINER_TYPES = new Set(['bulletList', 'orderedList', 'listItem', 
 // même item (paragraphes additionnels, sous-liste) sont indentés de deux
 // espaces (Fix 2, correctif review — un seul niveau d'imbrication géré
 // simplement, comme demandé par la revue).
-function renderListItemMarkdown(item: any, marker: string, opts: ExportOptions): string {
+function renderListItemMarkdown(item: TipTapNode, marker: string, opts: ExportOptions): string {
   const children = item.content ?? []
   const blocks: { md: string; isNestedList: boolean }[] = []
   for (const child of children) {
@@ -109,21 +160,25 @@ function renderListItemMarkdown(item: any, marker: string, opts: ExportOptions):
   return [firstLine, ...restLines].join('\n')
 }
 
-function renderListMarkdown(node: any, opts: ExportOptions): string {
+function renderListMarkdown(node: TipTapNode, opts: ExportOptions): string {
   const ordered = node.type === 'orderedList'
   const start = ordered ? Number(node.attrs?.start ?? node.attrs?.order ?? 1) : 1
   const items = node.content ?? []
   return items
-    .map((item: any, idx: number) => renderListItemMarkdown(item, ordered ? `${start + idx}. ` : '- ', opts))
+    .map((item: TipTapNode, idx: number) =>
+      renderListItemMarkdown(item, ordered ? `${start + idx}. ` : '- ', opts)
+    )
     .join('\n')
 }
 
 // Rendu Markdown d'un blockquote : chaque ligne (y compris les lignes vides
 // entre blocs internes) préfixée par `> ` (`>` seul si vide) — syntaxe
 // Markdown standard de citation multi-paragraphes.
-function renderBlockquoteMarkdown(node: any, opts: ExportOptions): string {
+function renderBlockquoteMarkdown(node: TipTapNode, opts: ExportOptions): string {
   const children = node.content ?? []
-  const rendered = children.map((c: any) => renderBlockNode(c, opts).md).filter((md: string) => md !== '')
+  const rendered = children
+    .map((c: TipTapNode) => renderBlockNode(c, opts).md)
+    .filter((md: string) => md !== '')
   return rendered
     .join('\n\n')
     .split('\n')
@@ -131,7 +186,7 @@ function renderBlockquoteMarkdown(node: any, opts: ExportOptions): string {
     .join('\n')
 }
 
-function renderBlockNode(node: any, opts: ExportOptions): { md: string; xhtml: string } {
+function renderBlockNode(node: TipTapNode, opts: ExportOptions): { md: string; xhtml: string } {
   const children = node.content ?? []
   // Atomes de bloc (Task 3) : pas d'enfants à aplatir, un rendu fixe par
   // format. Traités avant le repli paragraphe générique.
@@ -162,22 +217,31 @@ function renderBlockNode(node: any, opts: ExportOptions): { md: string; xhtml: s
   }
   if (LAYOUT_TYPES.has(node.type)) {
     // frontMatterPage porte des blocs enfants ; les trois autres sont des atomes.
-    const layoutChildren = node.type === 'frontMatterPage'
-      ? renderChildBlocks(node.content ?? [], opts)
-      : { md: '', xhtml: '' }
+    const layoutChildren =
+      node.type === 'frontMatterPage'
+        ? renderChildBlocks(node.content ?? [], opts)
+        : { md: '', xhtml: '' }
     if (opts.layout) {
-      return opts.layout({ type: node.type, attrs: node.attrs ?? {} }, layoutChildren) ?? { md: '', xhtml: '' }
+      return (
+        opts.layout({ type: node.type, attrs: node.attrs ?? {} }, layoutChildren) ?? {
+          md: '',
+          xhtml: ''
+        }
+      )
     }
     return defaultLayoutRender(node, layoutChildren)
   }
   if (node.type === 'heading') {
     const level = Math.min(Math.max(Number(node.attrs?.level ?? 1), 1), 6)
     const inline = joinInline(children)
-    return { md: `${'#'.repeat(level)} ${inline.md}`, xhtml: `<h${level}>${inline.xhtml}</h${level}>` }
+    return {
+      md: `${'#'.repeat(level)} ${inline.md}`,
+      xhtml: `<h${level}>${inline.xhtml}</h${level}>`
+    }
   }
-  const isInline = children.every((c: any) => INLINE_TYPES.has(c?.type))
+  const isInline = children.every((c: TipTapNode) => INLINE_TYPES.has(c?.type ?? ''))
   if (BLOCK_CONTAINER_TYPES.has(node.type) && !isInline) {
-    const nested = children.map((c: any) => renderBlockNode(c, opts))
+    const nested = children.map((c: TipTapNode) => renderBlockNode(c, opts))
     // XHTML : un <li>/<blockquote> n'a pas besoin d'un balisage sémantique
     // dédié ici : ses paragraphes internes en <p> séparés suffisent à ne pas
     // les coller (rendu XHTML inchangé par le Fix 2, cf. revue).
@@ -202,18 +266,30 @@ function renderBlockNode(node: any, opts: ExportOptions): { md: string; xhtml: s
 // Rend une suite de blocs enfants comme le fait renderBlocks, mais pour un nœud
 // conteneur : les blocs Markdown sont séparés par une ligne vide, le XHTML par un
 // simple retour à la ligne.
-function renderChildBlocks(nodes: any[], opts: ExportOptions): { md: string; xhtml: string } {
+function renderChildBlocks(
+  nodes: TipTapNode[],
+  opts: ExportOptions
+): { md: string; xhtml: string } {
   const parts = nodes.map((n) => renderBlockNode(n, opts))
   return {
-    md: parts.map((p) => p.md).filter((m) => m !== '').join('\n\n'),
-    xhtml: parts.map((p) => p.xhtml).filter((x) => x !== '').join('\n')
+    md: parts
+      .map((p) => p.md)
+      .filter((m) => m !== '')
+      .join('\n\n'),
+    xhtml: parts
+      .map((p) => p.xhtml)
+      .filter((x) => x !== '')
+      .join('\n')
   }
 }
 
 // Rendu par défaut des nœuds de mise en page : celui de l'EPUB et du Markdown.
 // Le sommaire n'y a pas de sens (l'EPUB a sa navigation native, le Markdown n'a
 // pas de pages) : il est omis.
-function defaultLayoutRender(node: any, children: { md: string; xhtml: string }): { md: string; xhtml: string } {
+function defaultLayoutRender(
+  node: TipTapNode,
+  children: { md: string; xhtml: string }
+): { md: string; xhtml: string } {
   const attrs = node.attrs ?? {}
   if (node.type === 'chapterOpening') {
     const enseigne = String(attrs.enseigne ?? '')
@@ -237,10 +313,13 @@ function defaultLayoutRender(node: any, children: { md: string; xhtml: string })
     return { md: '', xhtml: '' }
   }
   const genre = String(attrs.genre ?? 'titre')
-  return { md: children.md, xhtml: `<div class="liminaire liminaire-${escapeXml(genre)}">${children.xhtml}</div>` }
+  return {
+    md: children.md,
+    xhtml: `<div class="liminaire liminaire-${escapeXml(genre)}">${children.xhtml}</div>`
+  }
 }
 
-function renderBlocks(doc: any, opts: ExportOptions): { md: string[]; xhtml: string[] } {
+function renderBlocks(doc: TipTapNode, opts: ExportOptions): { md: string[]; xhtml: string[] } {
   const md: string[] = []
   const xhtml: string[] = []
   for (const node of doc.content ?? []) {

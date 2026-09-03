@@ -54,7 +54,9 @@ describe('repository series', () => {
 
     deleteSeries(db, series.id)
 
-    const books = db.prepare('SELECT series_id FROM books ORDER BY id').all() as any[]
+    const books = db
+      .prepare<unknown[], { series_id: number | null }>('SELECT series_id FROM books ORDER BY id')
+      .all()
     expect(books[0].series_id).toBeNull()
     expect(books[1].series_id).toBeNull()
   })

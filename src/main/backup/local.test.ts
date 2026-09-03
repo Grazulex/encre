@@ -19,7 +19,13 @@ describe('backupDatabase', () => {
     const path = await backupDatabase(db, join(dir, 'backups'), new Date('2026-08-22T10:00:00Z'))
     expect(existsSync(path)).toBe(true)
     const copy = new Database(path, { readonly: true })
-    expect((copy.prepare('SELECT title FROM books').get() as any).title).toBe('Sauvé')
+    expect(
+      (
+        copy.prepare<unknown[], { title: string }>('SELECT title FROM books').get() as {
+          title: string
+        }
+      ).title
+    ).toBe('Sauvé')
     copy.close()
     db.close()
   })

@@ -2,14 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { kindLabelFr, mentionDisplayText, mentionTooltip } from './mentionDisplay'
 import type { Entity } from './types'
 
-const entity = (overrides: Partial<Entity> = {}): Entity => ({
-  id: 1,
-  bookId: 1,
-  kind: 'place',
-  name: 'calle Predicadors',
-  aliases: [],
-  ...overrides
-}) as Entity
+const entity = (overrides: Partial<Entity> = {}): Entity =>
+  ({
+    id: 1,
+    bookId: 1,
+    kind: 'place',
+    name: 'calle Predicadors',
+    aliases: [],
+    ...overrides
+  }) as Entity
 
 describe('mentionDisplayText', () => {
   it("affiche le label stocké verbatim, même s'il ne correspond à aucun alias", () => {
@@ -26,7 +27,7 @@ describe('mentionDisplayText', () => {
 })
 
 describe('mentionTooltip', () => {
-  it("donne le nom courant et le type en français pour une entité existante", () => {
+  it('donne le nom courant et le type en français pour une entité existante', () => {
     expect(mentionTooltip(entity({ name: 'calle Predicadors', kind: 'place' }))).toBe(
       'calle Predicadors — lieu'
     )

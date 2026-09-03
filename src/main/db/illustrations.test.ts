@@ -1,19 +1,23 @@
 import { describe, it, expect } from 'vitest'
-import { openDb } from './connection'
+import { openDb, type Db } from './connection'
 import { createBook } from './books'
+import type { Book } from '../../shared/types'
 import {
-  listIllustrations, getIllustration, createIllustration,
-  renameIllustration, deleteIllustration
+  listIllustrations,
+  getIllustration,
+  createIllustration,
+  renameIllustration,
+  deleteIllustration
 } from './illustrations'
 
-function setup() {
+function setup(): { db: Db; book: Book } {
   const db = openDb(':memory:')
   const book = createBook(db, { title: 'Tome 1' })
   return { db, book }
 }
 
 describe('db/illustrations', () => {
-  it('crée et liste dans l\'ordre de position', () => {
+  it("crée et liste dans l'ordre de position", () => {
     const { db, book } = setup()
     const a = createIllustration(db, book.id, 'ill-1-100-0.png', 'planche-1.png')
     const b = createIllustration(db, book.id, 'ill-1-100-1.png', 'planche-2.png')

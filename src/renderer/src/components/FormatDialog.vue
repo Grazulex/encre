@@ -67,9 +67,7 @@ function trapTab(event: KeyboardEvent): void {
   const card = cardEl.value
   if (!card) return
   const focusables = Array.from(
-    card.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), [tabindex]:not([tabindex="-1"])'
-    )
+    card.querySelectorAll<HTMLElement>('button:not(:disabled), [tabindex]:not([tabindex="-1"])')
   )
   if (focusables.length === 0) return
   const first = focusables[0]
@@ -101,47 +99,47 @@ onMounted(async () => {
 
 <template>
   <Transition name="dialog" appear>
-  <div class="overlay" @click.self="abandon">
-    <div
-      ref="cardEl"
-      class="format-card dialog-card"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Harmonisation de mise en forme"
-      tabindex="-1"
-      @keydown="onKeydown"
-    >
-      <header>
-        <h2>Harmonisation de mise en forme</h2>
-        <span class="kbd">Échap</span>
-      </header>
+    <div class="overlay" @click.self="abandon">
+      <div
+        ref="cardEl"
+        class="format-card dialog-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Harmonisation de mise en forme"
+        tabindex="-1"
+        @keydown="onKeydown"
+      >
+        <header>
+          <h2>Harmonisation de mise en forme</h2>
+          <span class="kbd">Échap</span>
+        </header>
 
-      <p class="format-guard">
-        Vérifiez que le texte n'a pas été modifié — seul le formatage doit changer.
-      </p>
+        <p class="format-guard">
+          Vérifiez que le texte n'a pas été modifié — seul le formatage doit changer.
+        </p>
 
-      <div class="format-columns">
-        <section class="format-col">
-          <span class="field-label">Avant</span>
-          <div class="format-text">{{ current }}</div>
-        </section>
-        <section class="format-col">
-          <span class="field-label">Après (proposé)</span>
-          <div class="format-text">{{ proposed }}</div>
-        </section>
+        <div class="format-columns">
+          <section class="format-col">
+            <span class="field-label">Avant</span>
+            <div class="format-text">{{ current }}</div>
+          </section>
+          <section class="format-col">
+            <span class="field-label">Après (proposé)</span>
+            <div class="format-text">{{ proposed }}</div>
+          </section>
+        </div>
+
+        <footer>
+          <button type="button" class="ghost" :disabled="applying" @click="abandon">
+            Abandonner
+          </button>
+          <button type="button" class="primary" :disabled="applying" @click="apply">
+            <span v-if="applying" class="spinner" aria-hidden="true"></span>
+            {{ applying ? 'Application…' : 'Appliquer' }}
+          </button>
+        </footer>
       </div>
-
-      <footer>
-        <button type="button" class="ghost" :disabled="applying" @click="abandon">
-          Abandonner
-        </button>
-        <button type="button" class="primary" :disabled="applying" @click="apply">
-          <span v-if="applying" class="spinner" aria-hidden="true"></span>
-          {{ applying ? 'Application…' : 'Appliquer' }}
-        </button>
-      </footer>
     </div>
-  </div>
   </Transition>
 </template>
 

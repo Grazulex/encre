@@ -1,7 +1,16 @@
 import type { Db } from './connection'
 import type { Illustration } from '../../shared/types'
 
-function rowToIllustration(row: any): Illustration {
+interface IllustrationRow {
+  id: number
+  book_id: number
+  file_name: string
+  display_name: string
+  position: number
+  created_at: string
+}
+
+function rowToIllustration(row: IllustrationRow): Illustration {
   return {
     id: row.id,
     bookId: row.book_id,
@@ -13,26 +22,32 @@ function rowToIllustration(row: any): Illustration {
 }
 
 export function listIllustrations(db: Db, bookId: number): Illustration[] {
-  return db
+  const rows = db
     .prepare('SELECT * FROM illustrations WHERE book_id = ? ORDER BY position, id')
-    .all(bookId)
-    .map(rowToIllustration)
+    .all(bookId) as IllustrationRow[]
+  return rows.map(rowToIllustration)
 }
 
 export function getIllustration(db: Db, id: number): Illustration {
-  const row = db.prepare('SELECT * FROM illustrations WHERE id = ?').get(id)
+  const row = db.prepare('SELECT * FROM illustrations WHERE id = ?').get(id) as
+    IllustrationRow | undefined
   if (!row) throw new Error(`Illustration introuvable: ${id}`)
   return rowToIllustration(row)
 }
 
 export function createIllustration(
-  db: Db, bookId: number, fileName: string, displayName: string
+  db: Db,
+  bookId: number,
+  fileName: string,
+  displayName: string
 ): Illustration {
   const max = db
     .prepare('SELECT COALESCE(MAX(position), 0) AS m FROM illustrations WHERE book_id = ?')
     .get(bookId) as { m: number }
   const result = db
-    .prepare('INSERT INTO illustrations (book_id, file_name, display_name, position) VALUES (?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO illustrations (book_id, file_name, display_name, position) VALUES (?, ?, ?, ?)'
+    )
     .run(bookId, fileName, displayName, max.m + 1)
   return getIllustration(db, Number(result.lastInsertRowid))
 }

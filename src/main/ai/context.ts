@@ -64,7 +64,11 @@ function formatEntity(entity: Entity): string {
   return lines.join('\n')
 }
 
-export function buildWritePrompt(db: Db, chapterId: number, options: WriteOptions): WritePromptBundle {
+export function buildWritePrompt(
+  db: Db,
+  chapterId: number,
+  options: WriteOptions
+): WritePromptBundle {
   const chapter = getChapter(db, chapterId)
   const book = getBook(db, chapter.bookId)
   const allChapters = listChapters(db, book.id)
@@ -88,7 +92,9 @@ export function buildWritePrompt(db: Db, chapterId: number, options: WriteOption
 
   // 2. RÉSUMÉ DU CHAPITRE À ÉCRIRE
   const chapterNotes = outlineNotes.filter((n) => n.chapterId === chapterId)
-  const resumeLines = [hasSummary ? chapter.summary.trim() : 'Aucun résumé fourni pour ce chapitre.']
+  const resumeLines = [
+    hasSummary ? chapter.summary.trim() : 'Aucun résumé fourni pour ce chapitre.'
+  ]
   if (chapterNotes.length > 0) {
     resumeLines.push('', 'Notes de plan :')
     for (const note of chapterNotes) resumeLines.push(`- ${note.content}`)
@@ -118,7 +124,8 @@ export function buildWritePrompt(db: Db, chapterId: number, options: WriteOption
 
   // 6. PLAN GÉNÉRAL
   const globalNotes = outlineNotes.filter((n) => n.chapterId === null)
-  const planLines = globalNotes.length > 0 ? globalNotes.map((n) => `- ${n.content}`) : ['(aucune note globale)']
+  const planLines =
+    globalNotes.length > 0 ? globalNotes.map((n) => `- ${n.content}`) : ['(aucune note globale)']
   sections.push(['## PLAN GÉNÉRAL', ...planLines].join('\n'))
 
   // 7. TEXTE EXISTANT (si continueFromText)

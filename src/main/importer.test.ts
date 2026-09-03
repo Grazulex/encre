@@ -9,7 +9,7 @@ describe('scanChapterFiles', () => {
   it('trie par préfixe numérique et déduit les titres', () => {
     const dir = mkdtempSync(join(tmpdir(), 'encre-import-'))
     writeFileSync(join(dir, '02-la-fuite.md'), 'Texte.')
-    writeFileSync(join(dir, '01-incendie.md'), '# L\'incendie\n\nTexte.')
+    writeFileSync(join(dir, '01-incendie.md'), "# L'incendie\n\nTexte.")
     writeFileSync(join(dir, 'notes.txt'), 'ignoré')
     const files = scanChapterFiles(dir)
     expect(files.map((f) => f.title)).toEqual(["L'incendie", 'la fuite'])
@@ -18,7 +18,9 @@ describe('scanChapterFiles', () => {
 
 describe('mdToTiptapJson', () => {
   it('convertit gras/italique/paragraphes et retire le titre de tête', () => {
-    const { contentJson, contentText } = mdToTiptapJson('# Titre\n\nIl **pleuvait** sur *Brest*.\n\nFin.')
+    const { contentJson, contentText } = mdToTiptapJson(
+      '# Titre\n\nIl **pleuvait** sur *Brest*.\n\nFin.'
+    )
     const doc = JSON.parse(contentJson)
     expect(doc.type).toBe('doc')
     expect(JSON.stringify(doc)).not.toContain('"heading"')
@@ -32,7 +34,7 @@ describe('mdToTiptapJson', () => {
     expect(contentJson).not.toContain('codeBlock')
   })
 
-  it("sépare le texte des blocs imbriqués (listItem) par des sauts de ligne", () => {
+  it('sépare le texte des blocs imbriqués (listItem) par des sauts de ligne', () => {
     const { contentText } = mdToTiptapJson('- Item 1\n- Item 2\n')
     expect(contentText).toContain('Item 1\nItem 2')
   })
@@ -115,8 +117,14 @@ describe('round-trip export → import : listes, citation, hardBreak (Fix 2)', (
         {
           type: 'bulletList',
           content: [
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 1' }] }] },
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 2' }] }] }
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 1' }] }]
+            },
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Item 2' }] }]
+            }
           ]
         }
       ]
@@ -135,8 +143,14 @@ describe('round-trip export → import : listes, citation, hardBreak (Fix 2)', (
         {
           type: 'orderedList',
           content: [
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Un' }] }] },
-            { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Deux' }] }] }
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Un' }] }]
+            },
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Deux' }] }]
+            }
           ]
         }
       ]
@@ -214,7 +228,7 @@ describe('round-trip export → import', () => {
     const md = tiptapToMarkdown(original)
     const { contentJson } = mdToTiptapJson(md)
     const doc = JSON.parse(contentJson)
-    expect(doc.content.map((n: any) => n.type)).toEqual([
+    expect(doc.content.map((n: { type: string }) => n.type)).toEqual([
       'paragraph',
       'sceneBreak',
       'paragraph',

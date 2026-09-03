@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb, type Db } from './connection'
 import { createBook } from './books'
 import { createChapter } from './chapters'
-import { listOutline, createOutlineNote, updateOutlineNote, reorderOutline, deleteOutlineNote } from './outline'
+import {
+  listOutline,
+  createOutlineNote,
+  updateOutlineNote,
+  reorderOutline,
+  deleteOutlineNote
+} from './outline'
 
 let db: Db
 let bookId: number

@@ -30,7 +30,12 @@ beforeEach(() => {
       }
     ]
   })
-  saveChapterContent(db, chapterId, contentJson, 'Mara avança dans la rue, saluant Solane au passage.')
+  saveChapterContent(
+    db,
+    chapterId,
+    contentJson,
+    'Mara avança dans la rue, saluant Solane au passage.'
+  )
 })
 
 describe('buildExtractPrompt', () => {
@@ -55,7 +60,7 @@ describe('buildExtractPrompt', () => {
     expect(system).toMatch(/inventer.*interdit|interdit.*inventer/is)
   })
 
-  it('system prompt : descriptions/notes sont des ajouts, jamais une réécriture de l\'existant', () => {
+  it("system prompt : descriptions/notes sont des ajouts, jamais une réécriture de l'existant", () => {
     const { system } = buildExtractPrompt(db, chapterId)
 
     expect(system).toMatch(/ajout/i)
@@ -81,9 +86,12 @@ describe('buildExtractPrompt', () => {
     expect(prompt).toContain('Mara avança dans la rue')
   })
 
-  it('prompt : inclut nom, alias et id d\'une entité existante du livre, même non liée au chapitre', () => {
+  it("prompt : inclut nom, alias et id d'une entité existante du livre, même non liée au chapitre", () => {
     const solane = createEntity(db, { bookId, kind: 'character', name: 'Solane' })
-    db.prepare('UPDATE entities SET aliases = ? WHERE id = ?').run(JSON.stringify(['La Voilée']), solane.id)
+    db.prepare('UPDATE entities SET aliases = ? WHERE id = ?').run(
+      JSON.stringify(['La Voilée']),
+      solane.id
+    )
 
     const { prompt } = buildExtractPrompt(db, chapterId)
     expect(prompt).toContain('Solane')
