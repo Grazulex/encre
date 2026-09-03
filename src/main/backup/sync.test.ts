@@ -16,7 +16,7 @@ import { join } from 'path'
 import { openDb, type Db } from '../db/connection'
 import { createBook } from '../db/books'
 import { createChapter } from '../db/chapters'
-import { GIT_BIN, runGit } from './git'
+import { GIT_BIN, runGit, pushRepo } from './git'
 import { createBackupService, commitMessage, type BackupPaths } from './sync'
 
 let dir: string
@@ -252,8 +252,16 @@ describe('createBackupService — runs sans changement', () => {
 })
 
 describe("createBackupService — chemins d'échec", () => {
+  // `pushRepo` retente désormais trois fois en espaçant les essais. Les tests
+  // qui font échouer l'envoi injectent une attente nulle : ils vérifient la
+  // conduite du service, pas la patience de la reprise (couverte dans
+  // git.test.ts), et n'ont pas à passer une demi-minute à dormir.
+  const sansAttente = {
+    push: (d: string, k?: string) => pushRepo(d, k, { wait: async () => {} })
+  }
+
   it('garde le commit local quand le push échoue', async () => {
-    const svc = createBackupService(db, paths)
+    const svc = createBackupService(db, paths, sansAttente)
     const first = await svc.runNow()
     await runGit(['remote', 'set-url', 'origin', join(dir, 'disparu.git')], { cwd: paths.repoDir })
 
@@ -267,6 +275,36 @@ describe("createBackupService — chemins d'échec", () => {
     // localement même si l'envoi a échoué.
     const count = await runGit(['rev-list', '--count', 'HEAD'], { cwd: paths.repoDir })
     expect(count.stdout.trim()).toBe('2')
+  })
+
+  // Le scénario réel : deux envois coupés en cours de transfert, le troisième
+  // passe. Sans reprise, `runNow` rendait « Sauvegarde en échec » alors que le
+  // distant acceptait parfaitement l'envoi au coup suivant.
+  //
+  // La reprise est celle du vrai `pushRepo` : seul `runGit` est intercepté,
+  // pour simuler deux coupures puis laisser le troisième essai pousser pour de
+  // bon. Injecter un `push` complet remplacerait justement la boucle qu'on veut
+  // voir tourner.
+  it('marque la sauvegarde comme envoyée quand une reprise finit par passer', async () => {
+    let essais = 0
+    const coupeDeuxFois: typeof runGit = async (args, opts) => {
+      if (++essais < 3) {
+        return { ok: false, stdout: '', stderr: 'fatal: the remote end hung up unexpectedly' }
+      }
+      return runGit(args, opts)
+    }
+    const svc = createBackupService(db, paths, {
+      push: (d, k) => pushRepo(d, k, { run: coupeDeuxFois, wait: async () => {} })
+    })
+
+    const s = await svc.runNow()
+
+    expect(essais).toBe(3)
+    expect(s.lastError).toBeNull()
+    expect(s.lastPushAt).not.toBeNull()
+    // Et l'envoi a réellement eu lieu : le dépôt nu porte le commit.
+    const distant = await runGit(['log', '-1', '--format=%s'], { cwd: join(dir, 'remote.git') })
+    expect(distant.stdout.trim()).toMatch(/^sauvegarde /)
   })
 
   it("un `git add` en échec n'est pas rapporté comme une sauvegarde réussie", async () => {

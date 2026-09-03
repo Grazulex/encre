@@ -5,7 +5,7 @@ import type { Db } from '../db/connection'
 import type { BackupDiff, BackupStatus } from '../../shared/types'
 import { backupDatabase, pruneBackups } from './local'
 import { buildManifest, diffManifests, type Manifest } from './manifest'
-import { cloneRepo, commitAll, hasRepo, pushRepo, runGit, GIT_BIN } from './git'
+import { cloneRepo, commitAll, hasRepo, pushRepo, runGit, GIT_BIN, type GitResult } from './git'
 import { dumpDatabase, SQLITE_BIN } from './dump'
 import { readState, writeState, type BackupState } from './state'
 
@@ -23,13 +23,23 @@ export interface BackupService {
   runNow(): Promise<BackupStatus>
 }
 
+/**
+ * `push` n'est un paramètre que pour les tests : `index.ts` ne le passe jamais
+ * et hérite du vrai `pushRepo`. Il existe parce que `pushRepo` espace ses
+ * reprises de plusieurs secondes — durée juste sur une vraie liaison, mais que
+ * les tests d'échec d'envoi passeraient à dormir sans rien vérifier de plus.
+ */
+export interface BackupDeps {
+  push?: (dir: string, keyPath?: string) => Promise<GitResult>
+}
+
 const nf = new Intl.NumberFormat('fr-FR')
 
 // Selon la version d'ICU, le séparateur de milliers fr-FR est une espace
 // insécable fine (U+202F) plutôt qu'une espace normale : illisible dans un
 // terminal ou un `git log` qui ne la rend pas. On la ramène à une espace ASCII.
 function formatWords(n: number): string {
-  return nf.format(n).replace(/[  ]/g, ' ')
+  return nf.format(n).replace(/[\u00A0\u202F]/g, ' ')
 }
 
 export function commitMessage(now: Date, diff: BackupDiff): string {
@@ -116,7 +126,12 @@ async function headCommittedAt(repoDir: string): Promise<string | null> {
   return new Date(r.stdout.trim()).toISOString()
 }
 
-export function createBackupService(db: Db, paths: BackupPaths): BackupService {
+export function createBackupService(
+  db: Db,
+  paths: BackupPaths,
+  deps: BackupDeps = {}
+): BackupService {
+  const push = deps.push ?? pushRepo
   let running = false
 
   const currentManifest = (now: Date): Manifest => buildManifest(db, paths.mediaDir, now)
@@ -242,7 +257,7 @@ export function createBackupService(db: Db, paths: BackupPaths): BackupService {
           )
         }
 
-        const pushed = await pushRepo(paths.repoDir, paths.keyPath)
+        const pushed = await push(paths.repoDir, paths.keyPath)
         if (pushed.ok) {
           state.lastPushAt = now.toISOString()
           state.lastError = null

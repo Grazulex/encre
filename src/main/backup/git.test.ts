@@ -11,7 +11,12 @@ import {
   pushRepo,
   GIT_BIN,
   CLONE_TIMEOUT_MS,
-  PUSH_TIMEOUT_MS
+  PUSH_TIMEOUT_MS,
+  LOCAL_TIMEOUT_MS,
+  PUSH_ATTEMPTS,
+  PUSH_RETRY_DELAYS_MS,
+  sshCommand,
+  type GitResult
 } from './git'
 
 let dir: string
@@ -110,7 +115,7 @@ describe('commitAll', () => {
     expect(after.stdout.trim()).toBe(head.stdout.trim())
   })
 
-  it('refuse aussi quand la suppression est déjà en scène dans l\'index', async () => {
+  it("refuse aussi quand la suppression est déjà en scène dans l'index", async () => {
     await cloneRepo(remote, work)
     writeFileSync(join(work, 'a.txt'), 'x')
     writeFileSync(join(work, 'b.txt'), 'y')
@@ -123,7 +128,7 @@ describe('commitAll', () => {
     expect(result.stderr).toMatch(/[Ss]uppression/)
   })
 
-  it('renvoie committed=false quand il n\'y a rien à commiter', async () => {
+  it("renvoie committed=false quand il n'y a rien à commiter", async () => {
     await cloneRepo(remote, work)
     writeFileSync(join(work, 'a.txt'), 'x')
     await commitAll(work, 'premier')
@@ -150,9 +155,111 @@ describe('pushRepo', () => {
     await commitAll(work, 'sauvegarde')
     await runGit(['remote', 'set-url', 'origin', join(dir, 'nexistepas.git')], { cwd: work })
 
-    const r = await pushRepo(work)
+    const r = await pushRepo(work, undefined, { wait: async () => {} })
     expect(r.ok).toBe(false)
     expect(r.stderr).not.toBe('')
+  })
+})
+
+/**
+ * Le défaut qui a motivé ces tests : le dépôt de sauvegarde envoie ~80 Mo de
+ * médias par lot sur une liaison montante mesurée à ~750 Ko/s. Deux essais sur
+ * trois mouraient en cours de transfert (« Connection to github.com closed by
+ * remote host », à 5 puis 6 Mio écrits) ; le troisième est passé en 105,8 s.
+ * Une tentative unique transforme donc un aléa réseau ordinaire en
+ * « Sauvegarde en échec » jusqu'au run suivant, alors que le distant accepte
+ * parfaitement l'envoi.
+ */
+describe('pushRepo — reprises', () => {
+  // `run` et `wait` ne sont des paramètres que pour les tests : les appelants
+  // réels ne les passent jamais. Ils rendent observables le nombre d'essais et
+  // le délai transmis, sans mock de module ni attente réelle.
+  const failure = (msg: string): GitResult => ({ ok: false, stdout: '', stderr: msg })
+  const CUT = 'fatal: the remote end hung up unexpectedly'
+
+  it('retente et réussit quand un envoi est coupé en cours de transfert', async () => {
+    const attempts: number[] = []
+    const waits: number[] = []
+    let n = 0
+    const run: typeof runGit = async () => {
+      attempts.push(++n)
+      return n < 3 ? failure(CUT) : { ok: true, stdout: '', stderr: '' }
+    }
+
+    const r = await pushRepo(work, undefined, {
+      run,
+      wait: async (ms) => {
+        waits.push(ms)
+      }
+    })
+
+    expect(r.ok).toBe(true)
+    expect(attempts).toHaveLength(3)
+    // Une attente avant chaque reprise, pas avant le premier essai.
+    expect(waits).toEqual(PUSH_RETRY_DELAYS_MS.slice(0, 2))
+  })
+
+  it('renonce après PUSH_ATTEMPTS et rend la dernière erreur de git', async () => {
+    let n = 0
+    const run: typeof runGit = async () => failure(`${CUT} (essai ${++n})`)
+
+    const r = await pushRepo(work, undefined, { run, wait: async () => {} })
+
+    expect(r.ok).toBe(false)
+    expect(n).toBe(PUSH_ATTEMPTS)
+    // La dernière ligne reste celle de git : c'est elle que `sync` montre à
+    // l'utilisateur. Un message maison à la place masquerait la vraie cause.
+    expect(r.stderr).toContain(`essai ${PUSH_ATTEMPTS}`)
+  })
+
+  it("n'attend pas avant le premier essai quand il réussit du premier coup", async () => {
+    const waits: number[] = []
+    const run: typeof runGit = async () => ({ ok: true, stdout: '', stderr: '' })
+
+    await pushRepo(work, undefined, { run, wait: async (ms) => waits.push(ms) as unknown as void })
+
+    expect(waits).toEqual([])
+  })
+
+  // Même piège que pour le clone : comparer les constantes entre elles reste
+  // vert si `pushRepo` oublie de transmettre `timeoutMs`. La preuve porte sur
+  // la valeur reçue par `runGit`.
+  it('passe le délai de push à runGit, pas le délai local', async () => {
+    const received: Array<{ timeoutMs?: number }> = []
+    const run: typeof runGit = async (_args, opts) => {
+      received.push(opts)
+      return { ok: true, stdout: '', stderr: '' }
+    }
+
+    await pushRepo(work, undefined, { run, wait: async () => {} })
+
+    expect(received).toHaveLength(1)
+    expect(received[0].timeoutMs).toBe(PUSH_TIMEOUT_MS)
+    expect(received[0].timeoutMs).not.toBe(LOCAL_TIMEOUT_MS)
+  })
+
+  // L'ancienne valeur valait 120 000 ms. L'envoi mesuré en a pris 105 800 : la
+  // marge était de quatorze secondes, et le lot de médias suivant aurait fait
+  // que l'app tuerait son propre push au SIGKILL — en affichant une erreur
+  // réseau dont le réseau n'est pas responsable.
+  it('laisse au push une marge sans rapport avec les 106 s mesurées', () => {
+    expect(PUSH_TIMEOUT_MS).toBeGreaterThan(10 * 106_000)
+  })
+})
+
+describe('sshCommand', () => {
+  // Sans sonde de vivacité, une liaison coupée sans FIN ne se manifeste pas :
+  // ssh reste pendu jusqu'au délai de garde. Avec un délai de garde large
+  // (indispensable pour ne pas couper un envoi lent qui progresse), ça
+  // condamnerait la reprise à n'arriver qu'une heure trop tard.
+  it("arme des sondes de vivacité pour qu'une liaison morte rende vite la main", () => {
+    const cmd = sshCommand('/tmp/cle')
+    expect(cmd).toContain('ServerAliveInterval=')
+    expect(cmd).toContain('ServerAliveCountMax=')
+  })
+
+  it('garde BatchMode : une app graphique ne se bloque pas sur une invite', () => {
+    expect(sshCommand('/tmp/cle')).toContain('BatchMode=yes')
   })
 })
 
